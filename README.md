@@ -23,14 +23,17 @@ Roles, lowest to highest: `pending` → `volunteer` → `contractor` → `staff`
 - **The first account created becomes admin.** Everyone after starts as *pending* and
   sees nothing until an admin approves them on the Team screen.
 - **Staff and admins** see the network sheet, device logins and change history.
-- **Volunteers** can sign in but see no equipment or network data. Service flows and
-  training will be built for them later.
+- **Volunteers** can sign in and watch the Resi section, but see no equipment or
+  network data. Service flows and training will be built for them later.
+- **Staff** set up each campus's Resi player in Settings.
 - **Admins** approve people, change roles and set each person's production teams.
 
 ## Data model
 
 ```
 campuses ── rooms
+    │
+    ├── streams (a campus's Resi web player: embed id + type; status comes from Resi live)
     │
     ├── networks (subnet, VLAN, gateway, tags)
     │
@@ -65,7 +68,10 @@ js/views/gear.js               Types and Models (stacked by type), filtered by c
 js/views/devices.js            the model panel and editor (shared by Network and Gear)
 js/views/types.js              the type editor (shared by Gear and the model editor)
 js/views/team.js               people and access
-js/views/account.js            your profile, theme, sign out
+js/views/resi.js               Resi: what every campus's web player is showing
+js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
+js/resi.js                     reads pasted players and asks Resi what's on
+js/views/account.js            Settings: your profile, Resi players, theme, sign out
 supabase/migrations/*.sql      database, permissions, history
 supabase/seed.sql              the 10 campuses, matched to Planning Center
 tools/stamp.py                 run before each publish; open copies reload themselves

@@ -7,6 +7,7 @@ import { createDemoStore } from './store-demo.js';
 import * as NetworkView from './views/network.js';
 import * as GearView from './views/gear.js';
 import * as TeamView from './views/team.js';
+import * as ResiView from './views/resi.js';
 import * as AccountView from './views/account.js';
 
 const ROLE_ORDER = ['pending', 'volunteer', 'contractor', 'staff', 'admin'];
@@ -18,8 +19,9 @@ export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunte
 const MODULES = [
   { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
   { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
+  { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
   { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
-  { id: 'account', label: 'Me', icon: 'me', minRole: 'volunteer', view: AccountView },
+  { id: 'account', label: 'Settings', icon: 'settings', minRole: 'volunteer', view: AccountView },
 ];
 
 const ctx = {
@@ -43,6 +45,7 @@ const ctx = {
   openDevice: (id) => goWith('network', { open: id }),
   newDevice: (preset) => goWith('network', { newDevice: preset }),
   openType: (id) => goWith('gear', { type: id }),
+  openSettings: (section) => goWith('account', { section }),
   reloadMe,
   setTheme,
 };

@@ -1,6 +1,7 @@
-// Me: your name, home campus, appearance, and signing out.
+// Settings: your profile, Resi players (staff), appearance, and signing out.
 
 import { esc, icon, $, $$, storage } from '../util.js';
+import { mountResiSettings } from './resi-settings.js';
 
 export function mount(el, ctx) {
   const me = ctx.me;
@@ -9,7 +10,7 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
-      <div class="eyebrow">Me</div>
+      <div class="eyebrow">Settings</div>
       <div class="head-row"><h1 class="h1">${esc(me.full_name || 'Your account')}</h1></div>
       <p class="head-meta">${esc(me.email)} <i>·</i> ${esc(ctx.roleLabel[me.role])}</p>
     </div>
@@ -22,6 +23,7 @@ export function mount(el, ctx) {
         <small class="hint">The network sheet opens to this campus.</small></label>
       <div class="row-end"><p class="form-msg" role="status"></p><button class="btn primary" type="submit">Save</button></div>
     </form>
+    ${isStaff ? '<section class="panel" id="resi-players"></section>' : ''}
     <section class="panel">
       <h2>Appearance</h2>
       <div class="seg" role="radiogroup" aria-label="Theme">
@@ -61,5 +63,11 @@ export function mount(el, ctx) {
   }));
 
   $('#signout', el).addEventListener('click', () => ctx.store.signOut());
-  return { unmount() {} };
+
+  const resi = isStaff ? mountResiSettings($('#resi-players', el), ctx) : null;
+  if (ctx.pending?.section === 'resi') {
+    ctx.pending = null;
+    requestAnimationFrame(() => $('#resi-players', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
+  return { unmount() { resi?.unmount(); } };
 }

@@ -125,6 +125,18 @@ export async function createSupabaseStore(url, key) {
       return ok(await sb.from('rooms').insert({ campus_id, name }).select('*').single());
     },
 
+    async streams() {
+      return all(() => sb.from('streams').select('*').order('sort_order').order('created_at'));
+    },
+    async saveStream(st) {
+      const row = { campus_id: st.campus_id, name: (st.name || '').trim() || 'Online', embed_id: st.embed_id, embed_type: st.embed_type || 'webchannel' };
+      if (st.id) return ok(await sb.from('streams').update(row).eq('id', st.id).select('id').single()).id;
+      return ok(await sb.from('streams').insert(row).select('id').single()).id;
+    },
+    async deleteStream(id) {
+      ok(await sb.from('streams').delete().eq('id', id));
+    },
+
     async profiles() {
       return all(() => sb.from('profiles').select('*').order('full_name'));
     },
@@ -135,7 +147,7 @@ export async function createSupabaseStore(url, key) {
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
-      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports']) {
+      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports', 'streams']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
       }
       ch.subscribe();
@@ -158,6 +170,8 @@ function friendly(error) {
     [/device_types_name_idx/i, 'There’s already a type with that name from that maker.'],
     [/device_type_ports_type_id_name_key/i, 'Two ports on this type have the same name.'],
     [/devices_type_id_fkey/i, 'This type still has models at campuses. Delete or change those first.'],
+    [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],
+    [/invalid input syntax for type uuid/i, 'That doesn’t look like a Resi player ID.'],
     [/row-level security|permission denied/i, 'Your account doesn’t have access to change this.'],
     [/Failed to fetch|NetworkError/i, 'Can’t reach the server. Check your connection and try again.'],
   ];

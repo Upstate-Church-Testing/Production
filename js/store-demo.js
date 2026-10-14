@@ -169,8 +169,24 @@ function buildExample() {
   return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts };
 }
 
+// Example Resi players. The preview makes up what each one is showing.
+const STREAMS = [
+  ['SVL', 'Online', 'live', 'Wednesday Night Worship', 38],
+  ['GVL', 'Online', 'live', 'Wednesday Night Worship', 41],
+  ['FF', 'Online', 'replay', 'Sunday 11:00 Service', null, 4380],
+  ['HB', 'Online', 'offline'],
+  ['AND', 'Online', 'offline'],
+  ['MAU', 'Online', 'offline'],
+  ['GCC', 'Online', 'missing'],
+].map(([code, name, state, title, mins, dur], i) => ({
+  stream: { id: 's-' + code, campus_id: 'c-' + code, name, provider: 'resi', embed_id: `0000000${i}-0000-4000-8000-00000000000${i}`, embed_type: 'webchannel', sort_order: 0, created_at: ago(60 * 24) },
+  status: { state, title: title || '', startedAt: mins ? new Date(Date.now() - mins * 60000) : null, duration: dur || null },
+}));
+
 export function createDemoStore() {
   let db = buildExample();
+  let streams = STREAMS.map((x) => x.stream);
+  const demoStatus = new Map(STREAMS.map((x) => [x.stream.embed_id, x.status]));
   let me = clone(PEOPLE[0]);
   let people = clone(PEOPLE);
   let signedIn = true;
@@ -391,6 +407,24 @@ export function createDemoStore() {
       db.rooms.push(r);
       changed('rooms');
       return clone(r);
+    },
+
+    async streams() { await wait(); return clone(streams); },
+    async saveStream(st) {
+      await wait(160);
+      if (streams.some((x) => x.campus_id === st.campus_id && x.embed_id === st.embed_id && x.id !== st.id)) throw new Error('That player is already on this campus.');
+      const row = { campus_id: st.campus_id, name: (st.name || '').trim() || 'Online', embed_id: st.embed_id, embed_type: st.embed_type || 'webchannel' };
+      if (st.id) Object.assign(streams.find((x) => x.id === st.id), row);
+      else streams.push({ id: uid(), provider: 'resi', sort_order: 0, created_at: now(), ...row });
+      changed('streams');
+      return st.id || streams[streams.length - 1].id;
+    },
+    async deleteStream(id) { await wait(120); streams = streams.filter((x) => x.id !== id); changed('streams'); },
+    /** Stands in for asking Resi, so the preview has something to show. */
+    async resiStatus(st) {
+      await wait(250);
+      const s = demoStatus.get(st.embed_id) || { state: 'offline' };
+      return { ...s, checkedAt: new Date(), demo: true };
     },
 
     async profiles() { await wait(); return clone(people); },
