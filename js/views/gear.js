@@ -4,7 +4,8 @@ import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo 
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS } from './types.js';
 
 export function mount(el, ctx) {
-  const s = { q: '', tags: new Set(storage('ucp.geartags', [])), data: null, error: null };
+  let alive = true; // false once the person leaves this section
+  const s = { q: '', tags: new Set(storage('ucp.geartags', [])), cat: storage('ucp.gearcat', null), data: null, error: null };
   let openType = null; // { id, refresh }
 
   el.innerHTML = `
@@ -19,6 +20,7 @@ export function mount(el, ctx) {
     <div class="toolbar">
       <div class="search">${icon('search')}<input id="g-q" type="search" placeholder="Search type, maker, category, port" autocomplete="off" enterkeyhint="search" aria-label="Search types"></div>
       <div class="chips" id="g-chips"></div>
+      <div class="chips cat-chips" id="g-cats"></div>
     </div>
     <div id="g-results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add type">${icon('plus')}</button>`;
@@ -26,23 +28,26 @@ export function mount(el, ctx) {
   const q = $('#g-q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); draw(); }, 120));
   el.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-act], [data-type], [data-tag]');
+    const t = e.target.closest('[data-act], [data-type], [data-tag], [data-cat]');
     if (!t) return;
     if (t.dataset.type) openTypeSheet(t.dataset.type);
+    else if (t.dataset.cat !== undefined) { s.cat = t.dataset.cat === '' || t.dataset.cat === s.cat ? null : t.dataset.cat; store('ucp.gearcat', s.cat); draw(); }
     else if (t.dataset.tag) { s.tags.has(t.dataset.tag) ? s.tags.delete(t.dataset.tag) : s.tags.add(t.dataset.tag); store('ucp.geartags', [...s.tags]); draw(); }
     else if (t.dataset.act === 'add') newType();
-    else if (t.dataset.act === 'clear') { s.q = ''; q.value = ''; s.tags.clear(); store('ucp.geartags', []); draw(); }
+    else if (t.dataset.act === 'clear') { s.q = ''; q.value = ''; s.tags.clear(); s.cat = null; store('ucp.geartags', []); store('ucp.gearcat', null); draw(); }
     else if (t.dataset.act === 'retry') load();
   });
 
   const unsubscribe = ctx.store.subscribe(debounce(() => load(true), 350));
   load();
-  return { unmount: () => unsubscribe() };
+  return { unmount: () => { alive = false; unsubscribe(); } };
 
   async function load(quiet = false) {
+    if (!alive) return;
     if (!quiet) $('#g-results', el).innerHTML = `<div class="loading">${'<div class="sk"></div>'.repeat(5)}</div>`;
     try {
       s.data = await ctx.store.networkData();
+      if (!alive) return;
       s.data.types.forEach((t) => { t.ports = sortPorts(t.ports); });
       s.error = null;
     } catch (e) { s.error = e.message; }
@@ -53,10 +58,14 @@ export function mount(el, ctx) {
 
   function unitsOf(typeId) { return s.data.devices.filter((d) => d.type_id === typeId); }
 
+  function catOf(t) { return t.category || 'Uncategorized'; }
+  function inTags(t) { return !s.tags.size || t.departments.some((x) => s.tags.has(x)); }
   function matches(t) {
-    if (s.tags.size && !t.departments.some((x) => s.tags.has(x))) return false;
+    if (!inTags(t)) return false;
+    if (s.cat && catOf(t) !== s.cat) return false;
     if (!s.q) return true;
-    const hay = [t.name, t.manufacturer, t.category, t.part_number, t.description, ...(t.ports || []).map((p) => `${p.name} ${p.signal || ''}`)]
+    const hay = [t.name, t.manufacturer, t.category, t.part_number, t.description, ...t.departments.map((x) => ctx.dep[x]?.name || x),
+      ...(t.ports || []).map((p) => `${p.name} ${p.signal || ''}`)]
       .filter(Boolean).join(' ').toLowerCase();
     return s.q.split(/\s+/).every((w) => hay.includes(w));
   }
@@ -78,6 +87,13 @@ export function mount(el, ctx) {
       <div class="stat ${types.filter((t) => !unitsOf(t.id).length).length ? '' : 'is-zero'}"><span class="stat-label">Unused types</span><span class="stat-num">${types.filter((t) => !unitsOf(t.id).length).length}</span><span class="stat-sub">No models yet</span></div>`;
     $('#g-chips', el).innerHTML = types.length ? ctx.departments.map((d) => `<button type="button" class="chip dep" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${s.tags.has(d.slug)}"><i class="dot"></i>${esc(d.name)}<small>${types.filter((t) => t.departments.includes(d.slug)).length}</small></button>`).join('') : '';
 
+    // Category chips: the categories within the chosen tags, so Lighting → Fixture or Console.
+    const cats = new Map();
+    for (const t of types.filter(inTags)) cats.set(catOf(t), (cats.get(catOf(t)) || 0) + 1);
+    if (s.cat && !cats.has(s.cat)) s.cat = null;
+    const catKeys = [...cats.keys()].sort((a, b) => (a === 'Uncategorized') - (b === 'Uncategorized') || a.localeCompare(b));
+    $('#g-cats', el).innerHTML = cats.size > 1 ? `<button type="button" class="chip" data-cat="" aria-pressed="${!s.cat}">All categories</button>${catKeys.map((k) => `<button type="button" class="chip" data-cat="${esc(k)}" aria-pressed="${s.cat === k}">${esc(k)}<small>${cats.get(k)}</small></button>`).join('')}` : '';
+
     if (!types.length) {
       box.innerHTML = `<div class="empty">
         <h3>No types yet</h3>
@@ -88,7 +104,7 @@ export function mount(el, ctx) {
     }
     const shown = types.filter(matches);
     if (!shown.length) {
-      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No type matches “${esc(s.q)}”.` : 'No type matches these tags.'}</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
+      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No type matches “${esc(s.q)}”.` : 'No type matches these filters.'}</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
       return;
     }
     const groups = new Map();
@@ -111,7 +127,7 @@ export function mount(el, ctx) {
       <button class="row-hit" data-type="${t.id}" aria-label="Open ${esc(typeLabel(t))}"></button>
       ${tagDots(t.departments)}
       <span class="r-name"><b>${esc(t.name)}</b></span>
-      <span class="r-sub"><span class="r-model">${esc([t.manufacturer, t.part_number].filter(Boolean).join(' · '))}</span><span class="r-where">${t.ports?.length ? plural(t.ports.length, 'port') : ''}</span></span>
+      <span class="r-sub"><span class="r-model">${esc([t.manufacturer, t.part_number].filter(Boolean).join(' · '))}</span><span class="r-where">${[t.ports?.length ? plural(t.ports.length, 'port') : null, t.networked === false ? 'no IP' : null].filter(Boolean).join(' · ')}</span></span>
       <span class="r-count"><b>${units.length}</b><small>${units.length === 1 ? 'model' : 'models'}${campuses ? ` · ${plural(campuses, 'campus', 'campuses')}` : ''}</small></span>
     </li>`;
   }
@@ -154,6 +170,7 @@ export function mount(el, ctx) {
       const units = unitsOf(t.id);
       const byCampus = new Map();
       for (const u of units) { if (!byCampus.has(u.campus_id)) byCampus.set(u.campus_id, []); byCampus.get(u.campus_id).push(u); }
+      for (const list of byCampus.values()) list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })); // R3 Beam 2 before R3 Beam 10
       const campusOrder = ctx.campuses.filter((c) => byCampus.has(c.id));
       const firstIp = (u) => { const ip = s.data.ips.find((i) => i.device_id === u.id && i.ip); return ip ? splitInet(ip.ip).addr : ''; };
       const room = (u) => s.data.rooms.find((r) => r.id === u.room_id)?.name;
@@ -183,7 +200,7 @@ export function mount(el, ctx) {
                 </button></li>`).join('')}</ul>
               </div>`).join('')
               : '<p class="muted">None yet. Add one for each campus that has this gear.</p>'}
-            <button class="btn" data-g="add-unit">${icon('plus')}Add a model of this type</button>
+            <button class="btn" data-g="add-unit">${icon('plus')}Add models of this type</button>
           </section>
           ${t.manual_url ? `<a class="btn" href="${esc(t.manual_url)}" target="_blank" rel="noopener">${icon('open')}Open manual</a>` : ''}
           ${t.notes ? `<p class="notes">${esc(t.notes)}</p>` : ''}

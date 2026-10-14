@@ -92,7 +92,12 @@ export async function createSupabaseStore(url, key) {
       return ok(await sb.from('device_ports').select('*').eq('device_id', deviceId));
     },
     async saveType(payload) {
-      return ok(await sb.rpc('save_device_type', { payload }));
+      const id = ok(await sb.rpc('save_device_type', { payload }));
+      if ('networked' in payload.type) ok(await sb.from('device_types').update({ networked: !!payload.type.networked }).eq('id', id));
+      return id;
+    },
+    async addDevices(payload) {
+      return ok(await sb.rpc('add_devices', { payload }));
     },
     async deleteType(id) {
       ok(await sb.from('device_types').delete().eq('id', id));

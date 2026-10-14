@@ -54,7 +54,7 @@ function buildExample() {
     if (!t) {
       t = { id: uid(), key, name, manufacturer: d.manufacturer || null, part_number: null, category: d.category || null,
         departments: [...d.departments], description: SPECS[name]?.description || null, specs: SPECS[name]?.specs || [],
-        manual_url: null, notes: null, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
+        manual_url: null, notes: null, networked: d.networked !== false, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
       types.push(t);
       (PORTS[name] || []).forEach((p, i) => typePorts.push({ id: uid(), type_id: t.id, connector: null, direction: 'io', notes: null, sort_order: i, ...p }));
     }
@@ -77,7 +77,7 @@ function buildExample() {
   };
   const dev = (code, roomName, d, addr = []) => {
     const id = uid();
-    const { manufacturer, model, category, ...rest } = d;
+    const { manufacturer, model, category, networked, ...rest } = d;
     devices.push({ id, type_id: typeFor(d), campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null,
       serial_number: null, firmware: null, location: null, status: 'active',
       notes: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
@@ -122,6 +122,7 @@ function buildExample() {
   dev('SVL', W, { name: 'Main L Amp', departments: ['audio'], category: 'Amplifier', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.20/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Main R Amp', departments: ['audio'], category: 'Amplifier', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.21/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Sub Amp', departments: ['audio'], category: 'Amplifier', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.22/24', label: 'Dante Primary' }]);
+  for (let i = 1; i <= 6; i++) dev('SVL', W, { name: `R2X Wash ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'Chauvet', model: 'Rogue R2X Wash', networked: false, location: i <= 3 ? 'Upstage truss' : 'Midstage truss' });
   dev('SVL', 'North Auditorium', { name: 'DMX Node', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'DMX-AN2', location: 'Stage Right' }, [{ ip: '10.50.10.120/24', gw: '2.0.0.1' }]);
   dev('SVL', 'North Auditorium', { name: 'EPIX Drive', departments: ['lighting'], category: 'LED Driver', manufacturer: 'Chauvet', model: 'EPIX Drive 2000 IP', location: 'Stage Right' });
 
@@ -314,7 +315,7 @@ export function createDemoStore() {
       if (db.types.some((x) => x.id !== t.id && x.name.toLowerCase() === name.toLowerCase() && (x.manufacturer || '').toLowerCase() === (mfr || '').toLowerCase())) {
         throw new Error('There’s already a type with that name from that maker.');
       }
-      const fields = { name, manufacturer: mfr, part_number: blank(t.part_number), category: blank(t.category), departments: tags,
+      const fields = { name, manufacturer: mfr, part_number: blank(t.part_number), category: blank(t.category), departments: tags, networked: t.networked !== false,
         description: blank(t.description), specs: t.specs || [], manual_url: blank(t.manual_url), notes: blank(t.notes) };
       let row = t.id ? db.types.find((x) => x.id === t.id) : null;
       if (row) Object.assign(row, fields, { updated_at: now(), updated_by: me.id });
@@ -333,6 +334,24 @@ export function createDemoStore() {
       }
       changed('device_types');
       return row.id;
+    },
+    async addDevices(payload) {
+      await wait(250);
+      const d = payload.device;
+      const type = db.types.find((t) => t.id === d.type_id);
+      if (!type) throw new Error('Pick a type for these models.');
+      const names = payload.names || [];
+      if (names.length < 1 || names.length > 500) throw new Error('Add between 1 and 500 at a time.');
+      const tags = depOrder(d.departments || []);
+      for (const n of names) {
+        const dev = { id: uid(), type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(n) || type.name,
+          departments: tags.length ? tags : [...type.departments], serial_number: null, firmware: null, location: blank(d.location),
+          status: d.status || 'active', notes: blank(d.notes), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+        db.devices.push(dev);
+        log('created', 'devices', dev, { name: dev.name });
+      }
+      changed('devices');
+      return names.length;
     },
     async deleteType(id) {
       await wait(150);

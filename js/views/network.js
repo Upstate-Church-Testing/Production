@@ -20,6 +20,7 @@ const FIELD = {
 };
 
 export function mount(el, ctx) {
+  let alive = true; // false once the person leaves this section
   const s = {
     campus: storage('ucp.campus', ctx.me.home_campus_id || 'all'),
     mode: storage('ucp.netmode', 'devices'),
@@ -93,14 +94,16 @@ export function mount(el, ctx) {
 
   const unsubscribe = ctx.store.subscribe(debounce(() => load(true), 350));
   load();
-  return { unmount: () => unsubscribe() };
+  return { unmount: () => { alive = false; unsubscribe(); } };
 
   // ------------------------------------------------------------- data ---
 
   async function load(quiet = false) {
+    if (!alive) return;
     if (!quiet) $('#results', el).innerHTML = `<div class="loading">${'<div class="sk"></div>'.repeat(6)}</div>`;
     try {
       s.data = await ctx.store.networkData();
+      if (!alive) return;
       s.ix = buildIndex(s.data);
       s.error = null;
     } catch (e) {
@@ -149,6 +152,18 @@ export function mount(el, ctx) {
     return ix;
   }
 
+  /** Next free number for "Base N" names at a campus (R3 Beam 1, R3 Beam 2…). */
+  function nextNumber(base, campusId) {
+    const re = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(\\d+)$`, 'i');
+    let max = 0;
+    for (const d of s.data.devices) {
+      if (d.campus_id !== campusId) continue;
+      const m = re.exec(d.name.trim());
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+    return max + 1;
+  }
+
   function inCampus(row) { return s.campus === 'all' || row.campus_id === s.campus; }
   function campusName(id) { return ctx.campusById.get(id)?.short_name || 'Unknown campus'; }
 
@@ -158,6 +173,7 @@ export function mount(el, ctx) {
     for (const dev of s.data.devices) {
       if (!inCampus(dev)) continue;
       const ips = s.ix.ipsByDev.get(dev.id) || [];
+      if (!ips.length && s.ix.type.get(dev.type_id)?.networked === false) continue;
       if (!ips.length) out.push({ dev, ip: null });
       else for (const ip of ips) out.push({ dev, ip });
     }
@@ -194,7 +210,7 @@ export function mount(el, ctx) {
     const box = $('#stats', el);
     if (!s.data) { box.innerHTML = s.error ? '' : '<div class="stat"><span class="stat-label">Loading…</span><span class="stat-num">–</span></div>'; return; }
     const all = entries();
-    const devs = s.data.devices.filter(inCampus);
+    const devs = [...new Map(all.map((e) => [e.dev.id, e.dev])).values()];
     const ips = s.data.ips.filter((i) => inCampus(i) && i._addr);
     const nets = s.data.networks.filter(inCampus);
     const conflicts = all.filter((e) => e.ip && s.ix.conflicts.has(e.ip.id)).length;
@@ -275,7 +291,7 @@ export function mount(el, ctx) {
   }
 
   function groupHtml(net, list, campusId) {
-    list.sort((a, b) => (a.ip?._int ?? Infinity) - (b.ip?._int ?? Infinity) || a.dev.name.localeCompare(b.dev.name));
+    list.sort((a, b) => (a.ip?._int ?? Infinity) - (b.ip?._int ?? Infinity) || a.dev.name.localeCompare(b.dev.name, undefined, { numeric: true }));
     return `<section class="net">
       ${net ? netHead(net) : `<header class="net-head none"><div class="net-title"><h3>Not on a network yet</h3></div><p class="net-sub">IPs with no network picked, and models with no IP recorded.</p></header>`}
       <ul class="rows">${list.map(rowHtml).join('')}</ul>
@@ -421,6 +437,7 @@ export function mount(el, ctx) {
       else if (a === 'tag') { collect(); const tg = t.dataset.tag; draft.departments = draft.departments.includes(tg) ? draft.departments.filter((x) => x !== tg) : [...draft.departments, tg]; dirty = true; renderEdit(); }
       else if (a === 'next-ip') { collect(); fillNextIp(+t.dataset.i); }
       else if (a === 'add-room') addRoom();
+      else if (a === 'qty-' || a === 'qty+') { collect(); draft.qty = clampQty(draft.qty + (a === 'qty+' ? 1 : -1)); renderEdit(); }
       else if (a === 'open-type') { const tid = dev.type_id; openDevice = null; sheet.close(true); ctx.openType(tid); }
       else if (a === 'delete') { confirmDelete = true; renderView(); }
       else if (a === 'delete-no') { confirmDelete = false; renderView(); }
@@ -438,6 +455,7 @@ export function mount(el, ctx) {
       dirty = true;
       const id_ = e.target.id;
       if (id_ === 'f-type') { onTypePicked(e.target.value); return; }
+      if (id_ === 'f-qty' || id_ === 'f-numbered' || id_ === 'f-start') { collect(); renderEdit(); return; }
       if (id_ === 'f-campus') { collect(); draft.room_id = ''; draft.ips.forEach((ip) => { ip.network_id = ''; }); renderEdit(); }
       else if (id_ === 'f-room') {
         const was = draft.room_id;
@@ -629,7 +647,7 @@ export function mount(el, ctx) {
             creds: creds.map((c) => ({ ...c })),
             ports: Object.fromEntries(ports.map((p) => [p.type_port_id, { connected_to: p.connected_to || '', assignment: p.assignment || '', notes: p.notes || '' }])) }
         : { id: '', type_id: '', campus_id: defaultCampus, room_id: '', name: '', departments: [], serial_number: '', firmware: '',
-            location: '', status: 'active', notes: '', ips: [blankIp()], creds: [], ports: {} };
+            location: '', status: 'active', notes: '', ips: [blankIp()], creds: [], ports: {}, qty: clampQty(preset.qty || 1), numbering: true, start: '' };
       if (!dev && preset.type_id) onTypePicked(preset.type_id, true);
       renderEdit();
       $(draft.type_id ? '#f-name' : '#f-type', sheet.el)?.focus();
@@ -647,6 +665,8 @@ export function mount(el, ctx) {
         typeGroups.get(k).push(t);
       }
       const oldPatches = dev && draft.type_id !== dev.type_id && ports?.length;
+      const bulk = !dev && draft.qty > 1;
+      const names = bulk ? bulkNames() : [];
       const locs = [...new Set(s.data.devices.filter((d) => d.campus_id === campusId).map((d) => d.location).filter(Boolean))].sort();
       const scroll = $('.sh-body', sheet.el)?.scrollTop || 0;
       sheet.render(`
@@ -663,7 +683,22 @@ export function mount(el, ctx) {
           </select>
           ${ty ? `<small class="hint">${esc([ty.category, ty.part_number, ty.ports.length ? plural(ty.ports.length, 'port') : null].filter(Boolean).join(' · ') || 'Specs and ports come from the type.')}</small>` : `<small class="hint">The product this is, like Hoglet 4. Its specs and ports come from the type.</small>`}
           ${oldPatches ? `<small class="hint warn-text">What was recorded on the old type’s ports will be cleared when you save.</small>` : ''}</label>
-          <label class="field"><span>Name</span><input id="f-name" value="${esc(draft.name)}" placeholder="${esc(ty ? ty.name : 'FOH Switch, Camera 2, Stage Box…')}"></label>
+          ${!dev ? `<div class="qty-row">
+            <div class="field"><span>How many</span>
+              <div class="stepper">
+                <button type="button" class="icon-btn" data-a="qty-" aria-label="One fewer" ${draft.qty <= 1 ? 'disabled' : ''}>${icon('minus')}</button>
+                <input id="f-qty" class="mono" inputmode="numeric" value="${draft.qty}" aria-label="How many to add">
+                <button type="button" class="icon-btn" data-a="qty+" aria-label="One more">${icon('plus')}</button>
+              </div>
+            </div>
+            ${bulk ? `<label class="check"><input type="checkbox" id="f-numbered" ${draft.numbering ? 'checked' : ''}><span>Number the names</span></label>` : ''}
+          </div>` : ''}
+          <label class="field"><span>${bulk ? 'Name for all of them' : 'Name'}</span><input id="f-name" value="${esc(draft.name)}" placeholder="${esc(ty ? ty.name : 'FOH Switch, Camera 2, Stage Box…')}"></label>
+          ${bulk && draft.numbering ? `<div class="grid2">
+            <label class="field"><span>Start numbering at</span><input id="f-start" class="mono" inputmode="numeric" value="${esc(draft.start)}" placeholder="${nextNumber(bulkBase(), draft.campus_id)}"></label>
+            <p class="bulk-preview">${esc(names[0])}<i>→</i>${esc(names[names.length - 1])}</p>
+          </div>` : ''}
+          ${bulk ? `<p class="fine">Serial numbers, IPs and what's plugged into each port get filled in on each one after they're added.</p>` : ''}
           <div class="field"><span>Tags <b class="req">at least one</b></span>
             <div class="tag-picker">${ctx.departments.map((d) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${draft.departments.includes(d.slug)}"><i class="dot"></i>${esc(d.name)}</button>`).join('')}</div>
           </div>
@@ -681,12 +716,12 @@ export function mount(el, ctx) {
             <label class="field"><span>Location in the room</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Stage rack, Catwalk…"></label>
           </fieldset>
 
-          <fieldset class="group"><legend>IP addresses</legend>
+          ${bulk ? '' : `<fieldset class="group"><legend>IP addresses</legend>
             <div class="ip-edit">${draft.ips.map((ip, i) => ipEditCard(ip, i, nets)).join('')}</div>
             <button type="button" class="btn" data-a="add-ip">${icon('plus')}${draft.ips.length ? 'Add another IP' : 'Add an IP'}</button>
-          </fieldset>
+          </fieldset>`}
 
-          ${ty?.ports.length ? `<fieldset class="group"><legend>Ports <span class="count">${ty.ports.length}</span></legend>
+          ${ty?.ports.length && !bulk ? `<fieldset class="group"><legend>Ports <span class="count">${ty.ports.length}</span></legend>
             <p class="fine">What’s plugged into each port on this one. Leave a port blank if nothing is.</p>
             <div class="patch-edit">${ty.ports.map((p) => {
               const x = draft.ports[p.id] || {};
@@ -698,7 +733,7 @@ export function mount(el, ctx) {
             }).join('')}</div>
           </fieldset>` : ''}
 
-          <fieldset class="group"><legend>This model</legend>
+          ${bulk ? '' : `<fieldset class="group"><legend>This model</legend>
             <div class="grid2">
               <label class="field"><span>Serial number</span><input id="f-serial_number" class="mono" value="${esc(draft.serial_number)}"></label>
               <label class="field"><span>Firmware / software</span><input id="f-firmware" class="mono" value="${esc(draft.firmware)}"></label>
@@ -718,7 +753,7 @@ export function mount(el, ctx) {
               <button type="button" class="btn ghost small danger-text" data-a="rm-cred" data-i="${i}">${icon('trash')}Remove login</button>
             </div>`).join('')}</div>
             <button type="button" class="btn" data-a="add-cred">${icon('key')}Add a login</button>
-          </fieldset>
+          </fieldset>`}
 
           <datalist id="dl-loc">${locs.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
           <datalist id="dl-iplabel">${IP_LABELS.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
@@ -728,7 +763,7 @@ export function mount(el, ctx) {
           <p class="form-msg ${error ? 'bad' : ''}" role="status">${esc(error)}</p>
           <span class="spacer"></span>
           <button class="btn" data-a="cancel">Cancel</button>
-          <button class="btn primary" data-a="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : dev ? 'Save changes' : 'Add model'}</button>
+          <button class="btn primary" data-a="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : dev ? 'Save changes' : bulk ? `Add ${draft.qty} models` : 'Add model'}</button>
         </footer>`);
       $('#dev-form', sheet.el).addEventListener('submit', (e) => { e.preventDefault(); save(); });
       const body = $('.sh-body', sheet.el);
@@ -765,7 +800,10 @@ export function mount(el, ctx) {
     function collect() {
       const f = (id) => $(`#${id}`, sheet.el);
       if (!f('f-name')) return;
-      for (const k of ['name', 'location', 'serial_number', 'firmware', 'notes', 'status']) draft[k] = f('f-' + k).value;
+      for (const k of ['name', 'location', 'serial_number', 'firmware', 'notes', 'status']) if (f('f-' + k)) draft[k] = f('f-' + k).value;
+      if (f('f-qty')) draft.qty = clampQty(parseInt(f('f-qty').value, 10));
+      if (f('f-numbered')) draft.numbering = f('f-numbered').checked;
+      if (f('f-start')) draft.start = f('f-start').value.replace(/\D/g, '');
       const ty = s.ix.type.get(draft.type_id);
       for (const p of ty?.ports || []) {
         if (!f(`pp-${p.id}-to`)) continue;
@@ -822,6 +860,15 @@ export function mount(el, ctx) {
       renderEdit();
     }
 
+    function bulkBase() {
+      return (draft.name || '').trim() || s.ix.type.get(draft.type_id)?.name || 'Model';
+    }
+    function bulkNames() {
+      const base = bulkBase();
+      const start = draft.start !== '' ? Number(draft.start) : nextNumber(base, draft.campus_id);
+      return Array.from({ length: draft.qty }, (_, i) => (draft.numbering ? `${base} ${start + i}` : base));
+    }
+
     /** Picking a type: the name and tags follow it unless they were changed by hand. */
     function onTypePicked(v, initial = false) {
       if (!initial) collect();
@@ -833,6 +880,9 @@ export function mount(el, ctx) {
         if (prev && draft.name.trim() === prev.name) draft.name = '';
         const same = prev && draft.departments.length === prev.departments.length && draft.departments.every((t) => prev.departments.includes(t));
         if (!draft.departments.length || same) draft.departments = [...next.departments];
+        const blankOnly = draft.ips.every((ip) => !ip.addr && !ip.mac && !ip.label && !ip.network_id && !ip.gateway);
+        if (!dev && next.networked === false && blankOnly) draft.ips = [];
+        if (!dev && next.networked !== false && !draft.ips.length) draft.ips = [blankIp()];
       }
       if (!initial) { dirty = true; renderEdit(); }
     }
@@ -874,6 +924,7 @@ export function mount(el, ctx) {
       if (!draft.type_id) return err('Pick a type, or choose “New type…” to add one.', '#f-type');
       if (!draft.departments.length) return err('Tag it audio, video or lighting (at least one).');
       if (draft.room_id === '__new') return err('Finish adding the new room, or pick “No room”.', '#f-newroom');
+      if (!dev && draft.qty > 1) return saveMany(err);
 
       const ips = [];
       for (const [i, ip] of draft.ips.entries()) {
@@ -919,6 +970,26 @@ export function mount(el, ctx) {
         if (dev) renderView(); else sheet.close(true);
       } catch (e) {
         busy = false; renderEdit(e.message);
+      }
+    }
+
+    async function saveMany(err) {
+      const ty = s.ix.type.get(draft.type_id);
+      const names = bulkNames();
+      busy = true; renderEdit();
+      try {
+        const n = await ctx.store.addDevices({
+          device: { type_id: draft.type_id, campus_id: draft.campus_id, room_id: draft.room_id || '', location: draft.location,
+            departments: draft.departments, status: 'active', notes: '' },
+          names,
+        });
+        busy = false; dirty = false;
+        ctx.toast(ty?.networked === false ? `Added ${n} ${ty.name}. They're listed under Gear.` : `Added ${n} ${ty?.name || 'models'}`);
+        openDevice = null;
+        sheet.close(true);
+        load(true);
+      } catch (e) {
+        busy = false; err(e.message);
       }
     }
 
@@ -1039,6 +1110,8 @@ export function mount(el, ctx) {
     $('#n-name', sheet.el)?.focus();
   }
 }
+
+const clampQty = (n) => Math.max(1, Math.min(200, Number.isFinite(n) ? n : 1));
 
 function kv(label, value, mono = false) {
   if (value == null || value === '') return '';

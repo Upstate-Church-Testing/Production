@@ -28,7 +28,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     ? { ...type, departments: [...type.departments], specs: (type.specs || []).map((x) => ({ ...x })),
         ports: sortPorts(type.ports).map((p) => ({ ...p })) }
     : { id: '', name: '', manufacturer: '', part_number: '', category: '', departments: [], description: '',
-        specs: [], ports: [], manual_url: '', notes: '', ...defaults };
+        specs: [], ports: [], manual_url: '', notes: '', networked: true, ...defaults };
   const originalPortIds = new Set((type?.ports || []).map((p) => p.id));
   let dirty = false;
   let busy = false;
@@ -60,6 +60,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
           <div class="tag-picker">${ctx.departments.map((t) => `<button type="button" class="chip dep big" data-ta="tag" data-tag="${t.slug}" data-dep="${t.slug}" aria-pressed="${d.departments.includes(t.slug)}"><i class="dot"></i>${esc(t.name)}</button>`).join('')}</div>
           <small class="hint">New models start with these tags. Each model can change its own.</small>
         </div>
+        <label class="check"><input type="checkbox" id="t-networked" ${d.networked !== false ? 'checked' : ''}><span>Connects to a network and gets an IP address<small class="hint">Turn off for things like fixtures. Their models stay off the IP sheet unless one is given an IP.</small></span></label>
         <label class="field"><span>Description</span><textarea id="t-description" rows="2" placeholder="What it is and what it does">${esc(d.description || '')}</textarea></label>
 
         <fieldset class="group"><legend>Specs</legend>
@@ -122,6 +123,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     const v = (id) => $(`#${id}`, sheet.el)?.value ?? '';
     if (!$('#t-name', sheet.el)) return;
     for (const k of ['name', 'manufacturer', 'category', 'part_number', 'manual_url', 'description', 'notes']) d[k] = v('t-' + k);
+    d.networked = $('#t-networked', sheet.el)?.checked ?? d.networked;
     d.specs.forEach((sp, i) => { sp.label = v(`sp-${i}-label`); sp.value = v(`sp-${i}-value`); });
     d.ports.forEach((p, i) => {
       p.name = v(`po-${i}-name`); p.signal = v(`po-${i}-signal`); p.connector = v(`po-${i}-connector`); p.direction = v(`po-${i}-direction`) || 'io';
@@ -147,7 +149,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
       const id = await ctx.store.saveType({
         type: {
           id: d.id || '', name: d.name, manufacturer: d.manufacturer, part_number: d.part_number, category: d.category,
-          departments: d.departments, description: d.description, manual_url: d.manual_url, notes: d.notes,
+          departments: d.departments, description: d.description, manual_url: d.manual_url, notes: d.notes, networked: d.networked !== false,
           specs: d.specs.filter((sp) => sp.label.trim() || sp.value.trim()).map((sp) => ({ label: sp.label.trim(), value: sp.value.trim() })),
         },
         ports: ports.map((p) => ({ id: p.id || '', name: p.name.trim(), signal: p.signal, connector: p.connector, direction: p.direction || 'io', notes: p.notes || '' })),

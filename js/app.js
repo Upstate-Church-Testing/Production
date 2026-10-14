@@ -183,8 +183,11 @@ function onHash() {
   if (current?.id === mod.id) return;
   openSheetApi?.close(true); // leaving a section closes whatever was open on it
   current?.instance?.unmount?.();
-  const view = $('#view');
-  view.innerHTML = '';
+  // A fresh container per section, so the last section's listeners go with it.
+  const view = document.createElement('main');
+  view.id = 'view';
+  view.tabIndex = -1;
+  $('#view').replaceWith(view);
   view.className = `view view-${mod.id}`;
   current = { id: mod.id, instance: mod.view.mount(view, ctx) };
   document.title = `${mod.label} · ${APP_NAME}`;
