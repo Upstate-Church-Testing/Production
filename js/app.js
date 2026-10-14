@@ -214,9 +214,10 @@ function renderAuth(notice = '', tab = 'in') {
     e.preventDefault();
     const msg = $('.form-msg', form);
     const btn = $('button[type=submit]', form);
-    const email = form.email.value.trim();
-    const pass = form.password.value;
-    const name = form.name?.value.trim();
+    // Read inputs by id: a form's own `name` property hides an input called "name".
+    const email = $('#a-email', form).value.trim();
+    const pass = $('#a-pass', form).value;
+    const name = $('#a-name', form)?.value.trim() || '';
     if (tab === 'up' && !name) return (msg.textContent = 'Add your name so the team knows who you are.');
     if (!/^\S+@\S+\.\S+$/.test(email)) return (msg.textContent = 'Enter your email address.');
     if (pass.length < 8) return (msg.textContent = 'Passwords are at least 8 characters.');
@@ -250,7 +251,7 @@ function renderForgot() {
   $('#back').addEventListener('click', () => renderAuth());
   $('#f-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const msg = $('.form-msg'); const email = e.target.email.value.trim();
+    const msg = $('.form-msg'); const email = $('#f-email').value.trim();
     if (!/^\S+@\S+\.\S+$/.test(email)) return (msg.textContent = 'Enter your email address.');
     msg.textContent = 'Sending…';
     try { await ctx.store.sendReset(email); msg.textContent = `If there’s an account for ${email}, a reset link is on its way.`; }
@@ -269,7 +270,7 @@ function renderSetPassword() {
     </form>`);
   $('#p-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const msg = $('.form-msg'); const pass = e.target.password.value;
+    const msg = $('.form-msg'); const pass = $('#p-new').value;
     if (pass.length < 8) return (msg.textContent = 'Use at least 8 characters.');
     msg.textContent = 'Saving…';
     try {
