@@ -750,6 +750,11 @@ revoke execute on function public.my_role(), public.has_role(public.app_role), p
 grant execute on function public.my_role(), public.has_role(public.app_role), public.save_device(jsonb)
   to authenticated;
 
+-- Trigger functions run automatically; nobody should call them directly.
+revoke execute on function public.guard_profile(), public.handle_new_user(),
+  public.handle_user_email_change(), public.log_activity()
+  from public, anon, authenticated;
+
 -- Signed-in users can reach the tables (row-level security decides which rows).
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on public.rooms, public.networks, public.devices,

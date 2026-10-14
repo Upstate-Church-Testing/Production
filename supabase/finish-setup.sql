@@ -154,3 +154,8 @@ revoke execute on function public.my_role(), public.has_role(public.app_role), p
   from public, anon;
 grant execute on function public.my_role(), public.has_role(public.app_role), public.save_device(jsonb)
   to authenticated;
+
+-- Trigger functions run automatically; nobody should call them directly.
+revoke execute on function public.guard_profile(), public.handle_new_user(),
+  public.handle_user_email_change(), public.log_activity()
+  from public, anon, authenticated;
