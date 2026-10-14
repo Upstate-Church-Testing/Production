@@ -34,9 +34,13 @@ campuses ── rooms
     │
     ├── networks (subnet, VLAN, gateway, tags)
     │
-    └── devices (name, tags, category, make/model, serial, firmware, room, location, status)
+    └── devices — one physical unit ("model" in the app): name, tags, serial, firmware, room, location, status
             ├── device_ips (IP + mask, gateway, MAC, network, label, static/DHCP)
+            ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)
+
+device_types     the shared catalog entry ("type" in the app): name, maker, part number, category, tags, specs, manual
+    └── device_type_ports (the port layout every unit of that type shares)
 
 departments      audio / video / lighting — the tag on every item
 profiles         one per login: role, teams, home campus
@@ -56,7 +60,9 @@ js/config.js                   Supabase URL + publishable key (empty = preview m
 js/app.js                      sign-in, roles, navigation, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
-js/views/network.js            the IP sheet
+js/views/network.js            the IP sheet and the model editor
+js/views/gear.js               device types: specs, ports, and models at each campus
+js/views/types.js              the type editor (shared by Gear and the model editor)
 js/views/team.js               people and access
 js/views/account.js            your profile, theme, sign out
 supabase/migrations/*.sql      database, permissions, history

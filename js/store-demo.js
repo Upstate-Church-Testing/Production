@@ -31,7 +31,40 @@ const PEOPLE = [
 
 // [campus, room, network, name, tags, category, model, location, ip, extra]
 function buildExample() {
-  const rooms = [], networks = [], devices = [], ips = [], creds = [], activity = [];
+  const rooms = [], networks = [], devices = [], ips = [], creds = [], activity = [], types = [], typePorts = [], devPorts = [];
+  const nums = (prefix, n, o) => Array.from({ length: n }, (_, i) => ({ name: `${prefix}${i + 1}`, ...o }));
+  // Example port layouts and specs, keyed by type name.
+  const PORTS = {
+    'Net-X II': [...nums('DMX ', 8, { signal: 'DMX', connector: 'XLR5', direction: 'out' }), { name: 'Ethernet', signal: 'Art-Net / sACN', connector: 'etherCON' }],
+    'Hoglet 4': [...nums('DMX ', 4, { signal: 'DMX', connector: 'XLR5', direction: 'out' }), { name: 'Ethernet', signal: 'Ethernet', connector: 'RJ45' }, { name: 'USB to PC', signal: 'USB', connector: 'USB-A' }],
+    'SG350-10': nums('Port ', 10, { signal: 'Ethernet', connector: 'RJ45' }),
+    'KY-PZ100': [{ name: 'SDI Out', signal: 'SDI', connector: 'BNC', direction: 'out' }, { name: 'HDMI Out', signal: 'HDMI', connector: 'HDMI', direction: 'out' }, { name: 'LAN', signal: 'Ethernet', connector: 'RJ45' }],
+    'Rio3224-D2': [{ name: 'Dante Primary', signal: 'Dante', connector: 'etherCON' }, { name: 'Dante Secondary', signal: 'Dante', connector: 'etherCON' }],
+    'Pathport 8-port rack mount': [...nums('DMX ', 8, { signal: 'DMX', connector: 'XLR5', direction: 'out' }), { name: 'Ethernet', signal: 'Art-Net / sACN', connector: 'RJ45' }],
+  };
+  const SPECS = {
+    'Hoglet 4': { description: 'Compact Hog 4 console wing; runs with a Hog 4 PC.', specs: [{ label: 'DMX outputs', value: '4 universes' }, { label: 'Network', value: 'HogNet, Art-Net, sACN' }] },
+    'Net-X II': { description: 'Ethernet-to-DMX gateway.', specs: [{ label: 'DMX ports', value: '8' }, { label: 'Protocols', value: 'Art-Net, sACN' }] },
+    'KY-PZ100': { specs: [{ label: 'Zoom', value: '30x optical' }, { label: 'Outputs', value: '3G-SDI, HDMI, IP stream' }] },
+  };
+  const typeFor = (d) => {
+    const name = d.model || d.category || d.name;
+    const key = `${d.manufacturer || ''}|${name}`;
+    let t = types.find((x) => x.key === key);
+    if (!t) {
+      t = { id: uid(), key, name, manufacturer: d.manufacturer || null, part_number: null, category: d.category || null,
+        departments: [...d.departments], description: SPECS[name]?.description || null, specs: SPECS[name]?.specs || [],
+        manual_url: null, notes: null, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
+      types.push(t);
+      (PORTS[name] || []).forEach((p, i) => typePorts.push({ id: uid(), type_id: t.id, connector: null, direction: 'io', notes: null, sort_order: i, ...p }));
+    }
+    return t.id;
+  };
+  const patch = (deviceId, portName, connected_to, assignment = null) => {
+    const d = devices.find((x) => x.id === deviceId);
+    const port = typePorts.find((p) => p.type_id === d.type_id && p.name === portName);
+    devPorts.push({ id: uid(), device_id: deviceId, type_port_id: port.id, connected_to, assignment, notes: null });
+  };
   const room = (code, name) => {
     let r = rooms.find((x) => x.campus_id === 'c-' + code && x.name === name);
     if (!r) rooms.push((r = { id: uid(), campus_id: 'c-' + code, name, sort_order: rooms.length }));
@@ -44,9 +77,10 @@ function buildExample() {
   };
   const dev = (code, roomName, d, addr = []) => {
     const id = uid();
-    devices.push({ id, campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null, category: null,
-      manufacturer: null, model: null, serial_number: null, firmware: null, location: null, status: 'active',
-      notes: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...d });
+    const { manufacturer, model, category, ...rest } = d;
+    devices.push({ id, type_id: typeFor(d), campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null,
+      serial_number: null, firmware: null, location: null, status: 'active',
+      notes: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
     addr.forEach((a, i) => ips.push({ id: uid(), device_id: id, campus_id: 'c-' + code, network_id: a.net ? 'n-' + code + '-' + a.net : null,
       label: a.label || null, ip: a.ip || null, gateway: a.gw || null, mac: a.mac || null, hostname: null,
       mode: a.mode || 'static', notes: null, sort_order: i }));
@@ -63,7 +97,7 @@ function buildExample() {
   dev('SVL', W, { name: 'A-Control Switch', departments: ['video'], category: 'Switch', manufacturer: 'Cisco', model: 'SF300-24PP (PoE+)', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.103/24', label: 'Management' }]);
   dev('SVL', W, { name: 'Stage Switch', departments: ['video', 'lighting'], category: 'Switch', manufacturer: 'Cisco', model: 'SG300-10', location: 'Stage Rack' }, [{ net: 'ctl', ip: '10.50.10.104/24', label: 'Management' }]);
   const ma = dev('SVL', W, { name: 'Lighting Console', departments: ['lighting'], category: 'Console', manufacturer: 'MA Lighting', model: 'grandMA3 compact XT', location: 'FOH', firmware: '2.3.1.1' }, [{ net: 'ctl', ip: '10.50.10.105/24' }]);
-  dev('SVL', W, { name: 'Stage Gateway', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'Net-X II', location: 'Stage Rack', firmware: 'B1.0 V3.4' }, [{ net: 'ctl', ip: '10.50.10.106/24', label: 'Art-Net / sACN' }]);
+  const stageGw = dev('SVL', W, { name: 'Stage Gateway', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'Net-X II', location: 'Stage Rack', firmware: 'B1.0 V3.4' }, [{ net: 'ctl', ip: '10.50.10.106/24', label: 'Art-Net / sACN' }]);
   const cat = dev('SVL', W, { name: 'Catwalk Gateway', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'Net-X II', location: 'Catwalk', firmware: 'B1.0 V3.7' }, [{ net: 'ctl', ip: '10.50.10.107/24', label: 'Art-Net / sACN' }]);
   dev('SVL', W, { name: 'MA3 Node 1', departments: ['lighting'], category: 'Node / Gateway', model: 'grandMA3 node', location: 'Stage Rack', firmware: '2.1.1.2', notes: 'Old sheet lists this at .106 too. Check which one is live.' }, [{ net: 'ctl', ip: '10.50.10.106/24' }]);
   dev('SVL', W, { name: 'Truss Gateway', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'Net-X II', location: 'Truss' });
@@ -95,7 +129,7 @@ function buildExample() {
   net('HB', 'lx', { name: 'Lighting', purpose: 'Console, Pathports, wall stations', subnet: '10.50.0.0/16', gateway: '10.50.1.1', departments: ['lighting'], is_isolated: true });
   net('HB', 'prod', { name: 'Production', subnet: '10.80.8.0/24', vlan_id: 203, departments: ['video', 'audio'] });
   dev('HB', W, { name: 'Stage Switch', departments: ['lighting'], category: 'Switch', manufacturer: 'Cisco', model: 'SF300-24PP (PoE+)', location: 'Stage Rack' }, [{ net: 'lx', ip: '10.50.1.1/16' }]);
-  dev('HB', W, { name: 'Lighting PC', departments: ['lighting'], category: 'Console', manufacturer: 'High End Systems', model: 'Hog 4 PC / Hoglet 4', location: 'FOH', firmware: '3.20.0' }, [{ net: 'lx', ip: '10.50.100.101/16', gw: '10.50.1.1' }]);
+  dev('HB', W, { name: 'Lighting PC', departments: ['lighting'], category: 'Console', manufacturer: 'High End Systems', model: 'Hoglet 4', location: 'FOH', firmware: '3.20.0' }, [{ net: 'lx', ip: '10.50.100.101/16', gw: '10.50.1.1' }]);
   dev('HB', W, { name: 'Pathport 8-Port #1', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Pathway', model: 'Pathport 8-port rack mount', location: 'Stage Rack', firmware: '6.3.1' }, [{ net: 'lx', ip: '10.50.50.101/16', gw: '10.50.1.1' }]);
   dev('HB', W, { name: 'Pathport 8-Port #2', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Pathway', model: 'Pathport 8-port rack mount', location: 'Stage Rack', firmware: '6.3.1' }, [{ net: 'lx', ip: '10.50.50.102/16', gw: '10.50.1.1' }]);
   dev('HB', W, { name: 'HL Button Station', departments: ['lighting'], category: 'Wall Station', manufacturer: 'Pathway', model: 'Vignette PoE Wall Station', location: 'House Left', firmware: '6.2.0' }, [{ net: 'lx', ip: '10.50.10.101/16', gw: '10.50.1.1' }]);
@@ -123,7 +157,15 @@ function buildExample() {
     { id: 2, at: ago(60 * 5), actor_id: 'p-tom', action: 'updated', entity: 'devices', entity_id: ma, device_id: ma, campus_id: 'c-SVL', label: 'Lighting Console', changes: { model: ['HES HedgeHog 4X', 'grandMA3 compact XT'] } },
   );
 
-  return { rooms, networks, devices, ips, creds, activity };
+  patch(stageGw, 'DMX 1', 'Stage left floor', 'Universe 5');
+  patch(stageGw, 'DMX 2', 'Upstage truss', 'Universe 3');
+  patch(stageGw, 'DMX 3', 'Midstage truss', 'Universe 4');
+  patch(stageGw, 'Ethernet', 'Stage Switch port 4', 'sACN');
+  patch(cat, 'DMX 1', 'FOH batten', 'Universe 1');
+  patch(cat, 'DMX 2', 'Catwalk positions', 'Universe 2');
+  types.forEach((t) => delete t.key);
+
+  return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts };
 }
 
 export function createDemoStore() {
@@ -171,20 +213,25 @@ export function createDemoStore() {
 
     async networkData() {
       await wait(160);
-      return clone({ rooms: db.rooms, networks: db.networks, devices: db.devices, ips: db.ips });
+      return clone({ rooms: db.rooms, networks: db.networks, devices: db.devices, ips: db.ips,
+        types: db.types.map((t) => ({ ...t, ports: db.typePorts.filter((p) => p.type_id === t.id) })) });
     },
 
     async saveDevice(payload) {
       await wait(220);
       const d = payload.device;
-      const tags = depOrder((d.departments || []).map((x) => x.toLowerCase()));
-      if (!blank(d.name)) throw new Error('Give the device a name.');
-      if (!tags.length) throw new Error('Tag it audio, video or lighting (at least one).');
-      const fields = { campus_id: d.campus_id, room_id: d.room_id || null, name: blank(d.name), departments: tags,
-        category: blank(d.category), manufacturer: blank(d.manufacturer), model: blank(d.model), serial_number: blank(d.serial_number),
-        firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes) };
+      const type = db.types.find((t) => t.id === d.type_id);
+      if (!type) throw new Error('Pick a type for this model.');
+      let tags = depOrder((d.departments || []).map((x) => x.toLowerCase()));
+      if (!tags.length) tags = [...type.departments];
+      const fields = { type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(d.name) || type.name, departments: tags,
+        serial_number: blank(d.serial_number), firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes) };
       let dev = d.id ? db.devices.find((x) => x.id === d.id) : null;
-      if (d.id && !dev) throw new Error('That device was deleted by someone else.');
+      if (d.id && !dev) throw new Error('That unit was deleted by someone else.');
+      if (dev && dev.type_id !== type.id) {
+        const keepPorts = new Set(db.typePorts.filter((p) => p.type_id === type.id).map((p) => p.id));
+        db.devPorts = db.devPorts.filter((x) => x.device_id !== dev.id || keepPorts.has(x.type_port_id));
+      }
       if (dev) {
         const ch = diff(dev, fields, Object.keys(fields));
         Object.assign(dev, fields, { updated_at: now(), updated_by: me.id });
@@ -219,6 +266,24 @@ export function createDemoStore() {
       sync('ips', payload.ips || [], ['label', 'ip', 'gateway', 'mac', 'hostname', 'notes', 'network_id'],
         (r) => ({ campus_id: dev.campus_id, mode: r.mode || 'static', network_id: r.network_id || null }));
       if ('credentials' in payload) sync('creds', payload.credentials || [], ['label', 'username', 'password', 'notes'], () => ({}));
+      if ('ports' in payload) {
+        for (const pp of payload.ports || []) {
+          const vals = { connected_to: blank(pp.connected_to), assignment: blank(pp.assignment), notes: blank(pp.notes) };
+          const cur = db.devPorts.find((x) => x.device_id === dev.id && x.type_port_id === pp.type_port_id);
+          const portName = db.typePorts.find((p) => p.id === pp.type_port_id)?.name || 'Port';
+          if (!vals.connected_to && !vals.assignment && !vals.notes) {
+            if (cur) { db.devPorts = db.devPorts.filter((x) => x !== cur); log('deleted', 'device_ports', { ...cur, name: portName }, {}); }
+          } else if (cur) {
+            const ch = diff(cur, vals, ['connected_to', 'assignment', 'notes']);
+            Object.assign(cur, vals);
+            if (Object.keys(ch).length) log('updated', 'device_ports', { ...cur, name: portName }, ch);
+          } else {
+            const row = { id: uid(), device_id: dev.id, type_port_id: pp.type_port_id, ...vals };
+            db.devPorts.push(row);
+            log('created', 'device_ports', { ...row, name: portName }, { connected_to: vals.connected_to });
+          }
+        }
+      }
       changed('devices');
       return dev.id;
     },
@@ -230,11 +295,52 @@ export function createDemoStore() {
       db.devices = db.devices.filter((d) => d.id !== id);
       db.ips = db.ips.filter((i) => i.device_id !== id);
       db.creds = db.creds.filter((c) => c.device_id !== id);
+      db.devPorts = db.devPorts.filter((x) => x.device_id !== id);
       log('deleted', 'devices', dev, { name: dev.name });
       changed('devices');
     },
 
     async credentials(deviceId) { await wait(); return clone(db.creds.filter((c) => c.device_id === deviceId)); },
+    async devicePorts(deviceId) { await wait(); return clone(db.devPorts.filter((x) => x.device_id === deviceId)); },
+
+    async saveType(payload) {
+      await wait(220);
+      const t = payload.type;
+      const name = blank(t.name);
+      if (!name) throw new Error('Give the type a name.');
+      const tags = depOrder(t.departments || []);
+      if (!tags.length) throw new Error('Tag it audio, video or lighting (at least one).');
+      const mfr = blank(t.manufacturer);
+      if (db.types.some((x) => x.id !== t.id && x.name.toLowerCase() === name.toLowerCase() && (x.manufacturer || '').toLowerCase() === (mfr || '').toLowerCase())) {
+        throw new Error('There’s already a type with that name from that maker.');
+      }
+      const fields = { name, manufacturer: mfr, part_number: blank(t.part_number), category: blank(t.category), departments: tags,
+        description: blank(t.description), specs: t.specs || [], manual_url: blank(t.manual_url), notes: blank(t.notes) };
+      let row = t.id ? db.types.find((x) => x.id === t.id) : null;
+      if (row) Object.assign(row, fields, { updated_at: now(), updated_by: me.id });
+      else db.types.push((row = { id: uid(), ...fields, created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id }));
+      if ('ports' in payload) {
+        const keep = new Set();
+        (payload.ports || []).forEach((p, i) => {
+          const vals = { name: p.name.trim(), signal: blank(p.signal), connector: blank(p.connector), direction: p.direction || 'io', notes: blank(p.notes), sort_order: i };
+          let cur = p.id && db.typePorts.find((x) => x.id === p.id && x.type_id === row.id);
+          if (cur) Object.assign(cur, vals); else db.typePorts.push((cur = { id: uid(), type_id: row.id, ...vals }));
+          keep.add(cur.id);
+        });
+        const gone = new Set(db.typePorts.filter((x) => x.type_id === row.id && !keep.has(x.id)).map((x) => x.id));
+        db.typePorts = db.typePorts.filter((x) => !gone.has(x.id));
+        db.devPorts = db.devPorts.filter((x) => !gone.has(x.type_port_id));
+      }
+      changed('device_types');
+      return row.id;
+    },
+    async deleteType(id) {
+      await wait(150);
+      if (db.devices.some((d) => d.type_id === id)) throw new Error('This type still has models at campuses. Delete or change those first.');
+      db.types = db.types.filter((x) => x.id !== id);
+      db.typePorts = db.typePorts.filter((x) => x.type_id !== id);
+      changed('device_types');
+    },
     async history(deviceId) { await wait(); return clone(db.activity.filter((a) => a.device_id === deviceId).slice(0, 40)); },
 
     async saveNetwork(n) {

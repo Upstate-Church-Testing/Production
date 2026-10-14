@@ -5,6 +5,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, APP_NAME, ORG_NAME } from './co
 import { esc, icon, $, $$, storage, store as save } from './util.js';
 import { createDemoStore } from './store-demo.js';
 import * as NetworkView from './views/network.js';
+import * as GearView from './views/gear.js';
 import * as TeamView from './views/team.js';
 import * as AccountView from './views/account.js';
 
@@ -16,6 +17,7 @@ export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunte
 // New sections (Gear, Schedule, Training, Service flow…) get added here.
 const MODULES = [
   { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
+  { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
   { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
   { id: 'account', label: 'Me', icon: 'me', minRole: 'volunteer', view: AccountView },
 ];
@@ -36,6 +38,11 @@ const ctx = {
   toast,
   openSheet,
   go: (id) => { location.hash = id; },
+  // Cross-section jumps: the target section picks these up once its data loads.
+  pending: null,
+  openDevice: (id) => goWith('network', { open: id }),
+  newDevice: (preset) => goWith('network', { newDevice: preset }),
+  openType: (id) => goWith('gear', { type: id }),
   reloadMe,
   setTheme,
 };
@@ -159,6 +166,12 @@ function renderNav() {
 
 function markNav() {
   $$('.nav-item').forEach((a) => a.classList.toggle('on', a.dataset.mod === current?.id));
+}
+
+function goWith(mod, pending) {
+  ctx.pending = pending;
+  if (current?.id === mod) { current.instance?.unmount?.(); current = null; onHash(); }
+  else location.hash = mod;
 }
 
 function onHash() {

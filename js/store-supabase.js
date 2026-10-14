@@ -72,13 +72,14 @@ export async function createSupabaseStore(url, key) {
     },
 
     async networkData() {
-      const [rooms, networks, devices, ips] = await Promise.all([
+      const [rooms, networks, devices, ips, types] = await Promise.all([
         all(() => sb.from('rooms').select('*').order('sort_order').order('name')),
         all(() => sb.from('networks').select('*').order('sort_order').order('name')),
         all(() => sb.from('devices').select('*').order('name')),
         all(() => sb.from('device_ips').select('*').order('sort_order')),
+        all(() => sb.from('device_types').select('*, ports:device_type_ports(*)').order('name')),
       ]);
-      return { rooms, networks, devices, ips };
+      return { rooms, networks, devices, ips, types };
     },
 
     async saveDevice(payload) {
@@ -86,6 +87,15 @@ export async function createSupabaseStore(url, key) {
     },
     async deleteDevice(id) {
       ok(await sb.from('devices').delete().eq('id', id));
+    },
+    async devicePorts(deviceId) {
+      return ok(await sb.from('device_ports').select('*').eq('device_id', deviceId));
+    },
+    async saveType(payload) {
+      return ok(await sb.rpc('save_device_type', { payload }));
+    },
+    async deleteType(id) {
+      ok(await sb.from('device_types').delete().eq('id', id));
     },
     async credentials(deviceId) {
       return ok(await sb.from('device_credentials').select('*').eq('device_id', deviceId).order('sort_order'));
@@ -120,7 +130,7 @@ export async function createSupabaseStore(url, key) {
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
-      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles']) {
+      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
       }
       ch.subscribe();
@@ -140,6 +150,9 @@ function friendly(error) {
     [/rate limit/i, 'Too many emails were sent just now. Wait a few minutes and try again.'],
     [/invalid input syntax for type inet/i, 'One of the IP addresses isn’t valid.'],
     [/invalid input syntax for type macaddr/i, 'The MAC address isn’t valid.'],
+    [/device_types_name_idx/i, 'There’s already a type with that name from that maker.'],
+    [/device_type_ports_type_id_name_key/i, 'Two ports on this type have the same name.'],
+    [/devices_type_id_fkey/i, 'This type still has models at campuses. Delete or change those first.'],
     [/row-level security|permission denied/i, 'Your account doesn’t have access to change this.'],
     [/Failed to fetch|NetworkError/i, 'Can’t reach the server. Check your connection and try again.'],
   ];

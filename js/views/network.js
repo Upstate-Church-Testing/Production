@@ -5,10 +5,8 @@ import {
   esc, icon, $, $$, debounce, storage, store, ipToInt, intToIp, splitInet, prefixToMask, maskToPrefix,
   parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText,
 } from '../util.js';
+import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
 
-const CATEGORIES = ['Switch', 'Router', 'Console', 'Switcher', 'Control Panel', 'Camera', 'PTZ Controller', 'Projector',
-  'LED Processor', 'Display', 'Monitor', 'Computer', 'Recorder', 'Encoder / Decoder', 'Node / Gateway', 'LED Driver',
-  'Wall Station', 'Amplifier', 'Stagebox', 'Wireless Receiver', 'Intercom', 'Access Point', 'Other'];
 const IP_LABELS = ['Management', 'Control', 'Dante Primary', 'Dante Secondary', 'Art-Net / sACN', 'NDI', 'Video', 'House', 'Production'];
 const MASKS = ['255.255.255.0', '255.255.0.0', '255.0.0.0', '255.255.255.128', '255.255.254.0', '255.255.252.0'];
 const STATUS = { active: 'In use', spare: 'Spare', repair: 'In repair', retired: 'Retired' };
@@ -17,7 +15,8 @@ const FIELD = {
   name: 'Name', departments: 'Tags', category: 'Category', manufacturer: 'Manufacturer', model: 'Model',
   serial_number: 'Serial', firmware: 'Firmware', location: 'Location', room_id: 'Room', campus_id: 'Campus',
   status: 'Status', notes: 'Notes', ip: 'IP', gateway: 'Gateway', mac: 'MAC', label: 'Label', network_id: 'Network',
-  mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname',
+  mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Type',
+  connected_to: 'Connected to', assignment: 'Assignment',
 };
 
 export function mount(el, ctx) {
@@ -45,20 +44,20 @@ export function mount(el, ctx) {
             ${ctx.campuses.map((c) => `<option value="${c.id}">${esc(c.short_name)}</option>`).join('')}
           </select>
         </label>
-        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add device</span></button>
+        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
       </div>
       <div class="head-meta" id="head-meta">Loading…</div>
       <div class="seg mode-seg" role="tablist" aria-label="Show">
-        <button type="button" role="tab" data-mode="devices">Devices</button>
+        <button type="button" role="tab" data-mode="devices">Models</button>
         <button type="button" role="tab" data-mode="networks">Networks</button>
       </div>
     </div>
     <div class="toolbar">
-      <div class="search">${icon('search')}<input id="q" type="search" placeholder="Search name, IP, model, MAC, location" autocomplete="off" enterkeyhint="search" aria-label="Search"></div>
+      <div class="search">${icon('search')}<input id="q" type="search" placeholder="Search name, IP, type, MAC, location" autocomplete="off" enterkeyhint="search" aria-label="Search"></div>
       <div class="chips" id="chips"></div>
     </div>
     <div id="results" class="results" aria-live="polite"></div>
-    <button class="fab" data-act="add" aria-label="Add device">${icon('plus')}</button>`;
+    <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
   const campusSel = $('#campus', el);
   campusSel.value = s.campus;
@@ -109,6 +108,11 @@ export function mount(el, ctx) {
     }
     draw();
     openDevice?.refresh();
+    if (ctx.pending && s.data) {
+      const p = ctx.pending; ctx.pending = null;
+      if (p.open && s.ix.dev.has(p.open)) openDeviceSheet(p.open);
+      else if (p.newDevice) openDeviceSheet(null, true, p.newDevice);
+    }
   }
 
   function buildIndex(d) {
@@ -116,6 +120,7 @@ export function mount(el, ctx) {
       dev: new Map(d.devices.map((x) => [x.id, x])),
       net: new Map(d.networks.map((x) => [x.id, x])),
       room: new Map(d.rooms.map((x) => [x.id, x])),
+      type: new Map(d.types.map((x) => [x.id, { ...x, ports: sortPorts(x.ports) }])),
       ipsByDev: new Map(),
       conflicts: new Map(),
     };
@@ -165,7 +170,8 @@ export function mount(el, ctx) {
     if (s.flag === 'noip' && ip?._addr) return false;
     if (!s.q) return true;
     const net = ip?.network_id ? s.ix.net.get(ip.network_id) : null;
-    const hay = [dev.name, dev.category, dev.manufacturer, dev.model, dev.location, dev.serial_number, dev.firmware, dev.notes,
+    const ty = s.ix.type.get(dev.type_id);
+    const hay = [dev.name, ty?.name, ty?.manufacturer, ty?.category, ty?.part_number, dev.location, dev.serial_number, dev.firmware, dev.notes,
       s.ix.room.get(dev.room_id)?.name, ip?._addr, ip?.label, ip?.mac, ip?.hostname, net?.name,
       net?.vlan_id ? 'vlan ' + net.vlan_id : '', s.campus === 'all' ? campusName(dev.campus_id) : '']
       .filter(Boolean).join(' \u0001 ').toLowerCase();
@@ -178,8 +184,8 @@ export function mount(el, ctx) {
     const c = ctx.campusById.get(s.campus);
     $('#campus-name', el).textContent = c ? c.short_name : 'All campuses';
     $$('[data-mode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === s.mode)));
-    $('.fab', el).setAttribute('aria-label', s.mode === 'networks' ? 'Add network' : 'Add device');
-    $('.add-desktop span', el).textContent = s.mode === 'networks' ? 'Add network' : 'Add device';
+    $('.fab', el).setAttribute('aria-label', s.mode === 'networks' ? 'Add network' : 'Add model');
+    $('.add-desktop span', el).textContent = s.mode === 'networks' ? 'Add network' : 'Add model';
     $('.toolbar', el).hidden = s.mode === 'networks';
     drawMeta(); drawChips(); drawResults();
   }
@@ -190,7 +196,7 @@ export function mount(el, ctx) {
     const devs = s.data.devices.filter(inCampus);
     const ips = s.data.ips.filter((i) => inCampus(i) && i._addr);
     const nets = s.data.networks.filter(inCampus);
-    meta.innerHTML = `${plural(devs.length, 'device')} <i>·</i> ${plural(ips.length, 'IP')} <i>·</i> ${plural(nets.length, 'network')}`;
+    meta.innerHTML = `${plural(devs.length, 'model')} <i>·</i> ${plural(ips.length, 'IP')} <i>·</i> ${plural(nets.length, 'network')}`;
   }
 
   function drawChips() {
@@ -223,8 +229,8 @@ export function mount(el, ctx) {
       const c = ctx.campusById.get(s.campus);
       box.innerHTML = `<div class="empty">
         <h3>Nothing at ${esc(c ? c.short_name : 'any campus')} yet</h3>
-        <p>Add its networks first (Control, Dante, House…) so every IP gets checked against the right subnet. Then add devices.</p>
-        <div class="empty-actions"><button class="btn" data-act="add-net" data-campus="${esc(s.campus)}">${icon('network')}Add a network</button><button class="btn primary" data-act="add">${icon('plus')}Add a device</button></div>
+        <p>Add its networks first (Control, Dante, House…) so every IP gets checked against the right subnet. Then add the models here, each one picked from a type in Gear.</p>
+        <div class="empty-actions"><button class="btn" data-act="add-net" data-campus="${esc(s.campus)}">${icon('network')}Add a network</button><button class="btn primary" data-act="add">${icon('plus')}Add a model</button></div>
       </div>`;
       return;
     }
@@ -260,7 +266,7 @@ export function mount(el, ctx) {
   function groupHtml(net, list, campusId) {
     list.sort((a, b) => (a.ip?._int ?? Infinity) - (b.ip?._int ?? Infinity) || a.dev.name.localeCompare(b.dev.name));
     return `<section class="net">
-      ${net ? netHead(net) : `<header class="net-head none"><div class="net-title"><h3>Not on a network yet</h3></div><p class="net-sub">IPs with no network picked, and devices with no IP recorded.</p></header>`}
+      ${net ? netHead(net) : `<header class="net-head none"><div class="net-title"><h3>Not on a network yet</h3></div><p class="net-sub">IPs with no network picked, and models with no IP recorded.</p></header>`}
       <ul class="rows">${list.map(rowHtml).join('')}</ul>
     </section>`;
   }
@@ -291,7 +297,8 @@ export function mount(el, ctx) {
     const conflict = ip && s.ix.conflicts.get(ip.id);
     const room = s.ix.room.get(dev.room_id)?.name;
     const where = [room, dev.location].filter(Boolean).join(' · ');
-    const model = [dev.manufacturer, dev.model].filter(Boolean).join(' ') || dev.category || '';
+    const ty = s.ix.type.get(dev.type_id);
+    const model = ty ? typeLabel(ty) : '';
     return `<li class="row ${conflict ? 'is-conflict' : ''} ${dev.status !== 'active' ? 'is-' + dev.status : ''}">
       <button class="row-hit" data-open="${dev.id}" aria-label="Open ${esc(dev.name)}"></button>
       ${tagDots(dev.departments)}
@@ -340,10 +347,12 @@ export function mount(el, ctx) {
 
   // ---------------------------------------------------- device sheet ----
 
-  function openDeviceSheet(id, editing = false) {
+  function openDeviceSheet(id, editing = false, preset = {}) {
     let dev = id ? s.ix.dev.get(id) : null;
     let mode = editing ? 'edit' : 'view';
     let creds = null;       // loaded on demand
+    let ports = null;       // this model's port patches, loaded on demand
+    let typeApi = null;     // the type editor, while creating a type from here
     let showPw = new Set();
     let draft = null;
     let dirty = false;
@@ -351,9 +360,10 @@ export function mount(el, ctx) {
     let confirmDelete = false;
 
     const sheet = ctx.openSheet({
-      label: dev ? dev.name : 'New device',
+      label: dev ? dev.name : 'New model',
       className: 'device-sheet',
       beforeClose: () => {
+        if (mode === 'type') { typeApi?.cancel(); return false; }
         if (mode === 'edit' && dirty) { showDiscard(); return false; }
         openDevice = null;
         return true;
@@ -364,7 +374,7 @@ export function mount(el, ctx) {
       refresh() {
         if (!id) return;
         const fresh = s.ix.dev.get(id);
-        if (!fresh) { if (mode === 'view') { sheet.close(true); ctx.toast('That device was deleted'); } return; }
+        if (!fresh) { if (mode === 'view') { sheet.close(true); ctx.toast('That model was deleted'); } return; }
         dev = fresh;
         if (mode === 'view') renderView();
       },
@@ -400,6 +410,7 @@ export function mount(el, ctx) {
       else if (a === 'tag') { collect(); const tg = t.dataset.tag; draft.departments = draft.departments.includes(tg) ? draft.departments.filter((x) => x !== tg) : [...draft.departments, tg]; dirty = true; renderEdit(); }
       else if (a === 'next-ip') { collect(); fillNextIp(+t.dataset.i); }
       else if (a === 'add-room') addRoom();
+      else if (a === 'open-type') { const tid = dev.type_id; openDevice = null; sheet.close(true); ctx.openType(tid); }
       else if (a === 'delete') { confirmDelete = true; renderView(); }
       else if (a === 'delete-no') { confirmDelete = false; renderView(); }
       else if (a === 'delete-yes') remove();
@@ -415,6 +426,7 @@ export function mount(el, ctx) {
       if (mode !== 'edit') return;
       dirty = true;
       const id_ = e.target.id;
+      if (id_ === 'f-type') { onTypePicked(e.target.value); return; }
       if (id_ === 'f-campus') { collect(); draft.room_id = ''; draft.ips.forEach((ip) => { ip.network_id = ''; }); renderEdit(); }
       else if (id_ === 'f-room') {
         const was = draft.room_id;
@@ -439,12 +451,13 @@ export function mount(el, ctx) {
       const ips = s.ix.ipsByDev.get(dev.id) || [];
       const room = s.ix.room.get(dev.room_id)?.name;
       const by = (pid) => ctx.people.get(pid)?.full_name || 'Someone';
+      const ty = s.ix.type.get(dev.type_id);
       sheet.render(`
         <header class="sh-head">
           <div class="sh-top">${tagDots(dev.departments)}${dev.status !== 'active' ? `<span class="pill">${STATUS[dev.status]}</span>` : ''}
             <button class="icon-btn" data-a="close" aria-label="Close">${icon('close')}</button></div>
           <h2>${esc(dev.name)}</h2>
-          <p class="sh-sub">${esc([dev.category, [dev.manufacturer, dev.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || 'No model recorded')}</p>
+          <p class="sh-sub">${esc([ty?.category, typeLabel(ty)].filter(Boolean).join(' · '))}</p>
         </header>
         <div class="sh-body">
           <section class="ip-list">
@@ -457,13 +470,22 @@ export function mount(el, ctx) {
             </dl>
           </section>
           <section class="block">
-            <h3>Details</h3>
+            <h3>This model</h3>
             <dl class="kv">
-              ${kv('Category', dev.category)}${kv('Manufacturer', dev.manufacturer)}${kv('Model', dev.model)}
               ${kv('Serial', dev.serial_number, true)}${kv('Firmware', dev.firmware, true)}${kv('Status', STATUS[dev.status])}
             </dl>
             ${dev.notes ? `<p class="notes">${esc(dev.notes)}</p>` : ''}
           </section>
+          ${ty?.ports.length ? `<section class="block">
+            <h3>Ports</h3>
+            <div id="ports"><p class="muted">Loading…</p></div>
+          </section>` : ''}
+          ${ty ? `<section class="block type-block">
+            <h3>Type</h3>
+            <button class="type-link" data-a="open-type"><span><b>${esc(ty.name)}</b><small>${esc([ty.manufacturer, ty.category, ty.part_number].filter(Boolean).join(' · '))}</small></span>${icon('chevron')}</button>
+            ${ty.description ? `<p class="muted">${esc(ty.description)}</p>` : ''}
+            ${ty.specs?.length ? `<dl class="kv compact">${ty.specs.map((sp) => `<div><dt>${esc(sp.label)}</dt><dd>${esc(sp.value)}</dd></div>`).join('')}</dl>` : ''}
+          </section>` : ''}
           <section class="block">
             <h3>${icon('key')}Logins</h3>
             ${creds == null
@@ -488,6 +510,27 @@ export function mount(el, ctx) {
             : `<button class="btn ghost danger-text" data-a="delete">${icon('trash')}Delete</button><span class="spacer"></span><button class="btn primary" data-a="edit">${icon('edit')}Edit</button>`}
         </footer>`);
       loadHistory();
+      if (ty?.ports.length) loadPorts(ty);
+    }
+
+    async function loadPorts(ty) {
+      try {
+        ports = await ctx.store.devicePorts(dev.id);
+      } catch (e) {
+        const box = $('#ports', sheet.el); if (box) box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+        return;
+      }
+      const box = $('#ports', sheet.el);
+      if (!box) return;
+      const byPort = new Map(ports.map((p) => [p.type_port_id, p]));
+      const used = ty.ports.filter((p) => byPort.has(p.id));
+      const empty = ty.ports.length - used.length;
+      box.innerHTML = `${used.length ? `<ul class="patch-list">${used.map((p) => {
+          const x = byPort.get(p.id);
+          return `<li><span class="patch-port"><b>${esc(p.name)}</b><small>${esc(portMeta(p))}</small></span>
+            <span class="patch-to">${esc(x.connected_to || '')}${x.assignment ? `<em>${esc(x.assignment)}</em>` : ''}${x.notes ? `<small>${esc(x.notes)}</small>` : ''}</span></li>`;
+        }).join('')}</ul>` : ''}
+        ${empty ? `<p class="muted">${used.length ? `${plural(empty, 'more port')} with nothing recorded.` : `Nothing recorded on its ${plural(ty.ports.length, 'port')} yet.`} <button class="btn link" data-a="edit">Record what’s plugged in</button></p>` : ''}`;
     }
 
     function ipCard(ip) {
@@ -525,9 +568,9 @@ export function mount(el, ctx) {
 
     function histItem(a) {
       const who = ctx.people.get(a.actor_id)?.full_name || 'Someone';
-      const thing = { devices: '', device_ips: 'IP ', device_credentials: 'login ', networks: 'network ' }[a.entity] ?? '';
+      const thing = { devices: '', device_ips: 'IP ', device_credentials: 'login ', networks: 'network ', device_ports: 'port ' }[a.entity] ?? '';
       let what;
-      if (a.entity === 'devices') what = a.action === 'created' ? 'added this device' : a.action === 'deleted' ? 'deleted this device' : 'changed';
+      if (a.entity === 'devices') what = a.action === 'created' ? 'added this model' : a.action === 'deleted' ? 'deleted this model' : 'changed';
       else what = `${a.action === 'created' ? 'added' : a.action === 'deleted' ? 'removed' : 'changed'} ${thing}<b>${esc(a.label || '')}</b>`;
       const lines = a.action === 'updated'
         ? Object.entries(a.changes || {}).map(([k, [o, n]]) => k === 'password'
@@ -542,6 +585,7 @@ export function mount(el, ctx) {
       if (k === 'room_id') v = s.ix.room.get(v)?.name || 'a removed room';
       else if (k === 'campus_id') v = campusName(v);
       else if (k === 'network_id') v = s.ix.net.get(v)?.name || 'a removed network';
+      else if (k === 'type_id') v = s.ix.type.has(v) ? typeLabel(s.ix.type.get(v)) : 'a removed type';
       else if (k === 'departments') v = v.map((t) => ctx.dep[t]?.name || t).join(', ');
       else if (k === 'status') v = STATUS[v] || v;
       else if (k === 'mode') v = MODES[v] || v;
@@ -559,10 +603,10 @@ export function mount(el, ctx) {
       dirty = false;
       if (dev) {
         sheet.render(`<div class="sh-body"><p class="muted pad">Loading…</p></div>`);
-        try { creds = await ctx.store.credentials(dev.id); }
+        try { [creds, ports] = await Promise.all([ctx.store.credentials(dev.id), ctx.store.devicePorts(dev.id)]); }
         catch (e) { ctx.toast(e.message, 'bad'); mode = 'view'; return renderView(); }
       } else {
-        creds = [];
+        creds = []; ports = [];
       }
       const ips = dev ? s.ix.ipsByDev.get(dev.id) || [] : [];
       const defaultCampus = s.campus !== 'all' ? s.campus : (ctx.me.home_campus_id || ctx.campuses[0]?.id);
@@ -571,28 +615,44 @@ export function mount(el, ctx) {
             ips: ips.map((ip) => ({ id: ip.id, label: ip.label || '', network_id: ip.network_id || '', addr: ip._addr || '',
               mask: ip._prefix != null ? prefixToMask(ip._prefix) : '', gateway: ip.gateway ? splitInet(ip.gateway).addr : '',
               mac: ip.mac || '', hostname: ip.hostname || '', mode: ip.mode, notes: ip.notes || '' })),
-            creds: creds.map((c) => ({ ...c })) }
-        : { id: '', campus_id: defaultCampus, room_id: '', name: '', departments: [...s.tags].slice(0, 1), category: '', manufacturer: '',
-            model: '', serial_number: '', firmware: '', location: '', status: 'active', notes: '', ips: [blankIp()], creds: [] };
+            creds: creds.map((c) => ({ ...c })),
+            ports: Object.fromEntries(ports.map((p) => [p.type_port_id, { connected_to: p.connected_to || '', assignment: p.assignment || '', notes: p.notes || '' }])) }
+        : { id: '', type_id: '', campus_id: defaultCampus, room_id: '', name: '', departments: [], serial_number: '', firmware: '',
+            location: '', status: 'active', notes: '', ips: [blankIp()], creds: [], ports: {} };
+      if (!dev && preset.type_id) onTypePicked(preset.type_id, true);
       renderEdit();
-      $('#f-name', sheet.el)?.focus();
+      $(draft.type_id ? '#f-name' : '#f-type', sheet.el)?.focus();
     }
 
     function renderEdit(error = '') {
       const campusId = draft.campus_id;
       const rooms = s.data.rooms.filter((r) => r.campus_id === campusId);
       const nets = s.data.networks.filter((n) => n.campus_id === campusId);
-      const uniq = (key) => [...new Set(s.data.devices.map((d) => d[key]).filter(Boolean))].sort();
+      const ty = s.ix.type.get(draft.type_id);
+      const typeGroups = new Map();
+      for (const t of [...s.ix.type.values()].sort((a, b) => typeLabel(a).localeCompare(typeLabel(b)))) {
+        const k = t.category || 'Uncategorized';
+        if (!typeGroups.has(k)) typeGroups.set(k, []);
+        typeGroups.get(k).push(t);
+      }
+      const oldPatches = dev && draft.type_id !== dev.type_id && ports?.length;
       const locs = [...new Set(s.data.devices.filter((d) => d.campus_id === campusId).map((d) => d.location).filter(Boolean))].sort();
       const scroll = $('.sh-body', sheet.el)?.scrollTop || 0;
       sheet.render(`
         <header class="sh-head">
-          <div class="sh-top"><span class="eyebrow">${dev ? 'Edit device' : 'New device'}</span>
+          <div class="sh-top"><span class="eyebrow">${dev ? 'Edit model' : 'New model'}</span>
             <button class="icon-btn" data-a="cancel" aria-label="Close">${icon('close')}</button></div>
-          <h2>${esc(draft.name || (dev ? dev.name : 'New device'))}</h2>
+          <h2>${esc(draft.name || (ty ? ty.name : dev ? dev.name : 'New model'))}</h2>
         </header>
         <form class="sh-body form" id="dev-form" novalidate autocomplete="off">
-          <label class="field"><span>Name <b class="req">required</b></span><input id="f-name" value="${esc(draft.name)}" placeholder="FOH Switch, Camera 2, Stage Box…"></label>
+          <label class="field"><span>Type <b class="req">required</b></span><select id="f-type">
+            <option value="" ${draft.type_id ? '' : 'selected'}>Choose a type…</option>
+            ${[...typeGroups.keys()].sort().map((k) => `<optgroup label="${esc(k)}">${typeGroups.get(k).map((t) => `<option value="${t.id}" ${t.id === draft.type_id ? 'selected' : ''}>${esc(typeLabel(t))}</option>`).join('')}</optgroup>`).join('')}
+            <option value="__new">＋ New type…</option>
+          </select>
+          ${ty ? `<small class="hint">${esc([ty.category, ty.part_number, ty.ports.length ? plural(ty.ports.length, 'port') : null].filter(Boolean).join(' · ') || 'Specs and ports come from the type.')}</small>` : `<small class="hint">The product this is, like Hoglet 4. Its specs and ports come from the type.</small>`}
+          ${oldPatches ? `<small class="hint warn-text">What was recorded on the old type’s ports will be cleared when you save.</small>` : ''}</label>
+          <label class="field"><span>Name</span><input id="f-name" value="${esc(draft.name)}" placeholder="${esc(ty ? ty.name : 'FOH Switch, Camera 2, Stage Box…')}"></label>
           <div class="field"><span>Tags <b class="req">at least one</b></span>
             <div class="tag-picker">${ctx.departments.map((d) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${draft.departments.includes(d.slug)}"><i class="dot"></i>${esc(d.name)}</button>`).join('')}</div>
           </div>
@@ -615,14 +675,23 @@ export function mount(el, ctx) {
             <button type="button" class="btn" data-a="add-ip">${icon('plus')}${draft.ips.length ? 'Add another IP' : 'Add an IP'}</button>
           </fieldset>
 
-          <fieldset class="group"><legend>Details</legend>
+          ${ty?.ports.length ? `<fieldset class="group"><legend>Ports <span class="count">${ty.ports.length}</span></legend>
+            <p class="fine">What’s plugged into each port on this one. Leave a port blank if nothing is.</p>
+            <div class="patch-edit">${ty.ports.map((p) => {
+              const x = draft.ports[p.id] || {};
+              return `<div class="patch-row">
+                <span class="patch-port"><b>${esc(p.name)}</b><small>${esc(portMeta(p))}</small></span>
+                <input id="pp-${p.id}-to" value="${esc(x.connected_to || '')}" placeholder="Plugged into…" aria-label="${esc(p.name)}: plugged into">
+                <input id="pp-${p.id}-as" value="${esc(x.assignment || '')}" placeholder="Universe, input, channel…" aria-label="${esc(p.name)}: assignment">
+              </div>`;
+            }).join('')}</div>
+          </fieldset>` : ''}
+
+          <fieldset class="group"><legend>This model</legend>
             <div class="grid2">
-              <label class="field"><span>Category</span><input id="f-category" value="${esc(draft.category)}" list="dl-cat" placeholder="Switch, Camera…"></label>
-              <label class="field"><span>Status</span><select id="f-status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === draft.status ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-              <label class="field"><span>Manufacturer</span><input id="f-manufacturer" value="${esc(draft.manufacturer)}" list="dl-mfr" placeholder="Blackmagic, Yamaha…"></label>
-              <label class="field"><span>Model</span><input id="f-model" value="${esc(draft.model)}" list="dl-model" placeholder="ATEM 2 M/E…"></label>
               <label class="field"><span>Serial number</span><input id="f-serial_number" class="mono" value="${esc(draft.serial_number)}"></label>
               <label class="field"><span>Firmware / software</span><input id="f-firmware" class="mono" value="${esc(draft.firmware)}"></label>
+              <label class="field"><span>Status</span><select id="f-status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === draft.status ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
             </div>
             <label class="field"><span>Notes</span><textarea id="f-notes" rows="3" placeholder="Anything the next person should know">${esc(draft.notes)}</textarea></label>
           </fieldset>
@@ -640,9 +709,6 @@ export function mount(el, ctx) {
             <button type="button" class="btn" data-a="add-cred">${icon('key')}Add a login</button>
           </fieldset>
 
-          <datalist id="dl-cat">${[...new Set([...CATEGORIES, ...uniq('category')])].map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
-          <datalist id="dl-mfr">${uniq('manufacturer').map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
-          <datalist id="dl-model">${uniq('model').map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
           <datalist id="dl-loc">${locs.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
           <datalist id="dl-iplabel">${IP_LABELS.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
           <datalist id="dl-mask">${MASKS.map((v) => `<option value="${v}">`).join('')}</datalist>
@@ -651,7 +717,7 @@ export function mount(el, ctx) {
           <p class="form-msg ${error ? 'bad' : ''}" role="status">${esc(error)}</p>
           <span class="spacer"></span>
           <button class="btn" data-a="cancel">Cancel</button>
-          <button class="btn primary" data-a="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : dev ? 'Save changes' : 'Add device'}</button>
+          <button class="btn primary" data-a="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : dev ? 'Save changes' : 'Add model'}</button>
         </footer>`);
       $('#dev-form', sheet.el).addEventListener('submit', (e) => { e.preventDefault(); save(); });
       const body = $('.sh-body', sheet.el);
@@ -688,7 +754,12 @@ export function mount(el, ctx) {
     function collect() {
       const f = (id) => $(`#${id}`, sheet.el);
       if (!f('f-name')) return;
-      for (const k of ['name', 'location', 'category', 'manufacturer', 'model', 'serial_number', 'firmware', 'notes', 'status']) draft[k] = f('f-' + k).value;
+      for (const k of ['name', 'location', 'serial_number', 'firmware', 'notes', 'status']) draft[k] = f('f-' + k).value;
+      const ty = s.ix.type.get(draft.type_id);
+      for (const p of ty?.ports || []) {
+        if (!f(`pp-${p.id}-to`)) continue;
+        draft.ports[p.id] = { ...(draft.ports[p.id] || {}), connected_to: f(`pp-${p.id}-to`).value, assignment: f(`pp-${p.id}-as`).value };
+      }
       draft.campus_id = f('f-campus').value;
       draft.room_id = f('f-room').value;
       draft.ips.forEach((ip, i) => {
@@ -740,6 +811,37 @@ export function mount(el, ctx) {
       renderEdit();
     }
 
+    /** Picking a type: the name and tags follow it unless they were changed by hand. */
+    function onTypePicked(v, initial = false) {
+      if (!initial) collect();
+      if (v === '__new') { startNewType(); return; }
+      const prev = s.ix.type.get(draft.type_id);
+      const next = s.ix.type.get(v);
+      draft.type_id = v;
+      if (next) {
+        if (prev && draft.name.trim() === prev.name) draft.name = '';
+        const same = prev && draft.departments.length === prev.departments.length && draft.departments.every((t) => prev.departments.includes(t));
+        if (!draft.departments.length || same) draft.departments = [...next.departments];
+      }
+      if (!initial) { dirty = true; renderEdit(); }
+    }
+
+    function startNewType() {
+      mode = 'type';
+      typeApi = typeEditor({
+        ctx, sheet, types: [...s.ix.type.values()], defaults: { departments: [...draft.departments] },
+        onDone: async (newId) => {
+          typeApi = null;
+          await load(true);
+          mode = 'edit';
+          onTypePicked(newId, true);
+          dirty = true;
+          renderEdit();
+        },
+        onCancel: () => { typeApi = null; mode = 'edit'; renderEdit(); },
+      });
+    }
+
     async function addRoom() {
       const input = $('#f-newroom', sheet.el);
       const name = input.value.trim();
@@ -758,7 +860,7 @@ export function mount(el, ctx) {
       if (busy) return;
       collect();
       const err = (m, sel) => { renderEdit(m); if (sel) $(sel, sheet.el)?.focus(); };
-      if (!draft.name.trim()) return err('Give the device a name.', '#f-name');
+      if (!draft.type_id) return err('Pick a type, or choose “New type…” to add one.', '#f-type');
       if (!draft.departments.length) return err('Tag it audio, video or lighting (at least one).');
       if (draft.room_id === '__new') return err('Finish adding the new room, or pick “No room”.', '#f-newroom');
 
@@ -785,22 +887,24 @@ export function mount(el, ctx) {
 
       const payload = {
         device: {
-          id: draft.id || '', campus_id: draft.campus_id, room_id: draft.room_id || '', name: draft.name, departments: draft.departments,
-          category: draft.category, manufacturer: draft.manufacturer, model: draft.model, serial_number: draft.serial_number,
-          firmware: draft.firmware, location: draft.location, status: draft.status, notes: draft.notes,
+          id: draft.id || '', type_id: draft.type_id, campus_id: draft.campus_id, room_id: draft.room_id || '', name: draft.name,
+          departments: draft.departments, serial_number: draft.serial_number, firmware: draft.firmware, location: draft.location,
+          status: draft.status, notes: draft.notes,
         },
         ips,
         credentials,
+        ports: (s.ix.type.get(draft.type_id)?.ports || []).map((p) => ({ type_port_id: p.id, connected_to: draft.ports[p.id]?.connected_to || '',
+          assignment: draft.ports[p.id]?.assignment || '', notes: draft.ports[p.id]?.notes || '' })),
       };
       busy = true; renderEdit();
       try {
         const newId = await ctx.store.saveDevice(payload);
         busy = false; dirty = false;
-        ctx.toast(`Saved ${draft.name.trim()}`);
+        ctx.toast(`Saved ${draft.name.trim() || typeLabel(s.ix.type.get(draft.type_id))}`);
         await load(true);
         id = newId; openDevice.id = newId;
         dev = s.ix.dev.get(newId);
-        creds = null; mode = 'view';
+        creds = null; ports = null; mode = 'view';
         if (dev) renderView(); else sheet.close(true);
       } catch (e) {
         busy = false; renderEdit(e.message);
