@@ -4,7 +4,7 @@ import { esc, icon, $, $$, storage } from '../util.js';
 
 export function mount(el, ctx) {
   const me = ctx.me;
-  const theme = storage('ucp.theme', 'system');
+  const theme = storage('ucp.theme', 'dark');
   const isStaff = ctx.roleAtLeast(me.role, 'staff');
 
   el.innerHTML = `
@@ -25,7 +25,7 @@ export function mount(el, ctx) {
     <section class="panel">
       <h2>Appearance</h2>
       <div class="seg" role="radiogroup" aria-label="Theme">
-        ${[['system', 'Match device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => `<button type="button" role="radio" data-theme-pick="${v}" aria-checked="${theme === v}" aria-selected="${theme === v}">${l}</button>`).join('')}
+        ${[['dark', 'Dark'], ['light', 'Light'], ['system', 'Match device']].map(([v, l]) => `<button type="button" role="radio" data-theme-pick="${v}" aria-checked="${theme === v}" aria-selected="${theme === v}">${l}</button>`).join('')}
       </div>
     </section>
     <section class="panel">

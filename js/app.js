@@ -181,6 +181,7 @@ function onHash() {
   const want = location.hash.replace('#', '');
   const mod = mods.find((m) => m.id === want) || mods[0];
   if (current?.id === mod.id) return;
+  openSheetApi?.close(true); // leaving a section closes whatever was open on it
   current?.instance?.unmount?.();
   const view = $('#view');
   view.innerHTML = '';
@@ -366,7 +367,7 @@ export function toast(text, kind = '') {
 // ----------------------------------------------------------------- theme --
 
 function applyTheme() {
-  const t = storage('ucp.theme', 'system');
+  const t = storage('ucp.theme', 'dark');
   if (t === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = t;
 }

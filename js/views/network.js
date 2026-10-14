@@ -46,7 +46,7 @@ export function mount(el, ctx) {
         </label>
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
       </div>
-      <div class="head-meta" id="head-meta">Loading…</div>
+      <div class="stats" id="stats" aria-live="polite"></div>
       <div class="seg mode-seg" role="tablist" aria-label="Show">
         <button type="button" role="tab" data-mode="devices">Models</button>
         <button type="button" role="tab" data-mode="networks">Networks</button>
@@ -79,11 +79,11 @@ export function mount(el, ctx) {
       s.tags.has(t.dataset.tag) ? s.tags.delete(t.dataset.tag) : s.tags.add(t.dataset.tag);
       store('ucp.tags', [...s.tags]); drawChips(); drawResults();
     } else if (t.dataset.flag) {
-      s.flag = s.flag === t.dataset.flag ? null : t.dataset.flag; drawChips(); drawResults();
+      s.flag = s.flag === t.dataset.flag ? null : t.dataset.flag; drawMeta(); drawChips(); drawResults();
     } else if (t.dataset.act === 'add') {
       s.mode === 'networks' ? openNetworkSheet(null) : openDeviceSheet(null, true);
     } else if (t.dataset.act === 'clear') {
-      s.q = ''; q.value = ''; s.tags.clear(); s.flag = null; store('ucp.tags', []); drawChips(); drawResults();
+      s.q = ''; q.value = ''; s.tags.clear(); s.flag = null; store('ucp.tags', []); drawMeta(); drawChips(); drawResults();
     } else if (t.dataset.act === 'add-net') {
       openNetworkSheet(null, t.dataset.campus);
     } else if (t.dataset.act === 'retry') {
@@ -191,12 +191,26 @@ export function mount(el, ctx) {
   }
 
   function drawMeta() {
-    const meta = $('#head-meta', el);
-    if (!s.data) { meta.textContent = s.error ? '' : 'Loading…'; return; }
+    const box = $('#stats', el);
+    if (!s.data) { box.innerHTML = s.error ? '' : '<div class="stat"><span class="stat-label">Loading…</span><span class="stat-num">–</span></div>'; return; }
+    const all = entries();
     const devs = s.data.devices.filter(inCampus);
     const ips = s.data.ips.filter((i) => inCampus(i) && i._addr);
     const nets = s.data.networks.filter(inCampus);
-    meta.innerHTML = `${plural(devs.length, 'model')} <i>·</i> ${plural(ips.length, 'IP')} <i>·</i> ${plural(nets.length, 'network')}`;
+    const conflicts = all.filter((e) => e.ip && s.ix.conflicts.has(e.ip.id)).length;
+    const noip = all.filter((e) => !e.ip?._addr).length;
+    const byDep = (slug) => devs.filter((d) => d.departments.includes(slug)).length;
+    box.innerHTML = `
+      <div class="stat"><span class="stat-label">Models</span><span class="stat-num">${devs.length}</span>
+        <span class="stat-sub">${ctx.departments.map((d) => `<span><i class="tag" data-dep="${d.slug}">${esc(d.name[0])}</i>${byDep(d.slug)}</span>`).join('')}</span></div>
+      <div class="stat"><span class="stat-label">IP addresses</span><span class="stat-num">${ips.length}</span>
+        <span class="stat-sub">on ${plural(nets.length, 'network')}</span></div>
+      <button type="button" class="stat ${conflicts ? 'is-bad' : 'is-zero'}" data-flag="conflicts" aria-pressed="${s.flag === 'conflicts'}">
+        <span class="stat-label">Conflicts</span><span class="stat-num">${conflicts}</span>
+        <span class="stat-sub">${conflicts ? 'Same IP twice · tap to see' : 'No duplicate IPs'}</span></button>
+      <button type="button" class="stat ${noip ? '' : 'is-zero'}" data-flag="noip" aria-pressed="${s.flag === 'noip'}">
+        <span class="stat-label">Missing IP</span><span class="stat-num">${noip}</span>
+        <span class="stat-sub">${noip ? 'Models with no address' : 'Every model has one'}</span></button>`;
   }
 
   function drawChips() {
@@ -206,12 +220,9 @@ export function mount(el, ctx) {
     const devs = new Map();
     for (const e of all) devs.set(e.dev.id, e.dev);
     const count = (slug) => [...devs.values()].filter((d) => d.departments.includes(slug)).length;
-    const conflicts = all.filter((e) => e.ip && s.ix.conflicts.has(e.ip.id)).length;
-    const noip = all.filter((e) => !e.ip?._addr).length;
     box.innerHTML = `
       ${ctx.departments.map((d) => `<button type="button" class="chip dep" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${s.tags.has(d.slug)}"><i class="dot"></i>${esc(d.name)}<small>${count(d.slug)}</small></button>`).join('')}
-      ${conflicts || s.flag === 'conflicts' ? `<button type="button" class="chip bad" data-flag="conflicts" aria-pressed="${s.flag === 'conflicts'}">${icon('warn')}${plural(conflicts, 'conflict')}</button>` : ''}
-      ${noip || s.flag === 'noip' ? `<button type="button" class="chip" data-flag="noip" aria-pressed="${s.flag === 'noip'}">No IP<small>${noip}</small></button>` : ''}`;
+`;
   }
 
   function drawResults() {
@@ -288,7 +299,7 @@ export function mount(el, ctx) {
         ${net.is_isolated ? '<span class="pill">Separate switches</span>' : ''}
         <button class="icon-btn net-edit" data-net="${net.id}" aria-label="Edit ${esc(net.name)}">${icon('edit')}</button>
       </div>
-      <p class="net-sub mono">${[net.vlan_id ? `VLAN ${net.vlan_id}` : null, net.subnet, net.gateway ? `gw ${splitInet(net.gateway).addr}` : null].filter(Boolean).map(esc).join('<i>·</i>') || 'No subnet set'}</p>
+      <p class="net-sub mono">${[net.vlan_id ? `VLAN ${net.vlan_id}` : null, net.subnet, net.gateway ? `gw ${splitInet(net.gateway).addr}` : null].filter(Boolean).map((x) => `<span class="mp">${esc(x)}</span>`).join('') || '<span class="mp">No subnet set</span>'}</p>
       ${u ? `<div class="meter" title="${u.used} of ${u.size} addresses used"><span style="width:${pct.toFixed(1)}%"></span></div><span class="meter-label">${u.used} / ${u.size.toLocaleString()} used</span>` : ''}
     </header>`;
   }
@@ -335,7 +346,7 @@ export function mount(el, ctx) {
           return `<button class="net-card" data-net="${n.id}">
             <span class="net-title"><b>${esc(n.name)}</b>${tagDots(n.departments)}</span>
             ${n.purpose ? `<span class="net-purpose">${esc(n.purpose)}</span>` : ''}
-            <span class="net-sub mono">${[n.vlan_id ? `VLAN ${n.vlan_id}` : null, n.subnet, n.gateway ? `gw ${splitInet(n.gateway).addr}` : null].filter(Boolean).map(esc).join('<i>·</i>') || 'No subnet set'}</span>
+            <span class="net-sub mono">${[n.vlan_id ? `VLAN ${n.vlan_id}` : null, n.subnet, n.gateway ? `gw ${splitInet(n.gateway).addr}` : null].filter(Boolean).map((x) => `<span class="mp">${esc(x)}</span>`).join('') || '<span class="mp">No subnet set</span>'}</span>
             ${u ? `<span class="meter"><span style="width:${Math.min(100, (u.used / Math.max(1, u.size)) * 100).toFixed(1)}%"></span></span>` : ''}
             <span class="net-foot">${plural(devCount, 'device')}${u ? ` · ${u.used} of ${u.size.toLocaleString()} addresses` : ''}${n.is_isolated ? ' · separate switches' : ''}</span>
           </button>`;

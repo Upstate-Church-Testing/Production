@@ -13,7 +13,7 @@ js = subprocess.run([esbuild, str(root / 'js/app.js'), '--bundle', '--format=iif
                      '--external:https://*', '--minify-syntax', '--log-level=warning'],
                     check=True, capture_output=True, text=True).stdout
 css = (root / 'styles.css').read_text()
-fonts = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Semi+Condensed:wght@600;700&display=swap'
+fonts = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap'
 page = f'''<title>Upstate Production</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">

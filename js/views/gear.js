@@ -14,7 +14,7 @@ export function mount(el, ctx) {
         <h1 class="h1">Types</h1>
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add type</span></button>
       </div>
-      <div class="head-meta" id="g-meta">Loading…</div>
+      <div class="stats" id="g-stats"></div>
     </div>
     <div class="toolbar">
       <div class="search">${icon('search')}<input id="g-q" type="search" placeholder="Search type, maker, category, port" autocomplete="off" enterkeyhint="search" aria-label="Search types"></div>
@@ -69,7 +69,13 @@ export function mount(el, ctx) {
     }
     if (!s.data) return;
     const types = s.data.types;
-    $('#g-meta', el).innerHTML = `${plural(types.length, 'type')} <i>·</i> ${plural(s.data.devices.length, 'model')}`;
+    const covered = new Set(s.data.devices.map((d) => d.campus_id)).size;
+    const portCount = types.reduce((n, t) => n + (t.ports?.length || 0), 0);
+    $('#g-stats', el).innerHTML = `
+      <div class="stat"><span class="stat-label">Types</span><span class="stat-num">${types.length}</span><span class="stat-sub">${plural(new Set(types.map((t) => t.category).filter(Boolean)).size, 'category', 'categories')}</span></div>
+      <div class="stat"><span class="stat-label">Models</span><span class="stat-num">${s.data.devices.length}</span><span class="stat-sub">across ${plural(covered, 'campus', 'campuses')}</span></div>
+      <div class="stat"><span class="stat-label">Ports mapped</span><span class="stat-num">${portCount}</span><span class="stat-sub">on all types</span></div>
+      <div class="stat ${types.filter((t) => !unitsOf(t.id).length).length ? '' : 'is-zero'}"><span class="stat-label">Unused types</span><span class="stat-num">${types.filter((t) => !unitsOf(t.id).length).length}</span><span class="stat-sub">No models yet</span></div>`;
     $('#g-chips', el).innerHTML = types.length ? ctx.departments.map((d) => `<button type="button" class="chip dep" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${s.tags.has(d.slug)}"><i class="dot"></i>${esc(d.name)}<small>${types.filter((t) => t.departments.includes(d.slug)).length}</small></button>`).join('') : '';
 
     if (!types.length) {
