@@ -60,8 +60,9 @@ js/config.js                   Supabase URL + publishable key (empty = preview m
 js/app.js                      sign-in, roles, navigation, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
-js/views/network.js            the IP sheet and the model editor
-js/views/gear.js               device types: specs, ports, and models at each campus
+js/views/network.js            the IP sheet
+js/views/gear.js               Types and Models (stacked by type), filtered by campus, tag and category
+js/views/devices.js            the model panel and editor (shared by Network and Gear)
 js/views/types.js              the type editor (shared by Gear and the model editor)
 js/views/team.js               people and access
 js/views/account.js            your profile, theme, sign out

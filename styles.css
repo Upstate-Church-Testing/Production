@@ -844,3 +844,55 @@ button.r-ip:hover { border-color: var(--line-2); background: var(--panel-3); }
 .cat-chips .chip { height: 32px; padding: 0 12px; font-size: 13px; background: var(--panel-2); }
 .cat-chips .chip[aria-pressed="true"] { --c: var(--accent); }
 @media (min-width: 860px) { .toolbar .cat-chips { grid-column: 1 / -1; } }
+
+/* ---------------------------------------------- model stacks (Gear) ---- */
+
+.stack { position: relative; isolation: isolate; min-width: 0; } /* min-width: long peeks must not widen the page */
+.stack-card {
+  position: relative; z-index: 2;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden;
+}
+/* folded stacks show the cards underneath */
+.stack.is-two:not(.is-open) { margin-bottom: 8px; }
+.stack.is-many:not(.is-open) { margin-bottom: 16px; }
+.stack:is(.is-two, .is-many):not(.is-open)::before,
+.stack.is-many:not(.is-open)::after {
+  content: ""; position: absolute; inset: 0 12px; z-index: 1; pointer-events: none;
+  border: 1px solid var(--line-2); border-radius: var(--r-xl);
+  background: var(--panel-2); opacity: 0.75;
+  transform: translateY(8px);
+}
+.stack.is-many:not(.is-open)::after { inset: 0 26px; z-index: 0; transform: translateY(16px); opacity: 0.45; }
+.stack-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px;
+  width: 100%; min-height: 72px; padding: 14px 14px 14px 20px;
+  border: 0; border-radius: 0; background: transparent; color: inherit; text-align: left; font: inherit;
+}
+button.stack-head { cursor: pointer; }
+button.stack-head:hover { background: var(--panel-2); }
+button.stack-head:focus-visible { outline-offset: -3px; }
+.stack-head .tags { flex-direction: column; gap: 3px; align-self: start; padding-top: 3px; }
+.stack-title { display: grid; gap: 3px; min-width: 0; }
+.stack-title b { font: 500 19px/1.2 var(--f-display); letter-spacing: -0.005em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stack-title small { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stack-title small:empty { display: none; }
+.stack-head .r-count { grid-column: auto; grid-row: auto; }
+.stack-caret { width: 18px; height: 18px; color: var(--faint); transition: transform 0.2s ease; }
+.stack.is-open .stack-caret { transform: rotate(180deg); }
+.stack-peek {
+  margin: -6px 0 0; padding: 0 18px 16px 52px;
+  font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stack-peek i { font-style: normal; color: var(--faint); margin: 0 6px; }
+.stack.is-open .stack-head { border-bottom: 1px solid var(--line); }
+.stack .rows { padding-top: 4px; }
+.stack-foot { display: flex; justify-content: space-between; gap: 8px; margin: 0 8px; padding: 2px 4px 8px; border-top: 1px solid var(--line); }
+.stack-foot .btn.link { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; }
+.stack-foot .ico { width: 16px; height: 16px; }
+@media (min-width: 1100px) {
+  .row.model-row { grid-template-columns: 62px minmax(180px, 1.2fr) minmax(160px, 1.4fr) minmax(110px, 0.8fr) 180px; }
+  .stack-head { grid-template-columns: 62px minmax(0, 1fr) auto auto; }
+  .stack-head .tags { flex-direction: row; align-self: center; padding: 0; }
+  .stack-head .r-count { display: flex; align-items: baseline; gap: 8px; }
+  .stack-peek { padding-left: 94px; }
+}
