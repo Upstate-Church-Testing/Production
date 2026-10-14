@@ -750,6 +750,14 @@ revoke execute on function public.my_role(), public.has_role(public.app_role), p
 grant execute on function public.my_role(), public.has_role(public.app_role), public.save_device(jsonb)
   to authenticated;
 
+-- Signed-in users can reach the tables (row-level security decides which rows).
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.rooms, public.networks, public.devices,
+  public.device_ips, public.device_credentials to authenticated;
+grant select, update on public.profiles to authenticated;
+grant select, insert, update, delete on public.departments, public.campuses to authenticated;
+grant select on public.activity, public.ip_conflicts to authenticated;
+
 
 -- ---------------------------------------------------------------------------
 -- Live updates: edits show up on everyone's screen without a refresh.
