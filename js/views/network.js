@@ -7,6 +7,7 @@ import {
 } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet as openModelSheet, STATUS, kv } from './devices.js';
+import { locationPill, wireLocationPicker } from '../picker.js';
 
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
@@ -27,19 +28,15 @@ export function mount(el, ctx) {
     <div class="page-head">
       <div class="eyebrow">Network · IP sheet</div>
       <div class="head-row">
-        <label class="campus-pick">
-          <span class="campus-name" id="campus-name"></span>${icon('down', 'campus-caret')}
-          <select id="campus" aria-label="Campus">
-            <option value="all">All campuses</option>
-            ${ctx.campuses.map((c) => `<option value="${c.id}">${esc(c.short_name)}</option>`).join('')}
-          </select>
-        </label>
+        ${locationPill('n-loc')}
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
       </div>
-      <div class="stats" id="stats" aria-live="polite"></div>
-      <div class="seg mode-seg" role="tablist" aria-label="Show">
-        <button type="button" role="tab" data-mode="devices">Models</button>
-        <button type="button" role="tab" data-mode="networks">Networks</button>
+      <div class="mode-row">
+        <div class="seg mode-seg" role="tablist" aria-label="Show">
+          <button type="button" role="tab" data-mode="devices">Models</button>
+          <button type="button" role="tab" data-mode="networks">Networks</button>
+        </div>
+        <p class="tally" id="n-tally" aria-live="polite"></p>
       </div>
     </div>
     <div class="toolbar">
@@ -49,9 +46,19 @@ export function mount(el, ctx) {
     <div id="results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
-  const campusSel = $('#campus', el);
-  campusSel.value = s.campus;
-  campusSel.addEventListener('change', () => { s.campus = campusSel.value; store('ucp.campus', s.campus); draw(); });
+  const loc = wireLocationPicker(ctx, $('#n-loc', el), {
+    get: () => s.campus,
+    set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
+    counts: () => {
+      if (!s.data) return null;
+      const nets = s.mode === 'networks';
+      const counts = { all: nets ? s.data.networks.length : listedDevices().length };
+      for (const c of ctx.campuses) {
+        counts[c.id] = nets ? s.data.networks.filter((n) => n.campus_id === c.id).length : listedDevices().filter((d) => d.campus_id === c.id).length;
+      }
+      return { counts, unit: nets ? 'networks' : 'models', one: nets ? 'network' : 'model' };
+    },
+  });
   $$('[data-mode]', el).forEach((b) => b.addEventListener('click', () => { s.mode = b.dataset.mode; store('ucp.netmode', s.mode); draw(); }));
   const q = $('#q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); drawResults(); drawChips(); }, 120));
@@ -69,11 +76,11 @@ export function mount(el, ctx) {
       s.tags.has(t.dataset.tag) ? s.tags.delete(t.dataset.tag) : s.tags.add(t.dataset.tag);
       store('ucp.tags', [...s.tags]); drawChips(); drawResults();
     } else if (t.dataset.flag) {
-      s.flag = s.flag === t.dataset.flag ? null : t.dataset.flag; drawMeta(); drawChips(); drawResults();
+      s.flag = s.flag === t.dataset.flag ? null : t.dataset.flag; drawChips(); drawResults();
     } else if (t.dataset.act === 'add') {
       s.mode === 'networks' ? openNetworkSheet(null) : openDeviceSheet(null, true);
     } else if (t.dataset.act === 'clear') {
-      s.q = ''; q.value = ''; s.tags.clear(); s.flag = null; store('ucp.tags', []); drawMeta(); drawChips(); drawResults();
+      s.q = ''; q.value = ''; s.tags.clear(); s.flag = null; store('ucp.tags', []); drawChips(); drawResults();
     } else if (t.dataset.act === 'add-net') {
       openNetworkSheet(null, t.dataset.campus);
     } else if (t.dataset.act === 'retry') {
@@ -104,6 +111,7 @@ export function mount(el, ctx) {
       const p = ctx.pending; ctx.pending = null;
       if (p.open && s.ix.dev.has(p.open)) openDeviceSheet(p.open);
       else if (p.newDevice) openDeviceSheet(null, true, p.newDevice);
+      else if (p.flag) { s.flag = p.flag; s.mode = 'devices'; store('ucp.netmode', 'devices'); draw(); }
     }
   }
 
@@ -150,6 +158,11 @@ export function mount(el, ctx) {
   function inCampus(row) { return s.campus === 'all' || row.campus_id === s.campus; }
   function campusName(id) { return ctx.campusById.get(id)?.short_name || 'Unknown campus'; }
 
+  /** Every model the sheet lists, at any location (fixtures with no IP aren't on it). */
+  function listedDevices() {
+    return s.data.devices.filter((dev) => (s.ix.ipsByDev.get(dev.id) || []).length || s.ix.type.get(dev.type_id)?.networked !== false);
+  }
+
   /** One entry per IP, plus one for each device that has no IP yet. */
   function entries() {
     const out = [];
@@ -180,36 +193,18 @@ export function mount(el, ctx) {
   // ------------------------------------------------------------ drawing --
 
   function draw() {
-    const c = ctx.campusById.get(s.campus);
-    $('#campus-name', el).textContent = c ? c.short_name : 'All campuses';
+    loc.update();
     $$('[data-mode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === s.mode)));
     $('.fab', el).setAttribute('aria-label', s.mode === 'networks' ? 'Add network' : 'Add model');
     $('.add-desktop span', el).textContent = s.mode === 'networks' ? 'Add network' : 'Add model';
     $('.toolbar', el).hidden = s.mode === 'networks';
-    drawMeta(); drawChips(); drawResults();
+    drawChips(); drawResults();
   }
 
-  function drawMeta() {
-    const box = $('#stats', el);
-    if (!s.data) { box.innerHTML = s.error ? '' : '<div class="stat"><span class="stat-label">Loading…</span><span class="stat-num">–</span></div>'; return; }
-    const all = entries();
-    const devs = [...new Map(all.map((e) => [e.dev.id, e.dev])).values()];
-    const ips = s.data.ips.filter((i) => inCampus(i) && i._addr);
-    const nets = s.data.networks.filter(inCampus);
-    const conflicts = all.filter((e) => e.ip && s.ix.conflicts.has(e.ip.id)).length;
-    const noip = all.filter((e) => !e.ip?._addr).length;
-    const byDep = (slug) => devs.filter((d) => d.departments.includes(slug)).length;
-    box.innerHTML = `
-      <div class="stat"><span class="stat-label">Models</span><span class="stat-num">${devs.length}</span>
-        <span class="stat-sub">${ctx.departments.map((d) => `<span><i class="tag" data-dep="${d.slug}">${esc(d.name[0])}</i>${byDep(d.slug)}</span>`).join('')}</span></div>
-      <div class="stat"><span class="stat-label">IP addresses</span><span class="stat-num">${ips.length}</span>
-        <span class="stat-sub">on ${plural(nets.length, 'network')}</span></div>
-      <button type="button" class="stat ${conflicts ? 'is-bad' : 'is-zero'}" data-flag="conflicts" aria-pressed="${s.flag === 'conflicts'}">
-        <span class="stat-label">Conflicts</span><span class="stat-num">${conflicts}</span>
-        <span class="stat-sub">${conflicts ? 'Same IP twice · tap to see' : 'No duplicate IPs'}</span></button>
-      <button type="button" class="stat ${noip ? '' : 'is-zero'}" data-flag="noip" aria-pressed="${s.flag === 'noip'}">
-        <span class="stat-label">Missing IP</span><span class="stat-num">${noip}</span>
-        <span class="stat-sub">${noip ? 'Models with no address' : 'Every model has one'}</span></button>`;
+  /** The count up top: whatever is on screen right now. */
+  function drawTally(shown, total, unit) {
+    $('#n-tally', el).innerHTML = shown == null ? ''
+      : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${total != null && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
 
   function drawChips() {
@@ -219,14 +214,19 @@ export function mount(el, ctx) {
     const devs = new Map();
     for (const e of all) devs.set(e.dev.id, e.dev);
     const count = (slug) => [...devs.values()].filter((d) => d.departments.includes(slug)).length;
+    // Problems to chase down, as filters: the same IP twice, and models with no address.
+    const conflicts = all.filter((e) => e.ip && s.ix.conflicts.has(e.ip.id)).length;
+    const noip = all.filter((e) => !e.ip?._addr).length;
     box.innerHTML = `
       ${ctx.departments.map((d) => `<button type="button" class="chip dep" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${s.tags.has(d.slug)}"><i class="dot"></i>${esc(d.name)}<small>${count(d.slug)}</small></button>`).join('')}
-`;
+      ${conflicts || s.flag === 'conflicts' ? `<button type="button" class="chip bad" data-flag="conflicts" aria-pressed="${s.flag === 'conflicts'}">${icon('warn')}Same IP twice<small>${conflicts}</small></button>` : ''}
+      ${noip || s.flag === 'noip' ? `<button type="button" class="chip" data-flag="noip" aria-pressed="${s.flag === 'noip'}">No IP yet<small>${noip}</small></button>` : ''}`;
   }
 
   function drawResults() {
     const box = $('#results', el);
     if (s.error) {
+      drawTally(null);
       box.innerHTML = `<div class="empty"><h3>Couldn’t load the sheet</h3><p>${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
       return;
     }
@@ -235,6 +235,9 @@ export function mount(el, ctx) {
 
     const all = entries();
     const shown = all.filter(matches);
+    const devCount = (list) => new Set(list.map((e) => e.dev.id)).size;
+    const filtered = s.q || s.tags.size || s.flag;
+    drawTally(devCount(shown), filtered ? devCount(all) : null, ['model', 'models']);
     if (!all.length) {
       const c = ctx.campusById.get(s.campus);
       box.innerHTML = `<div class="empty">
@@ -259,9 +262,7 @@ export function mount(el, ctx) {
       g.get(key).push(e);
     }
     const campusOrder = ctx.campuses.map((c) => c.id).filter((id) => byCampus.has(id));
-    const filtered = s.q || s.tags.size || s.flag;
     box.innerHTML = `
-      ${filtered ? `<p class="result-note">Showing ${plural(shown.length, 'row')} of ${all.length}. <button class="btn link" data-act="clear">Clear</button></p>` : ''}
       ${campusOrder.map((cid) => {
         const groups = byCampus.get(cid);
         const nets = s.data.networks.filter((n) => n.campus_id === cid).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
@@ -324,6 +325,7 @@ export function mount(el, ctx) {
 
   function drawNetworks(box) {
     const camps = s.campus === 'all' ? ctx.campuses : [ctx.campusById.get(s.campus)];
+    drawTally(s.data.networks.filter(inCampus).length, null, ['network', 'networks']);
     box.innerHTML = camps.map((c) => {
       const nets = s.data.networks.filter((n) => n.campus_id === c.id).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
       if (s.campus === 'all' && !nets.length) return '';
@@ -342,7 +344,7 @@ export function mount(el, ctx) {
         }).join('')}</div>`
         : `<div class="empty small"><p>No networks at ${esc(c.short_name)} yet.</p><button class="btn" data-act="add-net" data-campus="${c.id}">${icon('plus')}Add a network</button></div>`}
       </section>`;
-    }).join('') || `<div class="empty"><h3>No networks yet</h3><p>Pick a campus and add its networks: Production Control, Dante, House…</p><button class="btn primary" data-act="add">${icon('plus')}Add a network</button></div>`;
+    }).join('') || `<div class="empty"><h3>No networks yet</h3><p>Pick a location and add its networks: Production Control, Dante, House…</p><button class="btn primary" data-act="add">${icon('plus')}Add a network</button></div>`;
   }
 
   // --------------------------------------------------- network sheet ----

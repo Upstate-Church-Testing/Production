@@ -70,6 +70,8 @@ js/photo.js                    turns a picked photo into a white-background squa
 js/views/devices.js            the model panel and editor (shared by Network and Gear)
 js/views/types.js              the type editor (shared by Gear and the model editor)
 js/views/team.js               people and access
+js/views/stats.js              Statistics: gear and network numbers for one location or all of them
+js/picker.js                   the location pill and its menu (Gear, Network, Statistics)
 js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on

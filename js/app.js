@@ -1,5 +1,5 @@
 // App shell: picks the data source, handles accounts, and hosts each module
-// (Gear, Network, Resi, Team and Settings; schedules, training and more later).
+// (Gear, Network, Resi, Statistics, Team and Settings; schedules, training and more later).
 
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, APP_NAME, ORG_NAME } from './config.js';
 import { esc, icon, $, $$, storage, store as save } from './util.js';
@@ -8,6 +8,7 @@ import * as NetworkView from './views/network.js';
 import * as GearView from './views/gear.js';
 import * as TeamView from './views/team.js';
 import * as ResiView from './views/resi.js';
+import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
 
 const ROLE_ORDER = ['pending', 'volunteer', 'contractor', 'staff', 'admin'];
@@ -20,6 +21,7 @@ const MODULES = [
   { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
   { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
   { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
+  { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
   { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
   { id: 'account', label: 'Settings', icon: 'settings', minRole: 'volunteer', view: AccountView },
 ];
@@ -46,6 +48,7 @@ const ctx = {
   newDevice: (preset) => goWith('network', { newDevice: preset }),
   openType: (id) => goWith('gear', { type: id }),
   openSettings: (section) => goWith('account', { section }),
+  openNetworkFlag: (flag) => goWith('network', { flag }),
   reloadMe,
   setTheme,
 };

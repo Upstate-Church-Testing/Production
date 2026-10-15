@@ -5,6 +5,7 @@ import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo,
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, STATUS } from './devices.js';
 import { preparePhoto } from '../photo.js';
+import { locationPill, wireLocationPicker } from '../picker.js';
 
 const NO_BRAND = '__none';
 
@@ -29,19 +30,15 @@ export function mount(el, ctx) {
     <div class="page-head">
       <div class="eyebrow">Gear</div>
       <div class="head-row">
-        <label class="campus-pick">
-          <span class="campus-name" id="g-campus-name"></span>${icon('down', 'campus-caret')}
-          <select id="g-campus" aria-label="Campus">
-            <option value="all">All campuses</option>
-            ${ctx.campuses.map((c) => `<option value="${c.id}">${esc(c.short_name)}</option>`).join('')}
-          </select>
-        </label>
+        ${locationPill('g-loc')}
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add type</span></button>
       </div>
-      <div class="stats" id="g-stats"></div>
-      <div class="seg mode-seg" role="tablist" aria-label="Show">
-        <button type="button" role="tab" data-gmode="types">Types</button>
-        <button type="button" role="tab" data-gmode="models">Models</button>
+      <div class="mode-row">
+        <div class="seg mode-seg" role="tablist" aria-label="Show">
+          <button type="button" role="tab" data-gmode="types">Types</button>
+          <button type="button" role="tab" data-gmode="models">Models</button>
+        </div>
+        <p class="tally" id="g-tally" aria-live="polite"></p>
       </div>
     </div>
     <div class="toolbar">
@@ -53,9 +50,20 @@ export function mount(el, ctx) {
     <div id="g-results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add type">${icon('plus')}</button>`;
 
-  const campusSel = $('#g-campus', el);
-  campusSel.value = s.campus;
-  campusSel.addEventListener('change', () => { s.campus = campusSel.value; store('ucp.campus', s.campus); draw(); });
+  const loc = wireLocationPicker(ctx, $('#g-loc', el), {
+    get: () => s.campus,
+    set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
+    counts: () => {
+      if (!s.data) return null;
+      const models = s.mode === 'models';
+      const counts = { all: models ? s.data.devices.length : s.data.types.length };
+      for (const c of ctx.campuses) {
+        const here = s.data.devices.filter((d) => d.campus_id === c.id);
+        counts[c.id] = models ? here.length : new Set(here.map((d) => d.type_id)).size;
+      }
+      return { counts, unit: models ? 'models' : 'types', one: models ? 'model' : 'type' };
+    },
+  });
   const q = $('#g-q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); draw(); }, 120));
   el.addEventListener('click', (e) => {
@@ -69,7 +77,7 @@ export function mount(el, ctx) {
     else if (t.dataset.brand !== undefined) { s.brand = t.dataset.brand === '' || t.dataset.brand === s.brand ? null : t.dataset.brand; store('ucp.gearbrand', s.brand); draw(); }
     else if (t.dataset.tag) { s.tags.has(t.dataset.tag) ? s.tags.delete(t.dataset.tag) : s.tags.add(t.dataset.tag); store('ucp.geartags', [...s.tags]); draw(); }
     else if (t.dataset.act === 'add') s.mode === 'models' ? openModel(null, true) : newType();
-    else if (t.dataset.act === 'all-campuses') { s.campus = 'all'; campusSel.value = 'all'; store('ucp.campus', 'all'); draw(); }
+    else if (t.dataset.act === 'all-campuses') { s.campus = 'all'; store('ucp.campus', 'all'); loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
     else if (t.dataset.act === 'retry') load();
   });
@@ -165,35 +173,27 @@ export function mount(el, ctx) {
   // ------------------------------------------------------------ drawing --
 
   function draw() {
-    const c = ctx.campusById.get(s.campus);
-    $('#g-campus-name', el).textContent = c ? c.short_name : 'All campuses';
+    loc.update();
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
     const addLabel = s.mode === 'models' ? 'Add models' : 'Add type';
     $('.add-desktop span', el).textContent = addLabel;
     $('.fab', el).setAttribute('aria-label', addLabel);
-    q.placeholder = s.mode === 'models' ? 'Search name, brand, campus, room, IP' : 'Search type, brand, port, campus';
+    q.placeholder = s.mode === 'models' ? 'Search name, brand, location, room, IP' : 'Search type, brand, port, location';
     if (s.error) {
+      drawTally(null);
       $('#g-results', el).innerHTML = `<div class="empty"><h3>Couldn’t load gear</h3><p>${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
       return;
     }
     if (!s.data) return;
-    drawStats();
     drawFilters();
     drawResults();
   }
 
-  function drawStats() {
-    const types = typesHere();
-    const models = s.data.devices.filter(inCampus);
-    const rooms = new Set(models.map((d) => d.room_id).filter(Boolean)).size;
-    const campuses = new Set(models.map((d) => d.campus_id)).size;
-    const brands = new Set(types.map((t) => brandKey(t.manufacturer)).filter(Boolean)).size;
-    const noPhoto = types.filter((t) => !t.photo_path).length;
-    $('#g-stats', el).innerHTML = `
-      <div class="stat"><span class="stat-label">Types</span><span class="stat-num">${types.length}</span><span class="stat-sub">${plural(new Set(types.map((t) => t.category).filter(Boolean)).size, 'category', 'categories')}</span></div>
-      <div class="stat"><span class="stat-label">Models</span><span class="stat-num">${models.length}</span><span class="stat-sub">${s.campus === 'all' ? `across ${plural(campuses, 'campus', 'campuses')}` : `in ${plural(rooms, 'room')}`}</span></div>
-      <div class="stat"><span class="stat-label">Brands</span><span class="stat-num">${brands}</span><span class="stat-sub">on these types</span></div>
-      <div class="stat ${noPhoto ? '' : 'is-zero'}"><span class="stat-label">Need a photo</span><span class="stat-num">${noPhoto}</span><span class="stat-sub">${noPhoto ? 'Types without a picture' : 'Every type has one'}</span></div>`;
+  /** The count up top: whatever is on screen right now. */
+  function drawTally(shown, total) {
+    const unit = s.mode === 'models' ? ['model', 'models'] : ['type', 'types'];
+    $('#g-tally', el).innerHTML = shown == null ? ''
+      : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${filtering() && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
 
   function drawFilters() {
@@ -242,15 +242,17 @@ export function mount(el, ctx) {
     if (!types.length) {
       box.innerHTML = `<div class="empty">
         <h3>No types yet</h3>
-        <p>A type is one product, like a Hoglet 4 or an HDMI-to-SDI converter. Add its photo, specs and ports once, then add its models at each campus.</p>
+        <p>A type is one product, like a Hoglet 4 or an HDMI-to-SDI converter. Add its photo, specs and ports once, then add its models at each location.</p>
         <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add the first type</button></div>
       </div>`;
+      drawTally(0, 0);
       return;
     }
     const here = typesHere();
     const shown = here.filter(typeMatches);
+    drawTally(shown.length, here.length);
     const hidden = types.length - here.length;
-    const elsewhere = hidden ? `<p class="result-note">${plural(hidden, 'more type isn’t', 'more types aren’t')} at ${esc(campusName(s.campus))}. <button class="btn link" data-act="all-campuses">Show all campuses</button></p>` : '';
+    const elsewhere = hidden ? `<p class="result-note">${plural(hidden, 'more type isn’t', 'more types aren’t')} at ${esc(campusName(s.campus))}. <button class="btn link" data-act="all-campuses">Show all locations</button></p>` : '';
     if (!shown.length) {
       box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No type matches “${esc(s.q)}”` : 'No type matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>${elsewhere}`;
       return;
@@ -281,7 +283,7 @@ export function mount(el, ctx) {
         <b class="g-name">${esc(t.name)}</b>
         ${sub ? `<span class="g-sub">${esc(sub)}</span>` : ''}
       </span>
-      <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'model' : 'models'}${s.campus === 'all' && campuses > 1 ? ` · ${plural(campuses, 'campus', 'campuses')}` : ''}</small></span>
+      <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'model' : 'models'}${s.campus === 'all' && campuses > 1 ? ` · ${plural(campuses, 'location')}` : ''}</small></span>
     </li>`;
   }
 
@@ -292,9 +294,11 @@ export function mount(el, ctx) {
       box.innerHTML = `<div class="empty"><h3>No models ${s.campus === 'all' ? 'yet' : `at ${esc(campusName(s.campus))} yet`}</h3>
         <p>Pick a type and how many you have. Ten R3 Beams go in as one batch, and you fill in serials and IPs on each one later.</p>
         <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add models</button></div></div>`;
+      drawTally(0, 0);
       return;
     }
     const models = all.filter(modelMatches);
+    drawTally(models.length, all.length);
     if (!models.length) {
       box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No model matches “${esc(s.q)}”` : 'No model matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
       return;
@@ -302,8 +306,7 @@ export function mount(el, ctx) {
     const order = ctx.campuses.map((c) => c.id);
     models.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
       || order.indexOf(a.campus_id) - order.indexOf(b.campus_id));
-    box.innerHTML = `${filtering() ? `<p class="result-note">${plural(models.length, 'model')} of ${all.length}. <button class="btn link" data-act="clear">Clear</button></p>` : ''}
-      <section class="net"><ul class="gear-list">${models.map(modelRow).join('')}</ul></section>`;
+    box.innerHTML = `<section class="net"><ul class="gear-list">${models.map(modelRow).join('')}</ul></section>`;
   }
 
   function modelRow(d) {
@@ -404,7 +407,7 @@ export function mount(el, ctx) {
                   <span class="mono">${esc(firstIp(u))}</span>${icon('chevron')}
                 </button></li>`).join('')}</ul>
               </div>`).join('')
-              : '<p class="muted">None yet. Add one for each campus that has this gear.</p>'}
+              : '<p class="muted">None yet. Add one for each location that has this gear.</p>'}
             <button class="btn" data-g="add-unit">${icon('plus')}Add models of this type</button>
           </section>
           ${t.manual_url ? `<a class="btn" href="${esc(t.manual_url)}" target="_blank" rel="noopener">${icon('open')}Open manual</a>` : ''}

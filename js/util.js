@@ -148,6 +148,7 @@ const paths = {
   out: '<path d="M14 4.5h4.5v15H14M10 8l-4 4 4 4M6 12h9.5"/>',
   wand: '<path d="m4 20 11-11M14 4v2M19 9h2M17.5 5.5 19 4M9 4.5l.5 1.5M18.5 13.5 20 14"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  chart: '<path d="M4.5 19.5h15"/><path d="M7 16.5v-5M11.5 16.5V7M16 16.5v-8"/>',
   camera: '<path d="M4 8.5h3.2l1.6-2.5h6.4l1.6 2.5H20v10.5H4z"/><circle cx="12" cy="13.2" r="3.4"/>',
   settings: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>',
   live: '<circle cx="12" cy="12" r="2"/><path d="M8.6 8.6a4.8 4.8 0 0 0 0 6.8M15.4 8.6a4.8 4.8 0 0 1 0 6.8M5.7 5.7a8.9 8.9 0 0 0 0 12.6M18.3 5.7a8.9 8.9 0 0 1 0 12.6"/>',
