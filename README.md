@@ -65,7 +65,7 @@ js/app.js                      sign-in, roles, navigation, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Models (by category) and Items (every unit A–Z), filtered by location, section, category and brand
+js/views/gear.js               Models, Items (every unit A–Z) and Grid (models × locations or rooms, like the old lighting sheet), filtered by location, section, category and brand
 js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)
 js/views/devices.js            the item panel and editor (shared by Network and Gear)
 js/views/types.js              the model editor (shared by Gear and the item editor)

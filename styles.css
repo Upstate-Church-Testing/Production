@@ -1171,3 +1171,76 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .bar-value { min-width: 2ch; text-align: right; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .stats-filters .filters > .dd { max-width: 420px; }
+
+/* ------------------------------------------------------------- gear grid -- */
+/* Models down the side, locations across the top, like the old lighting sheet. */
+
+.view-gear.is-grid .toolbar { position: static; }
+.view-gear.is-grid .results { gap: 10px; }
+.grid-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: 44px; }
+.grid-hint { font-size: 13px; color: var(--faint); }
+.grid-wrap {
+  overflow: auto; overscroll-behavior: contain; max-height: calc(100dvh - 170px);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl);
+}
+@media (min-width: 860px) { .grid-wrap { max-height: calc(100dvh - 48px); } }
+.grid { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
+.grid th, .grid td { border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); padding: 0; }
+.grid.split .first { border-left: 2px solid var(--line-2); }
+
+/* sticky header row(s) and model column */
+.grid thead th {
+  position: sticky; top: 0; z-index: 3; background: var(--panel-2);
+  height: 48px; padding: 0 4px; font: 600 12.5px/1.15 var(--f-body); color: var(--fg); text-align: center;
+}
+/* long names ("Harrison Bridge") wrap onto two lines so every location fits across an iPad */
+.grid thead th:not(.grid-corner) { overflow-wrap: normal; word-break: keep-all; }
+.grid.two-rows thead tr:first-child th { height: 44px; }
+.grid.two-rows thead tr.grid-rooms th { top: 44px; z-index: 2; height: 40px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.grid.two-rows thead tr:first-child th[rowspan] { height: 84px; }
+.grid thead th.is-blank { color: var(--faint); }
+/* a location over several rooms: keep its name in view while scrolling sideways */
+.grid { --gm-w: 180px; }
+.grid thead th.wide { text-align: left; padding-left: 10px; }
+.grid thead th.wide span { position: sticky; left: calc(var(--gm-w) + 10px); }
+.grid .grid-corner, .grid .grid-model {
+  position: sticky; left: 0; z-index: 2; text-align: left; border-left: 0;
+  background: var(--panel); box-shadow: 1px 0 0 var(--line-2);
+}
+.grid thead .grid-corner { z-index: 4; background: var(--panel-2); font: 700 11px/1 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); padding-left: 16px; }
+.grid-model { width: 1%; min-width: var(--gm-w); max-width: 280px; padding: 8px 10px 8px 10px !important; }
+.gm { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.thumb.sm { width: 36px; height: 36px; border-radius: 9px; }
+.thumb.sm .ico { width: 18px; height: 18px; }
+.gm-text { display: grid; min-width: 0; }
+.gm-text small { font: 600 10.5px/1.3 var(--f-body); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-text b { font: 600 14px/1.22 var(--f-body); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+
+/* count cells: blank when zero, tinted by how many */
+.grid tbody td {
+  min-width: 50px; height: 56px; text-align: center; font: 700 15px/1 var(--f-body); color: var(--fg);
+}
+.grid tbody td.has { background: color-mix(in srgb, var(--accent) var(--heat, 20%), transparent); }
+.grid .grid-sum { width: 1%; min-width: 56px; padding: 0 8px; background: var(--panel-2); font-weight: 800; position: sticky; right: 0; z-index: 1; box-shadow: -1px 0 0 var(--line-2); }
+.grid thead .grid-sum { z-index: 4; }
+.grid tbody .grid-sum.zero { color: var(--faint); }
+.grid tbody tr[data-type] { cursor: pointer; }
+.grid tbody tr[data-type]:hover th, .grid tbody tr[data-type]:hover td:not(.has) { background: var(--panel-2); }
+.grid tbody tr[data-type]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.grid-group th {
+  position: sticky; left: 0; padding: 14px 16px 8px !important; text-align: left; background: var(--panel); border-left: 0 !important;
+  font: 500 17px/1.2 var(--f-display); color: var(--fg);
+}
+.grid-group th span { position: sticky; left: 16px; }
+.grid tfoot th, .grid tfoot td {
+  position: sticky; bottom: 0; z-index: 2; height: 48px; background: var(--panel-2);
+  text-align: center; font: 800 15px/1 var(--f-body); border-bottom: 0; box-shadow: 0 -1px 0 var(--line-2);
+}
+.grid tfoot th.grid-model { z-index: 3; text-align: left; padding-left: 16px !important; font: 700 11px/1 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.grid tfoot .grid-sum { z-index: 3; }
+@media (max-width: 599px) {
+  .grid { --gm-w: 128px; }
+  .grid-model { min-width: 128px; max-width: 170px; padding-left: 12px !important; }
+  .grid-model .thumb { display: none; }
+  .grid-hint { display: none; }
+}

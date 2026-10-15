@@ -18,6 +18,7 @@ export function mount(el, ctx) {
     cat: ctx.gearFilters.cat,
     brand: ctx.gearFilters.brand,
     mode: storage('ucp.gearmode', 'types'),
+    gridRooms: storage('ucp.gridrooms', false), // grid: one column per room instead of per location
     campus: ctx.campus,           // shared with Network and Statistics; All on every launch
     data: null,
     ix: null,
@@ -42,6 +43,7 @@ export function mount(el, ctx) {
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-gmode="types">Models</button>
           <button type="button" role="tab" data-gmode="models">Items</button>
+          <button type="button" role="tab" data-gmode="grid">Grid</button>
         </div>
         <p class="tally" id="g-tally" aria-live="polite"></p>
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
@@ -127,6 +129,11 @@ export function mount(el, ctx) {
     else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
     else if (t.dataset.act === 'retry') load();
+    else if (t.dataset.act === 'grid-rooms') { s.gridRooms = !s.gridRooms; store('ucp.gridrooms', s.gridRooms); drawResults(); }
+  });
+  el.addEventListener('keydown', (e) => {
+    const row = e.target.closest?.('tr[data-type]');
+    if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openTypeSheet(row.dataset.type); }
   });
 
   const unsubscribe = ctx.store.subscribe(debounce(() => load(true), 350));
@@ -226,6 +233,7 @@ export function mount(el, ctx) {
     $('.add-desktop span', el).textContent = addLabel;
     $('.fab', el).setAttribute('aria-label', addLabel);
     q.placeholder = s.mode === 'models' ? 'Search name, model, brand, location, IP' : 'Search model, brand, port, location';
+    el.classList.toggle('is-grid', s.mode === 'grid');
     if (s.error) {
       drawTally(null);
       $('#g-results', el).innerHTML = `<div class="empty"><h3>Couldn’t load gear</h3><p>${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
@@ -264,6 +272,7 @@ export function mount(el, ctx) {
     const box = $('#g-results', el);
     if (!s.data) return;
     if (s.mode === 'models') return drawModels(box);
+    if (s.mode === 'grid') return drawGrid(box);
 
     const types = s.data.types;
     if (!types.length) {
@@ -311,6 +320,100 @@ export function mount(el, ctx) {
       </span>
       <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'item' : 'items'}</small></span>
     </li>`;
+  }
+
+  // Grid: models down the side, locations across the top, item counts in the cells,
+  // like the old lighting sheet. Tap a row to open that model.
+  function drawGrid(box) {
+    const types = typesHere().filter(typeMatches);
+    const typeIds = new Set(types.map((t) => t.id));
+    const items = s.data.devices.filter((d) => inCampus(d) && typeIds.has(d.type_id));
+    const roomName = (id) => s.ix.room.get(id)?.name || 'No room';
+    const byRoom = s.campus !== ALL || s.gridRooms;
+
+    // Columns: one per location, or one per room (grouped under its location).
+    let cols = [];
+    const places = s.campus === ALL ? ctx.campuses : [ctx.campusById.get(s.campus)];
+    for (const c of places) {
+      if (!byRoom) { cols.push({ campus: c, room: undefined, label: c.short_name }); continue; }
+      const here = items.filter((d) => d.campus_id === c.id);
+      const roomIds = [...new Set(here.map((d) => d.room_id || null))];
+      const ordered = s.data.rooms.filter((r) => r.campus_id === c.id && roomIds.includes(r.id))
+        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name)).map((r) => r.id);
+      if (roomIds.includes(null)) ordered.push(null);
+      if (!ordered.length) cols.push({ campus: c, room: undefined, label: s.campus === ALL ? '—' : 'Nothing here yet', empty: true });
+      else for (const rid of ordered) cols.push({ campus: c, room: rid, label: roomName(rid) });
+    }
+    cols.forEach((col, i) => { col.first = i === 0 || cols[i - 1].campus.id !== col.campus.id; }); // where a new location starts
+    const inCol = (d, col) => d.campus_id === col.campus.id && (col.room === undefined || (d.room_id || null) === col.room);
+
+    // Counts.
+    const count = new Map(); // `${typeId}|${colIndex}` -> n
+    let max = 0;
+    for (const d of items) {
+      cols.forEach((col, i) => {
+        if (!inCol(d, col)) return;
+        const k = `${d.type_id}|${i}`;
+        const n = (count.get(k) || 0) + 1;
+        count.set(k, n);
+        if (n > max) max = n;
+      });
+    }
+    drawGridTally(items.length, types.length);
+
+    if (!types.length) {
+      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>No model matches these filters${s.campus !== ALL ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
+      return;
+    }
+
+    // Rows: grouped by category (unless one is picked), then brand, then name.
+    const sorted = [...types].sort((a, b) => catOf(a).localeCompare(catOf(b)) || (a.manufacturer || '\uffff').localeCompare(b.manufacturer || '\uffff')
+      || a.name.localeCompare(b.name, undefined, { numeric: true }));
+    const heat = (n) => (n ? `style="--heat:${Math.round(14 + 46 * (n / Math.max(1, max)))}%"` : '');
+    const colTotals = cols.map(() => 0);
+    let lastCat = null;
+    const body = sorted.map((t) => {
+      const cells = cols.map((col, i) => {
+        const n = count.get(`${t.id}|${i}`) || 0;
+        colTotals[i] += n;
+        return `<td class="${n ? 'has' : ''} ${col.first ? 'first' : ''}" ${heat(n)}>${n || ''}</td>`;
+      }).join('');
+      const total = cols.reduce((sum, _, i) => sum + (count.get(`${t.id}|${i}`) || 0), 0);
+      const group = s.cat === ALL && catOf(t) !== lastCat ? `<tr class="grid-group"><th colspan="${cols.length + 2}"><span>${esc(catOf(t))}</span></th></tr>` : '';
+      lastCat = catOf(t);
+      return `${group}<tr data-type="${t.id}" tabindex="0" aria-label="Open ${esc(typeLabel(t))}">
+        <th class="grid-model" scope="row"><div class="gm">${typeThumb(ctx, t, 'sm')}<span class="gm-text"><small>${esc(t.manufacturer || 'No brand')}</small><b>${esc(t.name)}</b></span></div></th>
+        ${cells}<td class="grid-sum ${total ? '' : 'zero'}">${total || ''}</td></tr>`;
+    }).join('');
+
+    // Header: locations, with their rooms underneath when split by room.
+    const spans = [];
+    for (const col of cols) {
+      const last = spans[spans.length - 1];
+      if (last && last.campus.id === col.campus.id) last.n += 1; else spans.push({ campus: col.campus, n: 1 });
+    }
+    const twoRows = byRoom && s.campus === ALL;
+    const head = twoRows
+      ? `<tr><th class="grid-corner" rowspan="2">Model</th>${spans.map((sp) => `<th class="grid-loc first ${sp.n > 1 ? 'wide' : ''}" colspan="${sp.n}"><span>${esc(sp.campus.short_name)}</span></th>`).join('')}<th class="grid-sum" rowspan="2">Total</th></tr>
+         <tr class="grid-rooms">${cols.map((col) => `<th class="${col.first ? 'first' : ''} ${col.empty ? 'is-blank' : ''}">${esc(col.label)}</th>`).join('')}</tr>`
+      : `<tr><th class="grid-corner">Model</th>${cols.map((col, i) => `<th class="grid-loc ${col.first ? 'first' : ''} ${colTotals[i] ? '' : 'is-blank'}">${esc(col.label)}</th>`).join('')}<th class="grid-sum">Total</th></tr>`;
+
+    box.innerHTML = `
+      <div class="grid-tools">
+        ${s.campus === ALL ? `<button type="button" class="switch" role="switch" data-act="grid-rooms" aria-checked="${!!s.gridRooms}"><span class="switch-track"><i></i></span>Split by room</button>` : `<span class="muted">Rooms at ${esc(campusName(s.campus))}</span>`}
+        <span class="grid-hint">Tap a model to see its items</span>
+      </div>
+      <div class="grid-wrap">
+        <table class="grid ${twoRows ? 'two-rows' : ''} ${byRoom ? 'split' : ''}">
+          <thead>${head}</thead>
+          <tbody>${body}</tbody>
+          <tfoot><tr><th class="grid-model">Total</th>${colTotals.map((n, i) => `<td class="${cols[i].first ? 'first' : ''}">${n || ''}</td>`).join('')}<td class="grid-sum">${items.length}</td></tr></tfoot>
+        </table>
+      </div>`;
+  }
+
+  function drawGridTally(itemCount, modelCount) {
+    $('#g-tally', el).innerHTML = `<b>${itemCount}</b><span>${itemCount === 1 ? 'item' : 'items'}</span><small>in ${plural(modelCount, 'model')}${filtering() ? ` · <button class="btn link" data-act="clear">Clear</button>` : ''}</small>`;
   }
 
   // Items: every unit, A–Z, one after another.
