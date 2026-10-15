@@ -1,6 +1,8 @@
 // Preview store: the same methods as the live store, kept in memory with
 // example data. Used when no Supabase project is configured.
 
+import { createPcoDemo } from './pco-demo.js';
+
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2));
 const wait = (ms = 90) => new Promise((r) => setTimeout(r, ms));
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -212,8 +214,11 @@ export function createDemoStore() {
   }
   const blank = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
 
+  const pco = createPcoDemo({ wait, clone, me, changed });
+
   return {
     mode: 'demo',
+    ...pco,
 
     async session() { return signedIn ? { user: { id: me.id, email: me.email } } : null; },
     onAuth(cb) { authListeners.add(cb); return () => authListeners.delete(cb); },

@@ -158,6 +158,43 @@ export async function createSupabaseStore(url, key) {
       ok(await sb.from('streams').delete().eq('id', id));
     },
 
+    // ---- Planning Center: one church-wide connection, synced on the server.
+    async pcoStatus() {
+      return ok(await sb.rpc('pco_status'));
+    },
+    async pcoData() {
+      const [types, teams, plans, people] = await Promise.all([
+        all(() => sb.from('pco_service_types').select('*').order('sequence', { nullsFirst: false }).order('name')),
+        all(() => sb.from('pco_teams').select('*').order('sequence', { nullsFirst: false }).order('name')),
+        all(() => sb.from('pco_plans').select('*').order('sort_date')),
+        all(() => sb.from('pco_plan_people').select('id, plan_id, team_id, person_id, name, position, status, photo').order('id')),
+      ]);
+      return { types, teams, plans, people };
+    },
+    /** connect { app_id, secret } · disconnect · sync */
+    async pco(action, payload = {}) {
+      const { data, error } = await sb.functions.invoke('pco', { body: { action, ...payload } });
+      if (error) {
+        let msg = error.message;
+        try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch { /* not JSON */ }
+        throw friendly(new Error(msg));
+      }
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    async pcoSetAccess(typeId, access) {
+      ok(await sb.rpc('pco_set_access', { p_type: typeId, p_access: access }));
+    },
+    async pcoShowTeam(name, shown) {
+      ok(await sb.rpc('pco_show_team', { p_name: name, p_shown: shown }));
+    },
+    async pcoSetWeeks(weeks) {
+      ok(await sb.rpc('pco_set_weeks', { p_weeks: weeks }));
+    },
+    async pcoSetCampus(typeId, campusId) {
+      ok(await sb.rpc('pco_set_campus', { p_type: typeId, p_campus: campusId || null }));
+    },
+
     async profiles() {
       return all(() => sb.from('profiles').select('*').order('full_name'));
     },

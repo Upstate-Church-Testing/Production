@@ -1,5 +1,5 @@
 // App shell: picks the data source, handles accounts, and hosts each module
-// (Gear, Network, Resi, Statistics, Team and Settings; schedules, training and more later).
+// (Gear, Network, Services, Resi, Statistics, Team and Settings; training and more later).
 
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, APP_NAME, ORG_NAME } from './config.js';
 import { esc, icon, $, $$, storage, store as save } from './util.js';
@@ -8,6 +8,7 @@ import * as NetworkView from './views/network.js';
 import * as GearView from './views/gear.js';
 import * as TeamView from './views/team.js';
 import * as ResiView from './views/resi.js';
+import * as ServicesView from './views/services.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
 
@@ -20,6 +21,7 @@ export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunte
 const MODULES = [
   { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
   { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
+  { id: 'services', label: 'Services', icon: 'calendar', minRole: 'volunteer', view: ServicesView },
   { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
   { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
   { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },

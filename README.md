@@ -23,10 +23,30 @@ Roles, lowest to highest: `pending` → `volunteer` → `contractor` → `staff`
 - **The first account created becomes admin.** Everyone after starts as *pending* and
   sees nothing until an admin approves them on the Team screen.
 - **Staff and admins** see the network sheet, device logins and change history.
-- **Volunteers** can sign in and watch the Resi section, but see no equipment or
-  network data. Service flows and training will be built for them later.
+- **Volunteers** see Services and Resi, but no equipment or network data.
+  Service flows and training will be built for them later.
 - **Staff** set up each campus's Resi player in Settings.
 - **Admins** approve people, change roles and set each person's production teams.
+
+## Planning Center (Services tab)
+
+One church-wide connection, so nobody connects their own Planning Center account
+and nobody's own Planning Center permissions matter here.
+
+- An admin pastes a Planning Center **personal access token** once, in Settings ›
+  Planning Center (make it from a shared production login that can see every
+  service type). The `pco` edge function checks it with Planning Center and keeps
+  the secret in Supabase Vault. The app can never read it back.
+- Every 15 minutes (pg_cron → the edge function) the server copies service types and
+  their folders, teams, upcoming plans (6 weeks by default), and the rosters and open
+  spots of the **shown teams** (Broadcast, FOH… an admin picks) into `pco_*` tables.
+- Who sees a service is set per service in Settings: **Everyone** (volunteers and up),
+  **Staff**, or **Off**. A campus's weekly services that have a production team start
+  shared with everyone; everything else starts off. RLS enforces it.
+- App accounts are matched to Planning Center people by email, so the Services tab can
+  show "You're on 3 services" and a My schedule view.
+- Scheduling people from the app goes through the same connection (next step), so what
+  someone may do is decided by their role here, not by their Planning Center login.
 
 ## Data model
 
@@ -47,8 +67,13 @@ device_types     the shared catalog entry ("model" in the app): name, brand, par
     └── device_type_ports (the port layout every unit of that type shares)
 
 departments      audio / video / lighting / network — the section tag on every item
-profiles         one per login: role, teams, home campus
+profiles         one per login: role, teams, home campus, matched Planning Center person
 activity         every change: who, when, old → new (passwords never copied)
+
+pco_connection   the one Planning Center connection (token secret in Vault; the app can't read this table)
+pco_service_types ── pco_teams (shown or not; positions)
+        │            who sees it: access = everyone | staff | hidden, and which location
+        └── pco_plans (upcoming: dates, times, open spots) ── pco_plan_people (shown teams only)
 ```
 
 Every production table carries `departments text[]`, checked against `departments`,
@@ -75,7 +100,12 @@ js/picker.js                   the filter dropdowns and their menus (location, s
 js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on
-js/views/account.js            Settings: your profile, Resi players, theme, sign out
+js/views/account.js            Settings: your profile, Planning Center, Resi players, theme, sign out
+js/views/services.js           Services: upcoming plans by day with production-team rosters; My schedule
+js/views/pco-settings.js       Settings › Planning Center (connect, who sees which services, which teams show)
+js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
+js/pco-demo.js                 made-up Planning Center data for the preview
+supabase/functions/pco/        edge function: connect/disconnect/sync (index.ts), API client (pco.ts), sync (sync.ts), writes (db.ts)
 supabase/migrations/*.sql      database, permissions, history
 supabase/seed.sql              the 10 campuses, matched to Planning Center
 tools/stamp.py                 run before each publish; open copies reload themselves

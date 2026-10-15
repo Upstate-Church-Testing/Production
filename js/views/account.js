@@ -1,7 +1,8 @@
-// Settings: your profile, Resi players (staff), appearance, and signing out.
+// Settings: your profile, Planning Center and Resi players (staff), appearance, and signing out.
 
 import { esc, icon, $, $$, storage } from '../util.js';
 import { mountResiSettings } from './resi-settings.js';
+import { mountPcoSettings } from './pco-settings.js';
 
 export function mount(el, ctx) {
   const me = ctx.me;
@@ -13,7 +14,7 @@ export function mount(el, ctx) {
       <div class="head-row"><h1 class="h1">${esc(me.full_name || 'Your account')}</h1></div>
       <p class="head-meta">${esc(me.email)} <i>·</i> ${esc(ctx.roleLabel[me.role])}</p>
     </div>
-    ${!isStaff ? `<section class="panel welcome"><h2>Welcome to ${esc(ctx.appName)}</h2><p>Service flows and training videos for volunteers are on the way. You’ll find them here as they’re added.</p></section>` : ''}
+    ${!isStaff ? `<section class="panel welcome"><h2>Welcome to ${esc(ctx.appName)}</h2><p>Your services and schedule are in the Services tab. Service flows and training videos are on the way.</p></section>` : ''}
     <form class="panel form" id="me-form" novalidate>
       <h2>Profile</h2>
       <label class="field"><span>Name</span><input id="m-name" value="${esc(me.full_name)}" autocomplete="name"></label>
@@ -22,6 +23,7 @@ export function mount(el, ctx) {
         <small class="hint">New items you add start at this location.</small></label>
       <div class="row-end"><p class="form-msg" role="status"></p><button class="btn primary" type="submit">Save</button></div>
     </form>
+    ${isStaff ? '<section class="panel pc-panel" id="pco-settings"></section>' : ''}
     ${isStaff ? '<section class="panel" id="resi-players"></section>' : ''}
     <section class="panel">
       <h2>Appearance</h2>
@@ -63,9 +65,11 @@ export function mount(el, ctx) {
   $('#signout', el).addEventListener('click', () => ctx.store.signOut());
 
   const resi = isStaff ? mountResiSettings($('#resi-players', el), ctx) : null;
-  if (ctx.pending?.section === 'resi') {
+  const pco = isStaff ? mountPcoSettings($('#pco-settings', el), ctx) : null;
+  const jump = { resi: '#resi-players', pco: '#pco-settings' }[ctx.pending?.section];
+  if (jump) {
     ctx.pending = null;
-    requestAnimationFrame(() => $('#resi-players', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    requestAnimationFrame(() => $(jump, el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   }
-  return { unmount() { resi?.unmount(); } };
+  return { unmount() { resi?.unmount(); pco?.unmount(); } };
 }
