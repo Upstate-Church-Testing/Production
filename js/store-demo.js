@@ -240,13 +240,13 @@ export function createDemoStore() {
       await wait(220);
       const d = payload.device;
       const type = db.types.find((t) => t.id === d.type_id);
-      if (!type) throw new Error('Pick a type for this model.');
+      if (!type) throw new Error('Pick a model for this item.');
       let tags = depOrder((d.departments || []).map((x) => x.toLowerCase()));
       if (!tags.length) tags = [...type.departments];
       const fields = { type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(d.name) || type.name, departments: tags,
         serial_number: blank(d.serial_number), firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes) };
       let dev = d.id ? db.devices.find((x) => x.id === d.id) : null;
-      if (d.id && !dev) throw new Error('That unit was deleted by someone else.');
+      if (d.id && !dev) throw new Error('That item was deleted by someone else.');
       if (dev && dev.type_id !== type.id) {
         const keepPorts = new Set(db.typePorts.filter((p) => p.type_id === type.id).map((p) => p.id));
         db.devPorts = db.devPorts.filter((x) => x.device_id !== dev.id || keepPorts.has(x.type_port_id));
@@ -326,12 +326,12 @@ export function createDemoStore() {
       await wait(220);
       const t = payload.type;
       const name = blank(t.name);
-      if (!name) throw new Error('Give the type a name.');
+      if (!name) throw new Error('Give the model a name.');
       const tags = depOrder(t.departments || []);
-      if (!tags.length) throw new Error('Tag it audio, video or lighting (at least one).');
+      if (!tags.length) throw new Error('Pick at least one section: Audio, Video, Lighting or Network.');
       const mfr = blank(t.manufacturer);
       if (db.types.some((x) => x.id !== t.id && x.name.toLowerCase() === name.toLowerCase() && (x.manufacturer || '').toLowerCase() === (mfr || '').toLowerCase())) {
-        throw new Error('There’s already a type with that name from that maker.');
+        throw new Error('There’s already a model with that name from that brand.');
       }
       const fields = { name, manufacturer: mfr, part_number: blank(t.part_number), category: blank(t.category), departments: tags, networked: t.networked !== false,
         description: blank(t.description), specs: t.specs || [], manual_url: blank(t.manual_url), notes: blank(t.notes) };
@@ -357,7 +357,7 @@ export function createDemoStore() {
       await wait(250);
       const d = payload.device;
       const type = db.types.find((t) => t.id === d.type_id);
-      if (!type) throw new Error('Pick a type for these models.');
+      if (!type) throw new Error('Pick a model for these items.');
       const names = payload.names || [];
       if (names.length < 1 || names.length > 500) throw new Error('Add between 1 and 500 at a time.');
       const tags = depOrder(d.departments || []);
@@ -373,7 +373,7 @@ export function createDemoStore() {
     },
     async deleteType(id) {
       await wait(150);
-      if (db.devices.some((d) => d.type_id === id)) throw new Error('This type still has models at campuses. Delete or change those first.');
+      if (db.devices.some((d) => d.type_id === id)) throw new Error('This model still has items at some locations. Delete or change those first.');
       db.types = db.types.filter((x) => x.id !== id);
       db.typePorts = db.typePorts.filter((x) => x.type_id !== id);
       changed('device_types');
@@ -387,7 +387,7 @@ export function createDemoStore() {
         is_isolated: !!n.is_isolated, notes: blank(n.notes) };
       if (!fields.name) throw new Error('Give the network a name.');
       if (db.networks.some((x) => x.campus_id === fields.campus_id && x.name === fields.name && x.id !== n.id)) {
-        throw new Error('That campus already has a network with that name.');
+        throw new Error('That location already has a network with that name.');
       }
       let row = n.id && db.networks.find((x) => x.id === n.id);
       if (row) Object.assign(row, fields);
@@ -429,7 +429,7 @@ export function createDemoStore() {
     async streams() { await wait(); return clone(streams); },
     async saveStream(st) {
       await wait(160);
-      if (streams.some((x) => x.campus_id === st.campus_id && x.embed_id === st.embed_id && x.id !== st.id)) throw new Error('That player is already on this campus.');
+      if (streams.some((x) => x.campus_id === st.campus_id && x.embed_id === st.embed_id && x.id !== st.id)) throw new Error('That player is already on this location.');
       const row = { campus_id: st.campus_id, name: (st.name || '').trim() || 'Online', embed_id: st.embed_id, embed_type: st.embed_type || 'webchannel' };
       if (st.id) Object.assign(streams.find((x) => x.id === st.id), row);
       else streams.push({ id: uid(), provider: 'resi', sort_order: 0, created_at: now(), ...row });

@@ -372,7 +372,7 @@ body::after {
 @media (min-width: 860px) { .results { padding: 14px 32px 0 28px; } }
 .result-note { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 4px; }
 .campus-block { display: grid; gap: 14px; }
-.campus-h { font: 400 24px/1.1 var(--f-display); letter-spacing: 0.04em; text-transform: uppercase; padding: 12px 4px 0; }
+.campus-h { font: 300 28px/1.1 var(--f-display); letter-spacing: -0.01em; padding: 12px 4px 0; }
 
 .net {
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl);
@@ -755,7 +755,7 @@ button.r-ip:hover { border-color: var(--line-2); background: var(--panel-3); }
 .dir-in { color: var(--dep-audio); background: color-mix(in srgb, var(--dep-audio) 15%, transparent); }
 
 .unit-group { display: grid; gap: 8px; }
-.unit-campus { font-size: 12px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); padding: 4px 0 0 4px; }
+.unit-campus { font-size: 12.5px; font-weight: 700; color: var(--muted); padding: 4px 0 0 4px; }
 .unit-list { display: grid; padding: 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .unit-list li { position: relative; }
 .unit-list li + li::before { content: ""; position: absolute; top: 0; left: 12px; right: 12px; border-top: 1px solid var(--line); }
@@ -1081,7 +1081,6 @@ button.r-ip:hover { border-color: var(--line-2); background: var(--panel-3); }
 .dd-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
 .dd-label { font: 700 10.5px/1.2 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
 .dd-value { font: 600 15.5px/1.25 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dd.caps .dd-value { letter-spacing: 0.06em; text-transform: uppercase; }
 .dd-caret { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: var(--panel-3); color: var(--muted); }
 .dd.is-set .dd-caret, .dd[aria-expanded="true"] .dd-caret { background: var(--accent); color: var(--accent-fg); }
 .dd-caret .ico { width: 18px; height: 18px; stroke-width: 2.2; transition: transform 0.18s; }
@@ -1118,7 +1117,6 @@ button.r-ip:hover { border-color: var(--line-2); background: var(--panel-3); }
 .dd-opt[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 13%, var(--panel-2)); }
 .dd-opt .tag { width: 20px; height: 20px; font-size: 10.5px; }
 .dd-opt-name { font: 600 15px/1.2 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dd-menu.caps .dd-opt-name { letter-spacing: 0.06em; text-transform: uppercase; }
 .dd-opt-count { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 .dd-check { display: grid; place-items: center; color: var(--accent-ink); }
 .dd-check .ico { width: 18px; height: 18px; stroke-width: 2.6; }

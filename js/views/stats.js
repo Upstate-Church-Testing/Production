@@ -1,7 +1,7 @@
 // Statistics: the numbers behind Gear and Network for one location or all of them.
-// Tap a bar to see those models in Gear; tap a problem to see it on the Network sheet.
+// Tap a bar to see those items in Gear; tap a problem to see it on the Network sheet.
 
-import { esc, icon, $, debounce, storage, store, plural } from '../util.js';
+import { esc, icon, $, debounce, plural } from '../util.js';
 import { buildIndex } from './devices.js';
 import { brandKey } from './types.js';
 import { ALL, dropdownHtml, locationDropdown } from '../picker.js';
@@ -11,7 +11,7 @@ const TOP = 8; // longer lists fold the rest into "Everything else"
 export function mount(el, ctx) {
   let alive = true;
   const s = {
-    campus: storage('ucp.campus', ctx.me.home_campus_id || 'all'),
+    campus: ctx.campus, // shared with Gear and Network; All on every launch
     data: null,
     ix: null,
     error: null,
@@ -26,9 +26,9 @@ export function mount(el, ctx) {
     <div class="results stats-page" id="st-body"><div class="loading">${'<div class="sk"></div>'.repeat(4)}</div></div>`;
 
   const loc = locationDropdown(ctx, $('#st-loc', el), {
-    unit: ['model', 'models'],
+    unit: ['item', 'items'],
     get: () => s.campus,
-    set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
+    set: (v) => { s.campus = ctx.campus = v; draw(); },
     counts: () => {
       if (!s.data) return null;
       const counts = { [ALL]: s.data.devices.length };
@@ -41,14 +41,10 @@ export function mount(el, ctx) {
     const t = e.target.closest('[data-go]');
     if (!t) return;
     const [kind, value] = [t.dataset.go, t.dataset.value];
-    if (kind === 'location') { s.campus = value; store('ucp.campus', value); loc.update(); draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (kind === 'location') { s.campus = ctx.campus = value; loc.update(); draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (kind === 'flag') { ctx.openNetworkFlag(value); return; }
-    // A team, category or brand: show those models in Gear.
-    store('ucp.gearmode', 'models');
-    store('ucp.geardep', kind === 'team' ? value : ALL);
-    store('ucp.gearcat', kind === 'category' ? value : ALL);
-    store('ucp.gearbrand', kind === 'brand' ? value : ALL);
-    ctx.go('gear');
+    // A section, category or brand: show those items in Gear.
+    ctx.openGear({ dep: kind === 'team' ? value : ALL, cat: kind === 'category' ? value : ALL, brand: kind === 'brand' ? value : ALL });
   });
 
   const unsubscribe = ctx.store.subscribe(debounce(() => load(), 400));
@@ -93,7 +89,7 @@ export function mount(el, ctx) {
       ? `<button type="button" class="stat is-bad" data-go="flag" data-value="${flag}"><span class="stat-label">${icon('warn')}${label}</span><span class="stat-num">${value}</span><span class="stat-sub">${sub}</span></button>`
       : `<div class="stat is-zero"><span class="stat-label">${label}</span><span class="stat-num">0</span><span class="stat-sub">${ok}</span></div>`;
 
-    // Breakdowns of the models here.
+    // Breakdowns of the items here.
     const count = (keyOf) => {
       const m = new Map();
       for (const d of devices) { const k = keyOf(d); if (k != null) m.set(k, (m.get(k) || 0) + 1); }
@@ -110,12 +106,12 @@ export function mount(el, ctx) {
       <section class="st-group">
         <h2 class="st-h">Gear</h2>
         <div class="stats">
-          ${tile('Types', types.length, plural(categories.size, 'category', 'categories'))}
-          ${tile('Models', devices.length, s.campus === 'all' ? `at ${plural(locations, 'location')}` : `in ${plural(rooms, 'room')}`)}
-          ${tile('Brands', brands.size, 'on these types')}
-          ${tile('Need a photo', noPhoto, noPhoto ? 'Types without a picture' : 'Every type has one')}
+          ${tile('Models', types.length, plural(categories.size, 'category', 'categories'))}
+          ${tile('Items', devices.length, s.campus === 'all' ? `at ${plural(locations, 'location')}` : `in ${plural(rooms, 'room')}`)}
+          ${tile('Brands', brands.size, 'on these models')}
+          ${tile('Need a photo', noPhoto, noPhoto ? 'Models without a picture' : 'Every model has one')}
           ${tile('Off the network', offNet, 'Gear with no IP')}
-          ${tile('Ports listed', types.reduce((n, t) => n + (t.ports?.length || 0), 0), 'Across these types')}
+          ${tile('Ports listed', types.reduce((n, t) => n + (t.ports?.length || 0), 0), 'Across these models')}
         </div>
       </section>
       <section class="st-group">
@@ -124,14 +120,14 @@ export function mount(el, ctx) {
           ${tile('IP addresses', ips.length, `on ${plural(networks.length, 'network')}`)}
           ${tile('Networks', networks.length, s.campus === 'all' ? `at ${plural(new Set(networks.map((n) => n.campus_id)).size, 'location')}` : 'Subnets and VLANs')}
           ${alarm('Same IP twice', conflictIps, 'Tap to see them', 'conflicts', 'No duplicate IPs')}
-          ${alarm('No IP yet', noIp, 'Tap to see them', 'noip', 'Every model has one')}
+          ${alarm('No IP yet', noIp, 'Tap to see them', 'noip', 'Every item has one')}
         </div>
       </section>
       <section class="st-group st-bars">
-        ${bars('Models by section', byTeam, 'team', { colored: true, keepZero: true })}
-        ${s.campus === 'all' ? bars('Models by location', byLocation, 'location') : ''}
-        ${bars('Models by category', byCategory, 'category')}
-        ${bars('Models by brand', byBrand, 'brand')}
+        ${bars('Items by section', byTeam, 'team', { colored: true, keepZero: true })}
+        ${s.campus === 'all' ? bars('Items by location', byLocation, 'location') : ''}
+        ${bars('Items by category', byCategory, 'category')}
+        ${bars('Items by brand', byBrand, 'brand')}
       </section>`;
   }
 
@@ -151,8 +147,8 @@ export function mount(el, ctx) {
         const inner = `<span class="bar-label">${colored ? `<i class="tag" data-dep="${r.dep}">${esc(r.label[0])}</i>` : ''}${esc(r.label)}</span>
           <span class="bar-track"><span class="bar-fill ${r.other ? 'is-other' : ''}" ${colored ? `data-dep="${r.dep}"` : ''} style="width:${r.n ? Math.max(2, pct).toFixed(1) : 0}%"></span></span>
           <span class="bar-value">${r.n.toLocaleString()}</span>`;
-        return `<li>${r.key != null && r.n ? `<button type="button" class="bar-row" data-go="${kind}" data-value="${esc(r.key)}" aria-label="${esc(`${r.label}: ${r.n}. ${kind === 'location' ? 'Show this location' : 'Show these models in Gear'}`)}">${inner}</button>` : `<div class="bar-row">${inner}</div>`}</li>`;
-      }).join('')}</ul>` : '<p class="muted">No models here yet.</p>'}
+        return `<li>${r.key != null && r.n ? `<button type="button" class="bar-row" data-go="${kind}" data-value="${esc(r.key)}" aria-label="${esc(`${r.label}: ${r.n}. ${kind === 'location' ? 'Show this location' : 'Show these items in Gear'}`)}">${inner}</button>` : `<div class="bar-row">${inner}</div>`}</li>`;
+      }).join('')}</ul>` : '<p class="muted">No items here yet.</p>'}
     </div>`;
   }
 }

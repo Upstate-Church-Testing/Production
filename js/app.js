@@ -49,6 +49,11 @@ const ctx = {
   openType: (id) => goWith('gear', { type: id }),
   openSettings: (section) => goWith('account', { section }),
   openNetworkFlag: (flag) => goWith('network', { flag }),
+  openGear: (filters) => goWith('gear', { filters }),
+  // Filters last only while the app is open: every launch starts at All, all locations.
+  campus: 'all',
+  gearFilters: { dep: 'all', cat: 'all', brand: 'all' },
+  netFilters: { dep: 'all', flag: 'all' },
   reloadMe,
   setTheme,
 };
@@ -62,6 +67,10 @@ const appEl = () => $('#app');
 
 async function boot() {
   applyTheme();
+  // Filters used to be remembered between launches; they now reset every time.
+  for (const k of ['ucp.campus', 'ucp.geardep', 'ucp.geartags', 'ucp.gearcat', 'ucp.gearbrand', 'ucp.netdep', 'ucp.tags']) {
+    try { localStorage.removeItem(k); } catch { /* private mode */ }
+  }
   try {
     if (SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY && !window.UCP_PREVIEW) {
       const { createSupabaseStore } = await import('./store-supabase.js');
@@ -84,7 +93,16 @@ async function boot() {
   start();
 }
 
-async function start() {
+// One start at a time. Supabase can report a sign-in while the first start is
+// still loading; running two at once left Gear drawn into a page that was then
+// replaced, so it looked empty until you switched tabs.
+let starting = null;
+function start() {
+  if (!starting) starting = startOnce().finally(() => { starting = null; });
+  return starting;
+}
+
+async function startOnce() {
   let session;
   try { session = await ctx.store.session(); } catch (e) { return fatal('Couldn’t check your sign-in.', e); }
   if (!session) { teardown(); return renderAuth(); }
@@ -119,6 +137,7 @@ async function start() {
     return fatal('Couldn’t load campuses.', e);
   }
 
+  teardown(); // a fresh shell always gets a freshly mounted section
   renderShell();
   shellUserId = me.id;
   onHash();
@@ -190,7 +209,7 @@ function onHash() {
   const mods = visibleModules();
   const want = location.hash.replace('#', '');
   const mod = mods.find((m) => m.id === want) || mods[0];
-  if (current?.id === mod.id) return;
+  if (current?.id === mod.id && current.el?.isConnected) return;
   openSheetApi?.close(true); // leaving a section closes whatever was open on it
   current?.instance?.unmount?.();
   // A fresh container per section, so the last section's listeners go with it.
@@ -199,7 +218,7 @@ function onHash() {
   view.tabIndex = -1;
   $('#view').replaceWith(view);
   view.className = `view view-${mod.id}`;
-  current = { id: mod.id, instance: mod.view.mount(view, ctx) };
+  current = { id: mod.id, el: view, instance: mod.view.mount(view, ctx) };
   document.title = `${mod.label} · ${APP_NAME}`;
   markNav();
   window.scrollTo(0, 0);

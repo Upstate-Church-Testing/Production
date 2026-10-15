@@ -13,7 +13,7 @@ export const CONNECTORS = ['RJ45', 'etherCON', 'XLR3', 'XLR5', 'BNC', 'HDMI', 'M
   'TRS ¼"', 'TRS 3.5mm', 'Phoenix', 'powerCON', 'IEC', 'Edison', 'SFP', 'LC fiber', 'opticalCON', 'DB9', 'Other'];
 export const DIRECTIONS = { in: 'In', out: 'Out', io: 'In / Out' };
 
-export const typeLabel = (t) => (t ? [t.manufacturer, t.name].filter(Boolean).join(' ') : 'No type');
+export const typeLabel = (t) => (t ? [t.manufacturer, t.name].filter(Boolean).join(' ') : 'No model');
 export const sortPorts = (ports = []) => [...ports].sort((a, b) => a.sort_order - b.sort_order);
 
 /** Brands group regardless of capitals or stray spaces: "ETC" and "etc " are one brand. */
@@ -54,24 +54,24 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     const removed = [...originalPortIds].filter((pid) => !d.ports.some((p) => p.id === pid)).length;
     sheet.render(`
       <header class="sh-head">
-        <div class="sh-top"><span class="eyebrow">${type ? 'Edit type' : 'New type'}</span>
+        <div class="sh-top"><span class="eyebrow">${type ? 'Edit model' : 'New model'}</span>
           <button class="icon-btn" data-ta="cancel" aria-label="Close">${icon('close')}</button></div>
-        <h2>${esc(d.name || 'New type')}</h2>
-        <p class="sh-sub">Everything here is shared by every model of this type, at every campus.</p>
+        <h2>${esc(d.name || 'New model')}</h2>
+        <p class="sh-sub">Everything here is shared by every item of this model, at every location.</p>
       </header>
       <form class="sh-body form" id="type-form" novalidate autocomplete="off">
         <label class="field"><span>Name <b class="req">required</b></span><input id="t-name" value="${esc(d.name)}" placeholder="Hoglet 4, Decimator MD-HX, SG350-10…"></label>
         <div class="grid2">
-          <label class="field"><span>Manufacturer</span><input id="t-manufacturer" value="${esc(d.manufacturer || '')}" list="dl-t-mfr" placeholder="High End Systems, Blackmagic…"></label>
+          <label class="field"><span>Brand</span><input id="t-manufacturer" value="${esc(d.manufacturer || '')}" list="dl-t-mfr" placeholder="High End Systems, Blackmagic…"></label>
           <label class="field"><span>Category</span><input id="t-category" value="${esc(d.category || '')}" list="dl-t-cat" placeholder="Console, Converter…"></label>
           <label class="field"><span>Part number</span><input id="t-part_number" class="mono" value="${esc(d.part_number || '')}" autocapitalize="characters" spellcheck="false"></label>
           <label class="field"><span>Manual or product page</span><input id="t-manual_url" value="${esc(d.manual_url || '')}" inputmode="url" placeholder="https://…" autocapitalize="off" spellcheck="false"></label>
         </div>
-        <div class="field"><span>Tags <b class="req">at least one</b></span>
+        <div class="field"><span>Sections <b class="req">at least one</b></span>
           <div class="tag-picker">${ctx.departments.map((t) => `<button type="button" class="chip dep big" data-ta="tag" data-tag="${t.slug}" data-dep="${t.slug}" aria-pressed="${d.departments.includes(t.slug)}"><i class="dot"></i>${esc(t.name)}</button>`).join('')}</div>
-          <small class="hint">New models start with these tags. Each model can change its own.</small>
+          <small class="hint">New items start with these tags. Each item can change its own.</small>
         </div>
-        <label class="check"><input type="checkbox" id="t-networked" ${d.networked !== false ? 'checked' : ''}><span>Connects to a network and gets an IP address<small class="hint">Turn off for things like fixtures. Their models stay off the IP sheet unless one is given an IP.</small></span></label>
+        <label class="check"><input type="checkbox" id="t-networked" ${d.networked !== false ? 'checked' : ''}><span>Connects to a network and gets an IP address<small class="hint">Turn off for things like fixtures. Their items stay off the IP sheet unless one is given an IP.</small></span></label>
         <label class="field"><span>Description</span><textarea id="t-description" rows="2" placeholder="What it is and what it does">${esc(d.description || '')}</textarea></label>
 
         <fieldset class="group"><legend>Specs</legend>
@@ -84,7 +84,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
         </fieldset>
 
         <fieldset class="group"><legend>Ports <span class="count">${d.ports.length}</span></legend>
-          <p class="fine">The port layout every model shares. What's plugged into each port is recorded on each model.</p>
+          <p class="fine">The port layout every item shares. What's plugged into each port is recorded on each item.</p>
           <div class="port-edit">${d.ports.map((p, i) => `<div class="port-card" data-i="${i}">
             <div class="port-row">
               <input id="po-${i}-name" class="port-name" value="${esc(p.name)}" placeholder="Port name" aria-label="Port name">
@@ -118,12 +118,12 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
         <datalist id="dl-t-con">${CONNECTORS.map((v) => `<option value="${esc(v)}">`).join('')}</datalist>
       </form>
       <footer class="sh-foot">
-        ${discard ? `<div class="discard"><span>Discard this type?</span><button class="btn" data-ta="keep">Keep editing</button><button class="btn danger" data-ta="discard">Discard</button></div>` : ''}
+        ${discard ? `<div class="discard"><span>Discard this model?</span><button class="btn" data-ta="keep">Keep editing</button><button class="btn danger" data-ta="discard">Discard</button></div>` : ''}
         ${confirmRemove
-          ? `<span class="confirm-text">Remove ${removed} port${removed === 1 ? '' : 's'}? Anything recorded on ${removed === 1 ? 'it' : 'them'} at each campus is cleared too.</span><button class="btn" data-ta="keep-ports">Keep editing</button><button class="btn danger" data-ta="save-anyway">Remove and save</button>`
+          ? `<span class="confirm-text">Remove ${removed} port${removed === 1 ? '' : 's'}? Anything recorded on ${removed === 1 ? 'it' : 'them'} at each location is cleared too.</span><button class="btn" data-ta="keep-ports">Keep editing</button><button class="btn danger" data-ta="save-anyway">Remove and save</button>`
           : `<p class="form-msg ${msg ? 'bad' : ''}" role="status">${esc(msg)}</p><span class="spacer"></span>
              <button class="btn" data-ta="cancel">Cancel</button>
-             <button class="btn primary" data-ta="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : type ? 'Save type' : 'Add type'}</button>`}
+             <button class="btn primary" data-ta="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : type ? 'Save model' : 'Add model'}</button>`}
       </footer>`);
     $('#type-form', sheet.el).addEventListener('submit', (e) => { e.preventDefault(); save(); });
     const body = $('.sh-body', sheet.el);
@@ -144,8 +144,8 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
   async function save(force = false) {
     if (busy) return;
     collect();
-    if (!d.name.trim()) { render('Give the type a name.'); $('#t-name', sheet.el)?.focus(); return; }
-    if (!d.departments.length) return render('Tag it audio, video or lighting (at least one).');
+    if (!d.name.trim()) { render('Give the model a name.'); $('#t-name', sheet.el)?.focus(); return; }
+    if (!d.departments.length) return render('Pick at least one section: Audio, Video, Lighting or Network.');
     const ports = d.ports.filter((p) => p.name.trim() || p.id);
     const names = ports.map((p) => p.name.trim().toLowerCase());
     if (ports.some((p) => !p.name.trim())) return render('Every port needs a name.');

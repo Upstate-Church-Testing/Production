@@ -12,11 +12,11 @@ import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js'
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
   const s = {
-    campus: storage('ucp.campus', ctx.me.home_campus_id || 'all'),
+    campus: ctx.campus, // shared with Gear and Statistics; All on every launch
     mode: storage('ucp.netmode', 'devices'),
     q: '',
-    dep: storage('ucp.netdep', storage('ucp.tags', [])[0] || ALL), // Section: audio, video, lighting, network
-    flag: ALL, // or 'conflicts' / 'noip'
+    dep: ctx.netFilters.dep, // Section: audio, video, lighting, network
+    flag: ctx.netFilters.flag, // or 'conflicts' / 'noip'
     data: null,
     ix: null,
     error: null,
@@ -29,15 +29,15 @@ export function mount(el, ctx) {
       <div class="eyebrow">Network · IP sheet</div>
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
-          <button type="button" role="tab" data-mode="devices">Models</button>
+          <button type="button" role="tab" data-mode="devices">Items</button>
           <button type="button" role="tab" data-mode="networks">Networks</button>
         </div>
         <p class="tally" id="n-tally" aria-live="polite"></p>
-        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
+        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add item</span></button>
       </div>
     </div>
     <div class="toolbar filter-bar">
-      <div class="search" id="n-search">${icon('search')}<input id="q" type="search" placeholder="Search name, IP, type, MAC, location" autocomplete="off" enterkeyhint="search" aria-label="Search"></div>
+      <div class="search" id="n-search">${icon('search')}<input id="q" type="search" placeholder="Search name, IP, model, MAC, location" autocomplete="off" enterkeyhint="search" aria-label="Search"></div>
       <div class="filters">
         ${dropdownHtml('n-loc', 'Location', 'caps')}
         ${dropdownHtml('n-dep', 'Section')}
@@ -45,13 +45,13 @@ export function mount(el, ctx) {
       </div>
     </div>
     <div id="results" class="results" aria-live="polite"></div>
-    <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
+    <button class="fab" data-act="add" aria-label="Add item">${icon('plus')}</button>`;
 
   // Filters, in order: location, section, and problems to chase down.
   const loc = locationDropdown(ctx, $('#n-loc', el), {
-    unit: () => (s.mode === 'networks' ? ['network', 'networks'] : ['model', 'models']),
+    unit: () => (s.mode === 'networks' ? ['network', 'networks'] : ['item', 'items']),
     get: () => s.campus,
-    set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
+    set: (v) => { s.campus = ctx.campus = v; draw(); },
     counts: () => {
       if (!s.data) return {};
       const nets = s.mode === 'networks';
@@ -65,9 +65,9 @@ export function mount(el, ctx) {
   const devsIn = (list) => [...new Map(list.map((e) => [e.dev.id, e.dev])).values()];
   const depDd = wireDropdown($('#n-dep', el), {
     label: 'Section',
-    unit: ['model', 'models'],
+    unit: ['item', 'items'],
     get: () => s.dep,
-    set: (v) => { s.dep = v; store('ucp.netdep', v); drawFilters(); drawResults(); },
+    set: (v) => { s.dep = ctx.netFilters.dep = v; drawFilters(); drawResults(); },
     options: () => {
       const devs = s.data ? devsIn(entries()) : [];
       return [{ value: ALL, label: 'All', count: devs.length },
@@ -76,9 +76,9 @@ export function mount(el, ctx) {
   });
   const flagDd = wireDropdown($('#n-flag', el), {
     label: 'Show',
-    unit: ['model', 'models'],
+    unit: ['item', 'items'],
     get: () => s.flag,
-    set: (v) => { s.flag = v; drawFilters(); drawResults(); },
+    set: (v) => { s.flag = ctx.netFilters.flag = v; drawFilters(); drawResults(); },
     options: () => {
       const list = s.data ? entries().filter((e) => s.dep === ALL || e.dev.departments.includes(s.dep)) : [];
       const n = (f) => devsIn(list.filter(f)).length;
@@ -103,7 +103,7 @@ export function mount(el, ctx) {
     } else if (t.dataset.act === 'add') {
       s.mode === 'networks' ? openNetworkSheet(null) : openDeviceSheet(null, true);
     } else if (t.dataset.act === 'clear') {
-      s.q = ''; q.value = ''; s.dep = ALL; s.flag = ALL; store('ucp.netdep', ALL); drawFilters(); drawResults();
+      s.q = ''; q.value = ''; s.dep = ALL; s.flag = ALL; ctx.netFilters = { dep: ALL, flag: ALL }; drawFilters(); drawResults();
     } else if (t.dataset.act === 'add-net') {
       openNetworkSheet(null, t.dataset.campus);
     } else if (t.dataset.act === 'retry') {
@@ -134,7 +134,7 @@ export function mount(el, ctx) {
       const p = ctx.pending; ctx.pending = null;
       if (p.open && s.ix.dev.has(p.open)) openDeviceSheet(p.open);
       else if (p.newDevice) openDeviceSheet(null, true, p.newDevice);
-      else if (p.flag) { s.flag = p.flag; s.mode = 'devices'; store('ucp.netmode', 'devices'); draw(); }
+      else if (p.flag) { s.flag = ctx.netFilters.flag = p.flag; s.mode = 'devices'; store('ucp.netmode', 'devices'); draw(); }
     }
   }
 
@@ -217,8 +217,8 @@ export function mount(el, ctx) {
 
   function draw() {
     $$('[data-mode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === s.mode)));
-    $('.fab', el).setAttribute('aria-label', s.mode === 'networks' ? 'Add network' : 'Add model');
-    $('.add-desktop span', el).textContent = s.mode === 'networks' ? 'Add network' : 'Add model';
+    $('.fab', el).setAttribute('aria-label', s.mode === 'networks' ? 'Add network' : 'Add item');
+    $('.add-desktop span', el).textContent = s.mode === 'networks' ? 'Add network' : 'Add item';
     // Networks mode only needs the location.
     const nets = s.mode === 'networks';
     $('#n-search', el).hidden = nets;
@@ -252,13 +252,13 @@ export function mount(el, ctx) {
     const shown = all.filter(matches);
     const devCount = (list) => new Set(list.map((e) => e.dev.id)).size;
     const filtered = s.q || s.dep !== ALL || s.flag !== ALL;
-    drawTally(devCount(shown), filtered ? devCount(all) : null, ['model', 'models']);
+    drawTally(devCount(shown), filtered ? devCount(all) : null, ['item', 'items']);
     if (!all.length) {
       const c = ctx.campusById.get(s.campus);
       box.innerHTML = `<div class="empty">
-        <h3>Nothing at ${esc(c ? c.short_name : 'any campus')} yet</h3>
-        <p>Add its networks first (Control, Dante, House…) so every IP gets checked against the right subnet. Then add the models here, each one picked from a type in Gear.</p>
-        <div class="empty-actions"><button class="btn" data-act="add-net" data-campus="${esc(s.campus)}">${icon('network')}Add a network</button><button class="btn primary" data-act="add">${icon('plus')}Add a model</button></div>
+        <h3>Nothing at ${esc(c ? c.short_name : 'any location')} yet</h3>
+        <p>Add its networks first (Control, Dante, House…) so every IP gets checked against the right subnet. Then add the items here, each one picked from a model in Gear.</p>
+        <div class="empty-actions"><button class="btn" data-act="add-net" data-campus="${esc(s.campus)}">${icon('network')}Add a network</button><button class="btn primary" data-act="add">${icon('plus')}Add an item</button></div>
       </div>`;
       return;
     }
@@ -292,7 +292,7 @@ export function mount(el, ctx) {
   function groupHtml(net, list, campusId) {
     list.sort((a, b) => (a.ip?._int ?? Infinity) - (b.ip?._int ?? Infinity) || a.dev.name.localeCompare(b.dev.name, undefined, { numeric: true }));
     return `<section class="net">
-      ${net ? netHead(net) : `<header class="net-head none"><div class="net-title"><h3>Not on a network yet</h3></div><p class="net-sub">IPs with no network picked, and models with no IP recorded.</p></header>`}
+      ${net ? netHead(net) : `<header class="net-head none"><div class="net-title"><h3>Not on a network yet</h3></div><p class="net-sub">IPs with no network picked, and items with no IP recorded.</p></header>`}
       <ul class="rows">${list.map(rowHtml).join('')}</ul>
     </section>`;
   }
@@ -385,7 +385,7 @@ export function mount(el, ctx) {
           ${u ? `<p class="sh-sub">${u.used} of ${u.size.toLocaleString()} addresses used${next ? ` · next free <span class="mono">${next}</span>` : ''}</p>` : ''}
         </header>
         <form class="sh-body form" id="net-form" novalidate autocomplete="off">
-          ${!net ? `<label class="field"><span>Campus</span><select id="n-campus">${ctx.campuses.map((c) => `<option value="${c.id}" ${c.id === d.campus_id ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select></label>` : ''}
+          ${!net ? `<label class="field"><span>Location</span><select id="n-campus">${ctx.campuses.map((c) => `<option value="${c.id}" ${c.id === d.campus_id ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select></label>` : ''}
           <label class="field"><span>Name <b class="req">required</b></span><input id="n-name" value="${esc(d.name)}" placeholder="Production Control, Dante Primary, House…"></label>
           <label class="field"><span>What’s on it</span><input id="n-purpose" value="${esc(d.purpose || '')}" placeholder="Switchers, cameras, projectors"></label>
           <div class="grid3">
@@ -393,7 +393,7 @@ export function mount(el, ctx) {
             <label class="field"><span>Gateway</span><input id="n-gateway" class="mono" value="${esc(d.gateway || '')}" placeholder="10.50.10.1" inputmode="decimal"></label>
             <label class="field"><span>VLAN ID</span><input id="n-vlan" class="mono" value="${esc(d.vlan_id ?? '')}" inputmode="numeric" placeholder="203"></label>
           </div>
-          <div class="field"><span>Tags</span><div class="tag-picker">${ctx.departments.map((t) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${t.slug}" data-dep="${t.slug}" aria-pressed="${d.departments.includes(t.slug)}"><i class="dot"></i>${esc(t.name)}</button>`).join('')}</div></div>
+          <div class="field"><span>Sections</span><div class="tag-picker">${ctx.departments.map((t) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${t.slug}" data-dep="${t.slug}" aria-pressed="${d.departments.includes(t.slug)}"><i class="dot"></i>${esc(t.name)}</button>`).join('')}</div></div>
           <label class="check"><input type="checkbox" id="n-iso" ${d.is_isolated ? 'checked' : ''}><span>Separate switches, not connected to the church network (Dante, Art-Net…)</span></label>
           <label class="field"><span>Notes</span><textarea id="n-notes" rows="3">${esc(d.notes || '')}</textarea></label>
         </form>
@@ -434,7 +434,7 @@ export function mount(el, ctx) {
         sheet.close(true);
         load(true);
       } catch (e) {
-        render(/duplicate|unique/i.test(e.message) ? 'That campus already has a network with that name.' : e.message);
+        render(/duplicate|unique/i.test(e.message) ? 'That location already has a network with that name.' : e.message);
       }
     }
     sheet.el.addEventListener('input', () => { dirty = true; });

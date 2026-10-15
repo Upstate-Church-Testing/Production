@@ -18,9 +18,9 @@ export function mount(el, ctx) {
     <form class="panel form" id="me-form" novalidate>
       <h2>Profile</h2>
       <label class="field"><span>Name</span><input id="m-name" value="${esc(me.full_name)}" autocomplete="name"></label>
-      <label class="field"><span>Home campus</span>
+      <label class="field"><span>Home location</span>
         <select id="m-campus"><option value="">None</option>${ctx.campuses.map((c) => `<option value="${c.id}" ${c.id === me.home_campus_id ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select>
-        <small class="hint">The network sheet opens to this campus.</small></label>
+        <small class="hint">New items you add start at this location.</small></label>
       <div class="row-end"><p class="form-msg" role="status"></p><button class="btn primary" type="submit">Save</button></div>
     </form>
     ${isStaff ? '<section class="panel" id="resi-players"></section>' : ''}
@@ -51,7 +51,6 @@ export function mount(el, ctx) {
       await ctx.store.updateMe(me.id, { full_name: name, home_campus_id: $('#m-campus', el).value || null });
       await ctx.reloadMe();
       $('.h1', el).textContent = name;
-      try { localStorage.removeItem('ucp.campus'); } catch { /* ignore */ }
       msg.textContent = '';
       ctx.toast('Saved');
     } catch (err) { msg.textContent = err.message; }

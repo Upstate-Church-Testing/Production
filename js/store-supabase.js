@@ -190,15 +190,21 @@ function friendly(error) {
     [/rate limit/i, 'Too many emails were sent just now. Wait a few minutes and try again.'],
     [/invalid input syntax for type inet/i, 'One of the IP addresses isn’t valid.'],
     [/invalid input syntax for type macaddr/i, 'The MAC address isn’t valid.'],
-    [/device_types_name_idx/i, 'There’s already a type with that name from that maker.'],
-    [/device_type_ports_type_id_name_key/i, 'Two ports on this type have the same name.'],
-    [/devices_type_id_fkey/i, 'This type still has models at campuses. Delete or change those first.'],
+    [/device_types_name_idx/i, 'There’s already a model with that name from that brand.'],
+    [/device_type_ports_type_id_name_key/i, 'Two ports on this model have the same name.'],
+    [/devices_type_id_fkey/i, 'This model still has items at some locations. Delete or change those first.'],
+    // The database says "type" and "unit"; the app says "model" and "item".
+    [/That (unit|device) was deleted by someone else/i, 'That item was deleted by someone else.'],
+    [/That type was deleted by someone else/i, 'That model was deleted by someone else.'],
+    [/isn't on this unit's type/i, 'That port isn’t on this item’s model.'],
+    [/Tag it audio, video or lighting/i, 'Pick at least one section: Audio, Video, Lighting or Network.'],
+    [/is at a different campus/i, (m) => m.replace('campus', 'location')],
     [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],
     [/invalid input syntax for type uuid/i, 'That doesn’t look like a Resi player ID.'],
     [/Payload too large|exceeded the maximum allowed size/i, 'That photo is too big. Try a smaller one.'],
     [/row-level security|permission denied/i, 'Your account doesn’t have access to change this.'],
     [/Failed to fetch|NetworkError/i, 'Can’t reach the server. Check your connection and try again.'],
   ];
-  for (const [re, text] of map) if (re.test(msg)) return new Error(text);
+  for (const [re, text] of map) if (re.test(msg)) return new Error(typeof text === 'function' ? text(msg) : text);
   return new Error(msg);
 }

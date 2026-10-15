@@ -37,12 +37,12 @@ campuses ── rooms
     │
     ├── networks (subnet, VLAN, gateway, tags)
     │
-    └── devices — one physical unit ("model" in the app): name, tags, serial, firmware, room, location, status
+    └── devices — one physical unit ("item" in the app): name, sections, serial, firmware, room, location, status
             ├── device_ips (IP + mask, gateway, MAC, network, label, static/DHCP)
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)
 
-device_types     the shared catalog entry ("type" in the app): name, brand, part number, category, tags, specs, manual, photo
+device_types     the shared catalog entry ("model" in the app): name, brand, part number, category, sections, specs, manual, photo
                  (photos live in the public gear-photos storage bucket: <path>.jpg plus a <path>-t.jpg thumbnail)
     └── device_type_ports (the port layout every unit of that type shares)
 
@@ -65,10 +65,10 @@ js/app.js                      sign-in, roles, navigation, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Types (by category) and Models (every unit A–Z), filtered by campus, tag, category and brand
+js/views/gear.js               Models (by category) and Items (every unit A–Z), filtered by location, section, category and brand
 js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)
-js/views/devices.js            the model panel and editor (shared by Network and Gear)
-js/views/types.js              the type editor (shared by Gear and the model editor)
+js/views/devices.js            the item panel and editor (shared by Network and Gear)
+js/views/types.js              the model editor (shared by Gear and the item editor)
 js/views/team.js               people and access
 js/views/stats.js              Statistics: gear and network numbers for one location or all of them
 js/picker.js                   the filter dropdowns and their menus (location, section, category, brand…)

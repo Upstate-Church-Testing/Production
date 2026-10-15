@@ -1,5 +1,6 @@
-// Gear: device types (specs, ports, photo) and every model at every campus.
-// Types are grouped by category; Models is one A–Z list of every unit.
+// Gear: models (device types: specs, ports, photo) and every item at every location.
+// In the app a "model" is a device_types row and an "item" is a devices row.
+// Models are grouped by category; Items is one A–Z list of every unit.
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
@@ -13,16 +14,25 @@ export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
   const s = {
     q: '',
-    dep: storage('ucp.geardep', storage('ucp.geartags', [])[0] || ALL), // Section: audio, video, lighting, network
-    cat: storage('ucp.gearcat', null) || ALL,
-    brand: storage('ucp.gearbrand', null) || ALL,
+    dep: ctx.gearFilters.dep,     // Section: audio, video, lighting, network
+    cat: ctx.gearFilters.cat,
+    brand: ctx.gearFilters.brand,
     mode: storage('ucp.gearmode', 'types'),
-    campus: storage('ucp.campus', ctx.me.home_campus_id || 'all'), // shared with Network
+    campus: ctx.campus,           // shared with Network and Statistics; All on every launch
     data: null,
     ix: null,
     error: null,
   };
   if (s.campus !== 'all' && !ctx.campusById.has(s.campus)) s.campus = 'all';
+  // Statistics can open Gear on one section, category or brand.
+  if (ctx.pending?.filters) {
+    Object.assign(s, ctx.pending.filters);
+    s.mode = 'models';
+    store('ucp.gearmode', 'models');
+    ctx.pending = null;
+  }
+  const remember = () => { ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand }; };
+  remember();
   let openType = null; // { id, refresh } of the type panel on screen
   let openDev = null;  // { id, refresh } of the model panel on screen
 
@@ -31,11 +41,11 @@ export function mount(el, ctx) {
       <div class="eyebrow">Gear</div>
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
-          <button type="button" role="tab" data-gmode="types">Types</button>
-          <button type="button" role="tab" data-gmode="models">Models</button>
+          <button type="button" role="tab" data-gmode="types">Models</button>
+          <button type="button" role="tab" data-gmode="models">Items</button>
         </div>
         <p class="tally" id="g-tally" aria-live="polite"></p>
-        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add type</span></button>
+        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
       </div>
     </div>
     <div class="toolbar filter-bar">
@@ -48,14 +58,14 @@ export function mount(el, ctx) {
       </div>
     </div>
     <div id="g-results" class="results" aria-live="polite"></div>
-    <button class="fab" data-act="add" aria-label="Add type">${icon('plus')}</button>`;
+    <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
   // Filters, in order: location, section, category, brand. Each narrows the next.
-  const unit = () => (s.mode === 'models' ? ['model', 'models'] : ['type', 'types']);
+  const unit = () => (s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
   const loc = locationDropdown(ctx, $('#g-loc', el), {
     unit,
     get: () => s.campus,
-    set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
+    set: (v) => { s.campus = ctx.campus = v; draw(); },
     counts: () => {
       if (!s.data) return {};
       const models = s.mode === 'models';
@@ -71,7 +81,7 @@ export function mount(el, ctx) {
     label: 'Section',
     unit,
     get: () => s.dep,
-    set: (v) => { s.dep = v; store('ucp.geardep', v); draw(); },
+    set: (v) => { s.dep = v; remember(); draw(); },
     options: () => {
       const pool = s.data ? poolHere() : [];
       return [{ value: ALL, label: 'All', count: pool.length },
@@ -82,7 +92,7 @@ export function mount(el, ctx) {
     label: 'Category',
     unit,
     get: () => s.cat,
-    set: (v) => { s.cat = v; store('ucp.gearcat', v); draw(); },
+    set: (v) => { s.cat = v; remember(); draw(); },
     options: () => {
       const pool = s.data ? poolHere().filter((x) => inDep(x.departments)) : [];
       const m = new Map();
@@ -95,7 +105,7 @@ export function mount(el, ctx) {
     label: 'Brand',
     unit,
     get: () => s.brand,
-    set: (v) => { s.brand = v; store('ucp.gearbrand', v); draw(); },
+    set: (v) => { s.brand = v; remember(); draw(); },
     options: () => {
       const pool = s.data ? poolHere().filter((x) => inDep(x.departments) && inCat(typeFor(x))) : [];
       const names = s.data ? brandNames() : new Map();
@@ -115,7 +125,7 @@ export function mount(el, ctx) {
     else if (t.dataset.gmode) { s.mode = t.dataset.gmode; store('ucp.gearmode', s.mode); draw(); }
     else if (t.dataset.type) openTypeSheet(t.dataset.type);
     else if (t.dataset.act === 'add') s.mode === 'models' ? openModel(null, true) : newType();
-    else if (t.dataset.act === 'all-campuses') { s.campus = 'all'; store('ucp.campus', 'all'); loc.update(); draw(); }
+    else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
     else if (t.dataset.act === 'retry') load();
   });
@@ -144,7 +154,7 @@ export function mount(el, ctx) {
 
   function clearFilters() {
     s.q = ''; q.value = ''; s.dep = ALL; s.cat = ALL; s.brand = ALL;
-    store('ucp.geardep', ALL); store('ucp.gearcat', ALL); store('ucp.gearbrand', ALL);
+    remember();
     draw();
   }
 
@@ -213,10 +223,10 @@ export function mount(el, ctx) {
 
   function draw() {
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
-    const addLabel = s.mode === 'models' ? 'Add models' : 'Add type';
+    const addLabel = s.mode === 'models' ? 'Add items' : 'Add model';
     $('.add-desktop span', el).textContent = addLabel;
     $('.fab', el).setAttribute('aria-label', addLabel);
-    q.placeholder = s.mode === 'models' ? 'Search name, brand, location, room, IP' : 'Search type, brand, port, location';
+    q.placeholder = s.mode === 'models' ? 'Search name, model, brand, location, IP' : 'Search model, brand, port, location';
     if (s.error) {
       drawTally(null);
       $('#g-results', el).innerHTML = `<div class="empty"><h3>Couldn’t load gear</h3><p>${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
@@ -229,7 +239,7 @@ export function mount(el, ctx) {
 
   /** The count up top: whatever is on screen right now. */
   function drawTally(shown, total) {
-    const unit = s.mode === 'models' ? ['model', 'models'] : ['type', 'types'];
+    const unit = s.mode === 'models' ? ['item', 'items'] : ['model', 'models'];
     $('#g-tally', el).innerHTML = shown == null ? ''
       : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${filtering() && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
@@ -259,9 +269,9 @@ export function mount(el, ctx) {
     const types = s.data.types;
     if (!types.length) {
       box.innerHTML = `<div class="empty">
-        <h3>No types yet</h3>
-        <p>A type is one product, like a Hoglet 4 or an HDMI-to-SDI converter. Add its photo, specs and ports once, then add its models at each location.</p>
-        <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add the first type</button></div>
+        <h3>No models yet</h3>
+        <p>A model is one product, like a Hoglet 4 or an HDMI-to-SDI converter. Add its photo, specs and ports once, then add the items you have at each location.</p>
+        <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add the first model</button></div>
       </div>`;
       drawTally(0, 0);
       return;
@@ -270,9 +280,9 @@ export function mount(el, ctx) {
     const shown = here.filter(typeMatches);
     drawTally(shown.length, here.length);
     const hidden = types.length - here.length;
-    const elsewhere = hidden ? `<p class="result-note">${plural(hidden, 'more type isn’t', 'more types aren’t')} at ${esc(campusName(s.campus))}. <button class="btn link" data-act="all-campuses">Show all locations</button></p>` : '';
+    const elsewhere = hidden ? `<p class="result-note">${plural(hidden, 'more model isn’t', 'more models aren’t')} at ${esc(campusName(s.campus))}. <button class="btn link" data-act="all-campuses">Show all locations</button></p>` : '';
     if (!shown.length) {
-      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No type matches “${esc(s.q)}”` : 'No type matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>${elsewhere}`;
+      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No model matches “${esc(s.q)}”` : 'No model matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>${elsewhere}`;
       return;
     }
     const groups = new Map();
@@ -301,24 +311,24 @@ export function mount(el, ctx) {
         <b class="g-name">${esc(t.name)}</b>
         ${sub ? `<span class="g-sub">${esc(sub)}</span>` : ''}
       </span>
-      <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'model' : 'models'}${s.campus === 'all' && campuses > 1 ? ` · ${plural(campuses, 'location')}` : ''}</small></span>
+      <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'item' : 'items'}${s.campus === 'all' && campuses > 1 ? ` · ${plural(campuses, 'location')}` : ''}</small></span>
     </li>`;
   }
 
-  // Models: every unit, A–Z, one after another.
+  // Items: every unit, A–Z, one after another.
   function drawModels(box) {
     const all = s.data.devices.filter(inCampus);
     if (!all.length) {
-      box.innerHTML = `<div class="empty"><h3>No models ${s.campus === 'all' ? 'yet' : `at ${esc(campusName(s.campus))} yet`}</h3>
-        <p>Pick a type and how many you have. Ten R3 Beams go in as one batch, and you fill in serials and IPs on each one later.</p>
-        <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add models</button></div></div>`;
+      box.innerHTML = `<div class="empty"><h3>No items ${s.campus === 'all' ? 'yet' : `at ${esc(campusName(s.campus))} yet`}</h3>
+        <p>Pick a model and how many you have. Ten R3 Beams go in as one batch, and you fill in serials and IPs on each one later.</p>
+        <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add items</button></div></div>`;
       drawTally(0, 0);
       return;
     }
     const models = all.filter(modelMatches);
     drawTally(models.length, all.length);
     if (!models.length) {
-      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No model matches “${esc(s.q)}”` : 'No model matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
+      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No item matches “${esc(s.q)}”` : 'No item matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
       return;
     }
     const order = ctx.campuses.map((c) => c.id);
@@ -347,7 +357,7 @@ export function mount(el, ctx) {
   // ------------------------------------------------------- type sheet ----
 
   function newType() {
-    const sheet = ctx.openSheet({ label: 'New type', beforeClose: () => { api.cancel(); return false; } });
+    const sheet = ctx.openSheet({ label: 'New model', beforeClose: () => { api.cancel(); return false; } });
     const api = typeEditor({
       ctx, sheet, types: s.data?.types || [], defaults: { departments: s.dep !== ALL ? [s.dep] : [] },
       onDone: async (id) => { sheet.close(true); await load(true); openTypeSheet(id); },
@@ -370,7 +380,7 @@ export function mount(el, ctx) {
       id,
       refresh() {
         const fresh = s.data.types.find((x) => x.id === id);
-        if (!fresh) { if (!editing) { sheet.close(true); ctx.toast('That type was deleted'); } return; }
+        if (!fresh) { if (!editing) { sheet.close(true); ctx.toast('That model was deleted'); } return; }
         t = fresh;
         if (!editing && !photoBusy) render();
       },
@@ -400,7 +410,7 @@ export function mount(el, ctx) {
       const by = (pid) => ctx.people.get(pid)?.full_name || 'Someone';
       sheet.render(`
         <header class="sh-head">
-          <div class="sh-top">${tagDots(t.departments)}<span class="eyebrow">Type</span>
+          <div class="sh-top">${tagDots(t.departments)}<span class="eyebrow">Model</span>
             <button class="icon-btn" data-g="close" aria-label="Close">${icon('close')}</button></div>
           <p class="sh-brand">${esc(t.manufacturer || 'No brand')}</p>
           <h2>${esc(t.name)}</h2>
@@ -414,10 +424,10 @@ export function mount(el, ctx) {
           <section class="block">
             <h3>Ports <span class="count">${t.ports.length}</span></h3>
             ${t.ports.length ? `<ul class="port-list">${t.ports.map((p) => `<li><b>${esc(p.name)}</b><span>${esc([p.signal, p.connector].filter(Boolean).join(' · '))}</span>${p.direction !== 'io' ? `<i class="dir dir-${p.direction}">${esc(DIRECTIONS[p.direction])}</i>` : ''}</li>`).join('')}</ul>`
-              : '<p class="muted">No ports listed. Add them with Edit so each model can record what’s plugged in.</p>'}
+              : '<p class="muted">No ports listed. Add them with Edit so each item can record what’s plugged in.</p>'}
           </section>
           <section class="block">
-            <h3>Models <span class="count">${units.length}</span></h3>
+            <h3>Items <span class="count">${units.length}</span></h3>
             ${units.length ? campusOrder.map((c) => `<div class="unit-group">
                 <p class="unit-campus">${esc(c.short_name)}</p>
                 <ul class="unit-list">${byCampus.get(c.id).map((u) => `<li><button class="unit" data-unit="${u.id}">
@@ -426,7 +436,7 @@ export function mount(el, ctx) {
                 </button></li>`).join('')}</ul>
               </div>`).join('')
               : '<p class="muted">None yet. Add one for each location that has this gear.</p>'}
-            <button class="btn" data-g="add-unit">${icon('plus')}Add models of this type</button>
+            <button class="btn" data-g="add-unit">${icon('plus')}Add items of this model</button>
           </section>
           ${t.manual_url ? `<a class="btn" href="${esc(t.manual_url)}" target="_blank" rel="noopener">${icon('open')}Open manual</a>` : ''}
           ${t.notes ? `<p class="notes">${esc(t.notes)}</p>` : ''}
@@ -434,8 +444,8 @@ export function mount(el, ctx) {
         </div>
         <footer class="sh-foot">
           ${confirmDelete
-            ? `<span class="confirm-text">Delete the ${esc(t.name)} type?</span><button class="btn" data-g="del-no">Keep it</button><button class="btn danger" data-g="del-yes">Delete</button>`
-            : `${units.length ? '' : `<button class="btn ghost danger-text" data-g="del">${icon('trash')}Delete</button>`}<span class="spacer"></span><button class="btn primary" data-g="edit">${icon('edit')}Edit type</button>`}
+            ? `<span class="confirm-text">Delete the ${esc(t.name)} model?</span><button class="btn" data-g="del-no">Keep it</button><button class="btn danger" data-g="del-yes">Delete</button>`
+            : `${units.length ? '' : `<button class="btn ghost danger-text" data-g="del">${icon('trash')}Delete</button>`}<span class="spacer"></span><button class="btn primary" data-g="edit">${icon('edit')}Edit model</button>`}
         </footer>`);
       $('#t-photo-in', sheet.el).addEventListener('change', (e) => setPhoto(e.target.files?.[0]));
     }

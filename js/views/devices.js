@@ -15,10 +15,10 @@ export const MASKS = ['255.255.255.0', '255.255.0.0', '255.0.0.0', '255.255.255.
 export const STATUS = { active: 'In use', spare: 'Spare', repair: 'In repair', retired: 'Retired' };
 export const MODES = { static: 'Static', reserved: 'DHCP reservation', dhcp: 'DHCP' };
 export const FIELD = {
-  name: 'Name', departments: 'Tags', category: 'Category', manufacturer: 'Manufacturer', model: 'Model',
-  serial_number: 'Serial', firmware: 'Firmware', location: 'Location', room_id: 'Room', campus_id: 'Campus',
+  name: 'Name', departments: 'Sections', category: 'Category', manufacturer: 'Brand', model: 'Model',
+  serial_number: 'Serial', firmware: 'Firmware', location: 'Spot', room_id: 'Room', campus_id: 'Location',
   status: 'Status', notes: 'Notes', ip: 'IP', gateway: 'Gateway', mac: 'MAC', label: 'Label', network_id: 'Network',
-  mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Type',
+  mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Model',
   connected_to: 'Connected to', assignment: 'Assignment',
 };
 
@@ -82,14 +82,14 @@ export function tagDotsHtml(ctx, tags = []) {
 export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   const s = host.s;           // the section's state: data, ix, campus
   const load = host.load;     // reloads the section's data
-  const campusName = (cid) => ctx.campusById.get(cid)?.short_name || 'Unknown campus';
+  const campusName = (cid) => ctx.campusById.get(cid)?.short_name || 'Unknown location';
   const tagDots = (tags) => tagDotsHtml(ctx, tags);
   const nextNumber = (base, campusId) => nextNumberIn(s.data, base, campusId);
   let tracker = null;
   let dev = id ? s.ix.dev.get(id) : null;
   let mode = editing ? 'edit' : 'view';
   let creds = null;       // loaded on demand
-  let ports = null;       // this model's port patches, loaded on demand
+  let ports = null;       // this item's port patches, loaded on demand
   let typeApi = null;     // the type editor, while creating a type from here
   let showPw = new Set();
   let draft = null;
@@ -98,7 +98,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   let confirmDelete = false;
 
   const sheet = ctx.openSheet({
-    label: dev ? dev.name : 'New model',
+    label: dev ? dev.name : 'New item',
     className: 'device-sheet',
     beforeClose: () => {
       if (mode === 'type') { typeApi?.cancel(); return false; }
@@ -112,7 +112,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     refresh() {
       if (!id) return;
       const fresh = s.ix.dev.get(id);
-      if (!fresh) { if (mode === 'view') { sheet.close(true); ctx.toast('That model was deleted'); } return; }
+      if (!fresh) { if (mode === 'view') { sheet.close(true); ctx.toast('That item was deleted'); } return; }
       dev = fresh;
       if (mode === 'view') renderView();
     },
@@ -209,11 +209,11 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         <section class="block">
           <h3>Where</h3>
           <dl class="kv">
-            ${kv('Campus', campusName(dev.campus_id))}${kv('Room', room)}${kv('Location', dev.location)}
+            ${kv('Location', campusName(dev.campus_id))}${kv('Room', room)}${kv('Spot', dev.location)}
           </dl>
         </section>
         <section class="block">
-          <h3>This model</h3>
+          <h3>This item</h3>
           <dl class="kv">
             ${kv('Serial', dev.serial_number, true)}${kv('Firmware', dev.firmware, true)}${kv('Status', STATUS[dev.status])}
           </dl>
@@ -224,7 +224,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <div id="ports"><p class="muted">Loading…</p></div>
         </section>` : ''}
         ${ty ? `<section class="block type-block">
-          <h3>Type</h3>
+          <h3>Model</h3>
           <button class="type-link" data-a="open-type">${typeThumb(ctx, ty)}<span><b>${esc(ty.name)}</b><small>${esc([ty.manufacturer, ty.category, ty.part_number].filter(Boolean).join(' · '))}</small></span>${icon('chevron')}</button>
           ${ty.description ? `<p class="muted">${esc(ty.description)}</p>` : ''}
           ${ty.specs?.length ? `<dl class="kv compact">${ty.specs.map((sp) => `<div><dt>${esc(sp.label)}</dt><dd>${esc(sp.value)}</dd></div>`).join('')}</dl>` : ''}
@@ -313,7 +313,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const who = ctx.people.get(a.actor_id)?.full_name || 'Someone';
     const thing = { devices: '', device_ips: 'IP ', device_credentials: 'login ', networks: 'network ', device_ports: 'port ' }[a.entity] ?? '';
     let what;
-    if (a.entity === 'devices') what = a.action === 'created' ? 'added this model' : a.action === 'deleted' ? 'deleted this model' : 'changed';
+    if (a.entity === 'devices') what = a.action === 'created' ? 'added this item' : a.action === 'deleted' ? 'deleted this item' : 'changed';
     else what = `${a.action === 'created' ? 'added' : a.action === 'deleted' ? 'removed' : 'changed'} ${thing}<b>${esc(a.label || '')}</b>`;
     const lines = a.action === 'updated'
       ? Object.entries(a.changes || {}).map(([k, [o, n]]) => k === 'password'
@@ -328,7 +328,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     if (k === 'room_id') v = s.ix.room.get(v)?.name || 'a removed room';
     else if (k === 'campus_id') v = campusName(v);
     else if (k === 'network_id') v = s.ix.net.get(v)?.name || 'a removed network';
-    else if (k === 'type_id') v = s.ix.type.has(v) ? typeLabel(s.ix.type.get(v)) : 'a removed type';
+    else if (k === 'type_id') v = s.ix.type.has(v) ? typeLabel(s.ix.type.get(v)) : 'a removed model';
     else if (k === 'departments') v = v.map((t) => ctx.dep[t]?.name || t).join(', ');
     else if (k === 'status') v = STATUS[v] || v;
     else if (k === 'mode') v = MODES[v] || v;
@@ -385,18 +385,18 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const scroll = $('.sh-body', sheet.el)?.scrollTop || 0;
     sheet.render(`
       <header class="sh-head">
-        <div class="sh-top"><span class="eyebrow">${dev ? 'Edit model' : 'New model'}</span>
+        <div class="sh-top"><span class="eyebrow">${dev ? 'Edit item' : 'New item'}</span>
           <button class="icon-btn" data-a="cancel" aria-label="Close">${icon('close')}</button></div>
-        <h2>${esc(draft.name || (ty ? ty.name : dev ? dev.name : 'New model'))}</h2>
+        <h2>${esc(draft.name || (ty ? ty.name : dev ? dev.name : 'New item'))}</h2>
       </header>
       <form class="sh-body form" id="dev-form" novalidate autocomplete="off">
-        <label class="field"><span>Type <b class="req">required</b></span><select id="f-type">
-          <option value="" ${draft.type_id ? '' : 'selected'}>Choose a type…</option>
+        <label class="field"><span>Model <b class="req">required</b></span><select id="f-type">
+          <option value="" ${draft.type_id ? '' : 'selected'}>Choose a model…</option>
           ${[...typeGroups.keys()].sort().map((k) => `<optgroup label="${esc(k)}">${typeGroups.get(k).map((t) => `<option value="${t.id}" ${t.id === draft.type_id ? 'selected' : ''}>${esc(typeLabel(t))}</option>`).join('')}</optgroup>`).join('')}
-          <option value="__new">＋ New type…</option>
+          <option value="__new">＋ New model…</option>
         </select>
-        ${ty ? `<small class="hint">${esc([ty.category, ty.part_number, ty.ports.length ? plural(ty.ports.length, 'port') : null].filter(Boolean).join(' · ') || 'Specs and ports come from the type.')}</small>` : `<small class="hint">The product this is, like Hoglet 4. Its specs and ports come from the type.</small>`}
-        ${oldPatches ? `<small class="hint warn-text">What was recorded on the old type’s ports will be cleared when you save.</small>` : ''}</label>
+        ${ty ? `<small class="hint">${esc([ty.category, ty.part_number, ty.ports.length ? plural(ty.ports.length, 'port') : null].filter(Boolean).join(' · ') || 'Specs and ports come from the model.')}</small>` : `<small class="hint">The product this is, like Hoglet 4. Its specs and ports come from the model.</small>`}
+        ${oldPatches ? `<small class="hint warn-text">What was recorded on the old model’s ports will be cleared when you save.</small>` : ''}</label>
         ${!dev ? `<div class="qty-row">
           <div class="field"><span>How many</span>
             <div class="stepper">
@@ -413,13 +413,13 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <p class="bulk-preview">${esc(names[0])}<i>→</i>${esc(names[names.length - 1])}</p>
         </div>` : ''}
         ${bulk ? `<p class="fine">Serial numbers, IPs and what's plugged into each port get filled in on each one after they're added.</p>` : ''}
-        <div class="field"><span>Tags <b class="req">at least one</b></span>
+        <div class="field"><span>Sections <b class="req">at least one</b></span>
           <div class="tag-picker">${ctx.departments.map((d) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${draft.departments.includes(d.slug)}"><i class="dot"></i>${esc(d.name)}</button>`).join('')}</div>
         </div>
 
         <fieldset class="group"><legend>Where</legend>
           <div class="grid2">
-            <label class="field"><span>Campus</span><select id="f-campus">${ctx.campuses.map((c) => `<option value="${c.id}" ${c.id === campusId ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select></label>
+            <label class="field"><span>Location</span><select id="f-campus">${ctx.campuses.map((c) => `<option value="${c.id}" ${c.id === campusId ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select></label>
             <label class="field"><span>Room</span><select id="f-room">
               <option value="">No room</option>
               ${rooms.map((r) => `<option value="${r.id}" ${r.id === draft.room_id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
@@ -427,7 +427,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
             </select></label>
           </div>
           ${draft.room_id === '__new' ? `<div class="inline-add"><input id="f-newroom" placeholder="Worship Center, North Auditorium, Kids…" aria-label="New room name"><button type="button" class="btn" data-a="add-room">Add room</button></div>` : ''}
-          <label class="field"><span>Location in the room</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Stage rack, Catwalk…"></label>
+          <label class="field"><span>Spot in the room</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Stage rack, Catwalk…"></label>
         </fieldset>
 
         ${bulk ? '' : `<fieldset class="group"><legend>IP addresses</legend>
@@ -447,7 +447,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           }).join('')}</div>
         </fieldset>` : ''}
 
-        ${bulk ? '' : `<fieldset class="group"><legend>This model</legend>
+        ${bulk ? '' : `<fieldset class="group"><legend>This item</legend>
           <div class="grid2">
             <label class="field"><span>Serial number</span><input id="f-serial_number" class="mono" value="${esc(draft.serial_number)}"></label>
             <label class="field"><span>Firmware / software</span><input id="f-firmware" class="mono" value="${esc(draft.firmware)}"></label>
@@ -477,7 +477,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         <p class="form-msg ${error ? 'bad' : ''}" role="status">${esc(error)}</p>
         <span class="spacer"></span>
         <button class="btn" data-a="cancel">Cancel</button>
-        <button class="btn primary" data-a="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : dev ? 'Save changes' : bulk ? `Add ${draft.qty} models` : 'Add model'}</button>
+        <button class="btn primary" data-a="save" ${busy ? 'disabled' : ''}>${busy ? 'Saving…' : dev ? 'Save changes' : bulk ? `Add ${draft.qty} items` : 'Add item'}</button>
       </footer>`);
     $('#dev-form', sheet.el).addEventListener('submit', (e) => { e.preventDefault(); save(); });
     const body = $('.sh-body', sheet.el);
@@ -587,7 +587,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     return best;
   }
   function bulkBase() {
-    return (draft.name || '').trim() || seriesBase() || s.ix.type.get(draft.type_id)?.name || 'Model';
+    return (draft.name || '').trim() || seriesBase() || s.ix.type.get(draft.type_id)?.name || 'Item';
   }
   function bulkNames() {
     const base = bulkBase();
@@ -647,8 +647,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     if (busy) return;
     collect();
     const err = (m, sel) => { renderEdit(m); if (sel) $(sel, sheet.el)?.focus(); };
-    if (!draft.type_id) return err('Pick a type, or choose “New type…” to add one.', '#f-type');
-    if (!draft.departments.length) return err('Tag it audio, video or lighting (at least one).');
+    if (!draft.type_id) return err('Pick a model, or choose “New model…” to add one.', '#f-type');
+    if (!draft.departments.length) return err('Pick at least one section: Audio, Video, Lighting or Network.');
     if (draft.room_id === '__new') return err('Finish adding the new room, or pick “No room”.', '#f-newroom');
     if (!dev && draft.qty > 1) return saveMany(err);
 
@@ -710,7 +710,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         names,
       });
       busy = false; dirty = false;
-      ctx.toast(ty?.networked === false && !location.hash.startsWith('#gear') ? `Added ${n} ${ty.name}. They're listed under Gear.` : `Added ${n} ${ty?.name || 'models'}`);
+      ctx.toast(ty?.networked === false && !location.hash.startsWith('#gear') ? `Added ${n} ${ty.name}. They're listed under Gear.` : `Added ${n} ${ty?.name || 'items'}`);
       host.setOpen(null);
       sheet.close(true);
       load(true);
