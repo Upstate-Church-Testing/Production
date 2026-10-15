@@ -12,7 +12,9 @@ export function dbAdapter(sb: any): Db {
     return data;
   };
   async function upsert(table: string, rows: any[]) {
-    for (let i = 0; i < rows.length; i += CHUNK) ok(await sb.from(table).upsert(rows.slice(i, i + CHUNK), { onConflict: 'id' }));
+    // One row per id: Postgres won't update the same row twice in one statement.
+    const unique = [...new Map(rows.map((r) => [r.id, r])).values()];
+    for (let i = 0; i < unique.length; i += CHUNK) ok(await sb.from(table).upsert(unique.slice(i, i + CHUNK), { onConflict: 'id' }));
   }
   async function selectAll(table: string, cols: string) {
     const out: any[] = [];
@@ -26,7 +28,7 @@ export function dbAdapter(sb: any): Db {
   return {
     campuses: () => selectAll('campuses', 'id, short_name, code'),
     serviceTypes: () => selectAll('pco_service_types', 'id, access, access_set, campus_id, campus_set, teams_synced_at'),
-    teams: () => selectAll('pco_teams', 'id, service_type_id, name, shown'),
+    teams: () => selectAll('pco_teams', 'id, service_type_id, service_type_ids, name, shown'),
     plans: () => selectAll('pco_plans', 'id, service_type_id, synced_at, needed'),
 
     saveServiceTypes: (rows) => upsert('pco_service_types', rows),

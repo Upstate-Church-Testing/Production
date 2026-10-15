@@ -12,6 +12,9 @@ export const ACCESS = [
 
 export const teamKey = (name) => String(name || '').trim().toLowerCase();
 
+/** The services a team is on (a Planning Center team can be shared by several). */
+export const teamServices = (t) => (t.service_type_ids?.length ? t.service_type_ids : [t.service_type_id]);
+
 /** Date and time formatting in the church's time zone, whatever the device's. */
 export function clock(timeZone = 'America/New_York') {
   const safe = (opts) => {

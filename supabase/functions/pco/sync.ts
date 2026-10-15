@@ -18,7 +18,7 @@ const HOUR = 36e5;
 export type Db = {
   campuses(): Promise<{ id: string; short_name: string; code: string | null }[]>;
   serviceTypes(): Promise<{ id: string; access: string; access_set: boolean; campus_id: string | null; campus_set: boolean; teams_synced_at: string | null }[]>;
-  teams(): Promise<{ id: string; service_type_id: string; name: string; shown: boolean }[]>;
+  teams(): Promise<{ id: string; service_type_id: string; service_type_ids?: string[]; name: string; shown: boolean }[]>;
   plans(): Promise<{ id: string; service_type_id: string; synced_at: string | null; needed: any }[]>;
   saveServiceTypes(rows: any[]): Promise<void>;
   removeServiceTypesExcept(ids: string[]): Promise<void>;
@@ -143,6 +143,7 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
   const wantTeams = types.filter((r) => (fullTeams || r.access !== 'hidden' || (!r.access_set && r.weekly)) && teamsStale(r));
 
   const fetchedTeams: any[] = [];
+  const fetchedById = new Map<string, any>(); // a team can sit in more than one service
   const teamTypes: string[] = [];
   await pool(wantTeams, 4, async (r) => {
     if (late()) { out.partial = true; return; }
@@ -156,17 +157,25 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     const positions = new Map(doc.included.filter((x) => x.type === 'TeamPosition').map((p) => [p.id, p]));
     for (const t of doc.data) {
       if (t.attributes?.archived_at || t.attributes?.deleted_at) continue;
+      const also = fetchedById.get(String(t.id));
+      if (also) {
+        if (!also.service_type_ids.includes(r.id)) also.service_type_ids.push(r.id);
+        continue;
+      }
       const name = text(t.attributes?.name) || 'Team';
       const prev = knownTeamById.get(t.id);
-      fetchedTeams.push({
+      const row = {
         id: String(t.id), service_type_id: r.id, name,
+        service_type_ids: [...new Set([r.id, ...relIds(t, 'service_types').map(String)])],
         sequence: Number.isFinite(t.attributes?.sequence) ? t.attributes.sequence : null,
         positions: relIds(t, 'team_positions').map((id) => positions.get(id)).filter(Boolean)
           .map((p: any) => ({ id: String(p.id), name: text(p.attributes?.name), sequence: p.attributes?.sequence ?? null }))
           .sort(bySequence),
         shown: prev ? prev.shown : shownByName.has(key(name)) ? shownByName.get(key(name))! : PRODUCTION_TEAM.test(name),
         synced_at: stamp,
-      });
+      };
+      fetchedById.set(row.id, row);
+      fetchedTeams.push(row);
     }
     r.teams_synced_at = stamp;
     teamTypes.push(r.id);
@@ -175,9 +184,11 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
 
   // Every team we know of after this pass.
   const refetched = new Set(teamTypes);
-  const teams = [...knownTeams.filter((t) => !refetched.has(t.service_type_id)), ...fetchedTeams];
+  const teams = [...knownTeams.filter((t) => !refetched.has(t.service_type_id) && !fetchedById.has(t.id)), ...fetchedTeams];
   const teamsOf = new Map<string, typeof teams>();
-  for (const t of teams) teamsOf.set(t.service_type_id, [...(teamsOf.get(t.service_type_id) || []), t]);
+  for (const t of teams) {
+    for (const id of t.service_type_ids?.length ? t.service_type_ids : [t.service_type_id]) teamsOf.set(id, [...(teamsOf.get(id) || []), t]);
+  }
 
   // Until an admin picks, a campus's weekly service is shared when it has a production team.
   for (const r of types) {

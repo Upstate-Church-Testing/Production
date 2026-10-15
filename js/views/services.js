@@ -5,7 +5,7 @@
 
 import { esc, icon, $, debounce, plural, timeAgo, initials } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
-import { clock, teamKey, realPhoto, STATUS_LABEL } from '../pco.js';
+import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js';
 
 const POLL_MS = 60000;
 const FAST_MS = 3000;
@@ -169,7 +169,7 @@ export function mount(el, ctx) {
     if (!d) return null;
     const types = d.types.filter((t) => t.access !== 'hidden'); // admins can read hidden ones; they don't show here
     const typeById = new Map(types.map((t) => [t.id, t]));
-    const teams = d.teams.filter((t) => t.shown && typeById.has(t.service_type_id));
+    const teams = d.teams.filter((t) => t.shown && teamServices(t).some((id) => typeById.has(id)));
     const plans = d.plans.filter((p) => typeById.has(p.service_type_id))
       .sort((a, b) => Date.parse(a.sort_date) - Date.parse(b.sort_date) || placeOrder(typeById.get(a.service_type_id)) - placeOrder(typeById.get(b.service_type_id)));
     const people = new Map();
@@ -287,7 +287,7 @@ export function mount(el, ctx) {
     const campus = t.campus_id ? ctx.campusById.get(t.campus_id)?.short_name : null;
     const services = p.times.filter((x) => x.kind === 'service').map((x) => x.starts_at).filter(Boolean);
     const call = p.times.filter((x) => x.kind !== 'service' && x.starts_at).sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))[0];
-    const teams = m.teams.filter((tm) => tm.service_type_id === p.service_type_id && (s.team === ALL || teamKey(tm.name) === s.team))
+    const teams = m.teams.filter((tm) => teamServices(tm).includes(p.service_type_id) && (s.team === ALL || teamKey(tm.name) === s.team))
       .sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99) || a.name.localeCompare(b.name));
     const roster = m.people.get(p.id) || [];
     const tally = { C: 0, U: 0, D: 0, open: 0 };

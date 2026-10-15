@@ -3,7 +3,7 @@
 // Admins change things here; staff can see the status and ask for an update.
 
 import { esc, icon, $, $$, debounce, plural, timeAgo } from '../util.js';
-import { PCO_TOKENS_URL, ACCESS, teamKey } from '../pco.js';
+import { PCO_TOKENS_URL, ACCESS, teamKey, teamServices } from '../pco.js';
 
 const WEEKS = [2, 4, 6, 8, 12];
 
@@ -106,7 +106,7 @@ export function mountPcoSettings(box, ctx) {
     const shared = new Set(types.filter((t) => t.access !== 'hidden').map((t) => t.id));
 
     // Teams, by name, from shared services (all services if none are shared yet).
-    const pool = teams.filter((t) => !shared.size || shared.has(t.service_type_id));
+    const pool = teams.filter((t) => !shared.size || teamServices(t).some((id) => shared.has(id)));
     const byName = new Map();
     for (const t of pool) {
       const k = teamKey(t.name);
