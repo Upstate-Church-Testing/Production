@@ -52,6 +52,7 @@ const ctx = {
   openSettings: (section) => goWith('account', { section }),
   openNetworkFlag: (flag) => goWith('network', { flag }),
   openGear: (filters) => goWith('gear', { filters }),
+  openPatch: (universe) => goWith('gear', { patch: { universe } }),
   // Filters last only while the app is open: every launch starts at All, all locations.
   campus: 'all',
   gearFilters: { dep: 'all', cat: 'all', brand: 'all' },

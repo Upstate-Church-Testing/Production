@@ -49,6 +49,28 @@ and nobody's own Planning Center permissions matter here.
 - Scheduling people from the app goes through the same connection (next step), so what
   someone may do is decided by their role here, not by their Planning Center login.
 
+## Lighting numbers
+
+Every lighting fixture carries the numbers a lighting team works with:
+
+| In the app | Column | What it is |
+|---|---|---|
+| Model # | `device_types.part_number` | The maker's exact model number (JOL299). Filled in only where it's confirmed for the exact product. |
+| DMX modes | `device_types.dmx_modes`, `dmx_footprint` | The channel counts the model offers, and the one the team uses. |
+| Serial | `devices.serial_number` | From the label on each unit. |
+| Asset # | `devices.asset_no` | 1…N per model across every location. Permanent: a deleted unit's number is never reused (`asset_counters`). |
+| Stage # | `devices.stage_no` | 1…N per model in one room. Moving a unit gives it the next number in its new room. |
+| Fixture ID | `devices.fixture_id` | Its number on that room's console (grandMA3 Fixture ID, Eos channel, Hog fixture number), e.g. 401–424. |
+| Patch | `devices.patch_universe`, `patch_address` | Typed as `1.333` (universe 1, address 333; `1/333` works too). Two numbers, so a universe can be counted across locations. |
+| Channels | `devices.dmx_channels` | Only when one unit's mode differs from its model's. |
+
+A patch belongs to the console in its room, so patch and fixture ID are per location +
+room ("rig"), and moving a unit to another room clears them. The database checks that a
+patch doesn't run past address 512; the app flags overlapping patches, repeated fixture
+IDs and repeated stage numbers, and treats two fixtures on exactly the same addresses as
+doubled on purpose. Gear › Patch is the patch sheet: one room at a time, universe by
+universe (1–100), with a fill-in table, or one universe across every location.
+
 ## Data model
 
 ```
@@ -58,12 +80,13 @@ campuses ── rooms
     │
     ├── networks (subnet, VLAN, gateway, tags)
     │
-    └── devices — one physical unit ("item" in the app): name, sections, serial, firmware, room, location, status
+    └── devices — one physical unit ("item" in the app): name, sections, serial, firmware, room, location, status,
+            │         asset #, stage #, fixture ID, patch (universe + address), DMX channels
             ├── device_ips (IP + mask, gateway, MAC, network, label, static/DHCP)
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)
 
-device_types     the shared catalog entry ("model" in the app): name, brand, part number, category, sections, specs, manual, photo
+device_types     the shared catalog entry ("model" in the app): name, brand, model number, category, sections, specs, manual, photo, DMX modes
                  (photos live in the public gear-photos storage bucket: <path>.jpg plus a <path>-t.jpg thumbnail)
     └── device_type_ports (the port layout every unit of that type shares)
 
@@ -92,7 +115,9 @@ js/app.js                      sign-in, roles, navigation, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Models, Items (every unit A–Z) and Grid (models × locations or rooms, like the old lighting sheet), filtered by location, section, category and brand
+js/views/gear.js               Models, Items (every unit A–Z), Grid (models × locations or rooms, like the old lighting sheet) and Patch, filtered by location, section, category and brand
+js/views/patch.js              Gear › Patch: each room's patch by universe, the numbers table with quick fill, one universe across locations
+js/lighting.js                 patch parsing (1.333), footprints, overlap and duplicate checks
 js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)
 js/views/devices.js            the item panel and editor (shared by Network and Gear)
 js/views/types.js              the model editor (shared by Gear and the item editor)

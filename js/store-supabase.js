@@ -82,8 +82,13 @@ export async function createSupabaseStore(url, key) {
       return { rooms, networks, devices, ips, types };
     },
 
+    /** payload: { device, ips, credentials, ports, numbers } — numbers holds only what changed. */
     async saveDevice(payload) {
-      return ok(await sb.rpc('save_device', { payload }));
+      return ok(await sb.rpc('save_device_full', { payload }));
+    },
+    /** Many items' lighting numbers at once: [{ id, fixture_id?, patch_universe?, patch_address?, … }]. */
+    async setDeviceNumbers(rows) {
+      return ok(await sb.rpc('set_device_numbers', { rows }));
     },
     async deleteDevice(id) {
       ok(await sb.from('devices').delete().eq('id', id));
@@ -93,7 +98,11 @@ export async function createSupabaseStore(url, key) {
     },
     async saveType(payload) {
       const id = ok(await sb.rpc('save_device_type', { payload }));
-      if ('networked' in payload.type) ok(await sb.from('device_types').update({ networked: !!payload.type.networked }).eq('id', id));
+      const extra = {};
+      if ('networked' in payload.type) extra.networked = !!payload.type.networked;
+      if ('dmx_modes' in payload.type) extra.dmx_modes = payload.type.dmx_modes || [];
+      if ('dmx_footprint' in payload.type) extra.dmx_footprint = payload.type.dmx_footprint || null;
+      if (Object.keys(extra).length) ok(await sb.from('device_types').update(extra).eq('id', id));
       return id;
     },
     async addDevices(payload) {
@@ -240,6 +249,9 @@ function friendly(error) {
     [/isn't on this unit's type/i, 'That port isn’t on this item’s model.'],
     [/Tag it audio, video or lighting/i, 'Pick at least one section: Audio, Video, Lighting or Network.'],
     [/is at a different campus/i, (m) => m.replace('campus', 'location')],
+    [/devices_type_asset_key/i, 'Another one of this model already has that asset number.'],
+    [/devices_patch_pair/i, 'A patch needs both a universe and an address, like 1.333.'],
+    [/devices_(patch_universe|patch_address|fixture_id|stage_no|asset_no|dmx_channels)_check/i, 'One of the numbers is out of range.'],
     [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],
     [/invalid input syntax for type uuid/i, 'That doesn’t look like a Resi player ID.'],
     [/Payload too large|exceeded the maximum allowed size/i, 'That photo is too big. Try a smaller one.'],

@@ -1492,3 +1492,190 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
   .svc-detail { padding: 16px; }
   .fl-item { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 2px 10px; }
 }
+
+/* ------------------------------------------------------ lighting numbers -- */
+/* Fixture ID, patch (1.333), stage # and asset # on each item, and the patch sheet. */
+
+.num-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.num {
+  display: grid; gap: 3px; align-content: start; text-align: left; min-width: 0;
+  padding: 12px 14px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--panel-2); color: inherit;
+}
+.num:hover { border-color: var(--line-2); }
+.num small { font: 600 12px/1.2 var(--f-body); color: var(--muted); }
+.num b { font: 700 26px/1.1 var(--f-body); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.num b.mono { font: 600 23px/1.18 var(--f-mono); letter-spacing: -0.03em; }
+.num em { font-style: normal; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.num.is-blank b { font: 600 15px/1.75 var(--f-body); color: var(--accent-ink); letter-spacing: 0; }
+.num.is-blank em { color: var(--faint); }
+
+.with-btn { display: flex; gap: 8px; align-items: center; }
+.with-btn input { flex: 1 1 auto; min-width: 0; }
+.with-btn .btn { flex: none; min-height: 48px; }
+.mode-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.field input.short { width: 104px; flex: none; }
+.mode-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.small { height: 32px; padding: 0 11px; font: 600 13px/1 var(--f-mono); gap: 4px; }
+.chip.static { cursor: default; }
+.chip.static:hover { border-color: var(--line); }
+.chip.on { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.kv dd .mode-chips { margin-top: 4px; }
+.kv dd .hint { display: block; margin-top: 6px; font-weight: 400; }
+.field .ro {
+  margin: 0; min-height: 48px; display: flex; align-items: center; padding: 0 14px;
+  border: 1px dashed var(--line-2); border-radius: 14px; font-size: 15px;
+}
+.field .ro i { font-family: var(--f-body); font-style: normal; color: var(--faint); font-size: 14px; }
+.field > label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.warn-text { color: var(--soft); }
+
+/* Items list and a model's item list: fixture ID over patch where there's no IP */
+.r-num { display: grid; justify-items: end; gap: 3px; padding-right: 4px; font-variant-numeric: tabular-nums; }
+.r-num b { font: 700 15px/1 var(--f-mono); }
+.r-num span { font: 500 13px/1 var(--f-mono); color: var(--muted); }
+.unit-nums { display: grid; justify-items: end; gap: 2px; }
+.unit-nums b { font-size: 14px; color: var(--fg); }
+.unit-nums i { font-style: normal; font-size: 12.5px; }
+
+/* ----- the patch sheet ----- */
+.view-gear.is-patch .results { gap: 14px; }
+.px-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.px-rooms { flex-wrap: wrap; border-radius: 22px; }
+.px-rooms button small { margin-left: 6px; color: var(--faint); font-weight: 600; font-variant-numeric: tabular-nums; }
+.px-room { font: 500 20px/1.2 var(--f-display); }
+.px-sum { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.px-sum b { color: var(--fg); font-weight: 700; }
+.px-sum i { font-style: normal; margin: 0 8px; color: var(--faint); }
+.px-unis { display: flex; flex-wrap: wrap; gap: 8px; }
+.px-unis .chip { font-variant-numeric: tabular-nums; }
+.px-problems { border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent); background: color-mix(in srgb, var(--bad) 8%, var(--panel)); border-radius: var(--r-lg); padding: 12px 16px; }
+.px-problems summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; color: var(--bad); font-weight: 700; font-size: 14px; }
+.px-problems summary::-webkit-details-marker { display: none; }
+.px-problems summary .ico { width: 16px; height: 16px; }
+.px-problems ul { margin: 10px 0 2px; padding-left: 18px; display: grid; gap: 6px; font-size: 13.5px; color: var(--muted); }
+.px-problems .btn.link { min-height: 0; padding: 0; font-size: 13.5px; font-weight: 700; }
+
+.px-uni { display: grid; gap: 12px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); }
+.px-uni-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.px-uni-head h3 { font: 500 19px/1.2 var(--f-display); }
+.px-use { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.px-use b { color: var(--fg); }
+.px-use i { font-style: normal; margin: 0 6px; color: var(--faint); }
+/* 512 addresses, a tick every 64 */
+.px-bar {
+  position: relative; height: 30px; border-radius: 9px; overflow: hidden;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), var(--line-2) calc(12.5% - 1px) 12.5%), var(--panel-3);
+}
+.px-bar i {
+  position: absolute; top: 4px; bottom: 4px; border-radius: 3px;
+  background: hsl(var(--h) 68% 56%); box-shadow: inset -1px 0 0 rgb(0 0 0 / 0.35);
+}
+.px-bar i.bad { background: var(--bad); top: 1px; bottom: 1px; }
+.px-bar i.hit { outline: 2px solid var(--fg); outline-offset: 1px; z-index: 1; }
+.px-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: hsl(var(--h) 68% 56%); }
+
+.px-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.px-table th { text-align: left; font: 600 11.5px/1 var(--f-body); letter-spacing: 0.04em; color: var(--muted); padding: 0 8px 8px; white-space: nowrap; }
+.px-table td { padding: 9px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+.px-table tbody tr { cursor: pointer; }
+.px-table tbody tr:hover td { background: var(--panel-2); }
+.px-table tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.px-table tr.is-bad td { background: color-mix(in srgb, var(--bad) 9%, transparent); }
+.px-table tr.is-bad .px-name small { color: var(--bad); }
+.px-addr { font-size: 14px; white-space: nowrap; }
+.px-link .ico { width: 14px; height: 14px; color: var(--soft); vertical-align: -2px; margin-left: 6px; }
+.px-ch, .px-st { color: var(--muted); }
+.px-fid { font-weight: 700; font-size: 15px; }
+.px-name { min-width: 0; }
+.px-nm { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.px-nm > span { display: grid; min-width: 0; }
+.px-name b { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-name small { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-done { display: flex; align-items: center; gap: 8px; color: var(--ok); font-weight: 600; font-size: 14px; }
+.px-done .ico { width: 16px; height: 16px; }
+@container results (max-width: 599px) {
+  .px-ch, .px-st { display: none; }
+  .px-uni { padding: 14px 12px; }
+  .px-table td, .px-table th { padding-inline: 6px; }
+}
+
+.px-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.px-card {
+  display: grid; gap: 10px; align-content: start; text-align: left; color: inherit;
+  padding: 16px; border-radius: var(--r-xl); border: 1px solid var(--line); background: var(--panel);
+}
+.px-card:hover { border-color: var(--line-2); background: var(--panel-2); }
+.px-card-head { display: grid; gap: 2px; }
+.px-card-head small { font: 600 11px/1.3 var(--f-body); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.px-card-head b { font: 500 18px/1.2 var(--f-display); }
+.px-card-count { display: flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.px-card-count b { color: var(--fg); font: 700 22px/1 var(--f-body); }
+.px-card-count em { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--bad); font-style: normal; font-weight: 700; }
+.px-card-count em .ico { width: 14px; height: 14px; }
+.px-minis { display: grid; gap: 6px; }
+.px-mini { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 8px; }
+.px-mini small { font: 600 12px/1 var(--f-mono); color: var(--muted); }
+.px-mini-bar { height: 8px; border-radius: 999px; background: var(--panel-3); overflow: hidden; }
+.px-mini-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.px-card-console { font-size: 12.5px; color: var(--muted); }
+
+/* editing a room's numbers */
+.px-edit-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px 12px 18px; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-xl); }
+.px-edit-bar > div { display: grid; gap: 4px; }
+.px-edit-bar > div b { font: 500 18px/1.2 var(--f-display); }
+.px-edit-bar .form-msg { flex: 1 1 200px; margin: 0; text-align: right; }
+.px-edit-bar .form-msg:empty { display: none; }
+.px-howto { padding: 0 4px; }
+.px-group { display: grid; gap: 12px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); }
+.px-group-head { display: flex; align-items: center; gap: 10px; }
+.px-group-head > span { display: grid; gap: 2px; min-width: 0; }
+.px-group-head b { font: 500 18px/1.2 var(--f-display); }
+.px-group-head small { font-size: 12.5px; color: var(--muted); }
+.px-fill {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; align-items: end;
+  padding: 12px; border-radius: var(--r-lg); background: var(--panel-2); border: 1px solid var(--line);
+}
+.px-fill .field input { min-height: 44px; background: var(--panel); }
+.px-fill-btns { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }
+.px-etable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.px-etable th { text-align: left; font: 600 11.5px/1 var(--f-body); letter-spacing: 0.04em; color: var(--muted); padding: 0 4px 8px; white-space: nowrap; }
+.px-etable td { padding: 4px; border-top: 1px solid var(--line); vertical-align: middle; }
+.px-etable input {
+  height: 42px; padding: 0 10px; border-radius: 10px;
+  border: 1px solid var(--line-2); background: var(--panel-2); font: 500 16px/1 var(--f-mono);
+}
+.px-etable input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+.px-etable input.is-bad { border-color: var(--bad); background: var(--bad-bg); }
+.px-etable input::placeholder { color: var(--faint); }
+.px-etable input.px-in-st { width: 64px; }
+.px-etable input.px-in-fid { width: 92px; }
+.px-etable input.px-in-patch { width: 110px; }
+.px-etable input.px-in-ch { width: 64px; }
+.px-etable td.px-name { min-width: 120px; }
+.px-edit-foot { display: flex; justify-content: flex-end; gap: 10px; }
+.px-etable .px-name b { display: block; font-size: 14px; }
+.px-etable .px-name small { display: block; white-space: normal; color: var(--bad); font-weight: 600; }
+.px-etable .px-name small:empty { display: none; }
+@container results (max-width: 599px) {
+  .px-etable input { padding: 0 6px; }
+  .px-etable td.px-name { min-width: 90px; }
+  .px-group { padding: 14px 10px; }
+}
+.px-table td.px-name { width: 100%; max-width: 0; }
+.bar-label small { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 2px; }
+.kv dd .btn.link { min-height: 0; padding: 0; font-size: inherit; }
+.chip.is-default { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent-ink); }
+.px-edit-bar .spacer { flex: 1 1 auto; }
+.px-escroll { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.px-group, .px-uni, .px-edit-bar { min-width: 0; }
+@container results (max-width: 599px) {
+  .px-etable input.px-in-st, .px-etable input.px-in-ch { width: 46px; }
+  .px-etable input.px-in-fid { width: 60px; }
+  .px-etable input.px-in-patch { width: 78px; }
+  .px-etable .px-name b { font-size: 13px; }
+  .px-etable td.px-name { min-width: 72px; }
+  .px-etable td { padding: 4px 3px; }
+  .px-fill { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.px-etable .px-name b { white-space: normal; overflow-wrap: anywhere; }
+.kv > .kv-wide { grid-column: 1 / -1; }

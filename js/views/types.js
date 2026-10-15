@@ -2,6 +2,7 @@
 // model editor ("＋ New type…").
 
 import { esc, icon, $, $$ } from '../util.js';
+import { parseModes } from '../lighting.js';
 
 export const CATEGORIES = ['Console', 'Switcher', 'Control Panel', 'Router', 'Converter', 'Camera', 'PTZ Controller',
   'Projector', 'Display', 'Monitor', 'LED Processor', 'LED Driver', 'Computer', 'Recorder', 'Encoder / Decoder',
@@ -37,9 +38,9 @@ export const portMeta = (p) => [p.signal, p.connector, p.direction !== 'io' ? DI
 export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCancel, defaults = {} }) {
   const d = type
     ? { ...type, departments: [...type.departments], specs: (type.specs || []).map((x) => ({ ...x })),
-        ports: sortPorts(type.ports).map((p) => ({ ...p })) }
+        ports: sortPorts(type.ports).map((p) => ({ ...p })), modesText: (type.dmx_modes || []).join(', '), footText: type.dmx_footprint ? String(type.dmx_footprint) : '' }
     : { id: '', name: '', manufacturer: '', part_number: '', category: '', departments: [], description: '',
-        specs: [], ports: [], manual_url: '', notes: '', networked: true, ...defaults };
+        specs: [], ports: [], manual_url: '', notes: '', networked: true, modesText: '', footText: '', ...defaults };
   const originalPortIds = new Set((type?.ports || []).map((p) => p.id));
   let dirty = false;
   let busy = false;
@@ -64,7 +65,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
         <div class="grid2">
           <label class="field"><span>Brand</span><input id="t-manufacturer" value="${esc(d.manufacturer || '')}" list="dl-t-mfr" placeholder="High End Systems, Blackmagic…"></label>
           <label class="field"><span>Category</span><input id="t-category" value="${esc(d.category || '')}" list="dl-t-cat" placeholder="Console, Converter…"></label>
-          <label class="field"><span>Part number</span><input id="t-part_number" class="mono" value="${esc(d.part_number || '')}" autocapitalize="characters" spellcheck="false"></label>
+          <label class="field"><span>Model number</span><input id="t-part_number" class="mono" value="${esc(d.part_number || '')}" autocapitalize="characters" spellcheck="false" placeholder="JOL299, ROGUER2XWASH…"><small class="hint">The maker’s exact model or part number, from the label or spec sheet</small></label>
           <label class="field"><span>Manual or product page</span><input id="t-manual_url" value="${esc(d.manual_url || '')}" inputmode="url" placeholder="https://…" autocapitalize="off" spellcheck="false"></label>
         </div>
         <div class="field"><span>Sections <b class="req">at least one</b></span>
@@ -73,6 +74,8 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
         </div>
         <label class="check"><input type="checkbox" id="t-networked" ${d.networked !== false ? 'checked' : ''}><span>Connects to a network and gets an IP address<small class="hint">Turn off for things like fixtures. Their items stay off the IP sheet unless one is given an IP.</small></span></label>
         <label class="field"><span>Description</span><textarea id="t-description" rows="2" placeholder="What it is and what it does">${esc(d.description || '')}</textarea></label>
+
+        ${d.departments.includes('lighting') ? dmxBlock() : ''}
 
         <fieldset class="group"><legend>Specs</legend>
           <div class="spec-edit">${d.specs.map((sp, i) => `<div class="spec-row" data-i="${i}">
@@ -130,9 +133,22 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     if (body) body.scrollTop = scroll;
   }
 
+  function dmxBlock() {
+    const modes = parseModes(d.modesText);
+    return `<fieldset class="group"><legend>DMX</legend>
+      <label class="field"><span>DMX modes</span><input id="t-modes" class="mono" value="${esc(d.modesText)}" inputmode="numeric" placeholder="6, 9, 13, 18, 20" autocomplete="off">
+        <small class="hint">The channel counts it offers, from the manual. Leave blank for consoles and other gear that isn’t patched.</small></label>
+      <div class="field"><label for="t-foot">Mode you use</label>
+        <div class="mode-pick"><input id="t-foot" class="mono short" value="${esc(d.footText)}" inputmode="numeric" autocomplete="off" placeholder="${modes.length === 1 ? modes[0] : ''}">
+          ${modes.length > 1 ? `<span class="mode-chips">${modes.map((n) => `<button type="button" class="chip small" data-ta="foot" data-n="${n}" aria-pressed="${String(n) === d.footText}">${n}</button>`).join('')}</span>` : ''}</div>
+        <small class="hint">Every item of this model is patched with this many channels unless one is set differently. Leave blank if it varies.</small></div>
+    </fieldset>`;
+  }
+
   function collect() {
     const v = (id) => $(`#${id}`, sheet.el)?.value ?? '';
     if (!$('#t-name', sheet.el)) return;
+    if ($('#t-modes', sheet.el)) { d.modesText = v('t-modes'); d.footText = v('t-foot').trim(); }
     for (const k of ['name', 'manufacturer', 'category', 'part_number', 'manual_url', 'description', 'notes']) d[k] = v('t-' + k);
     d.networked = $('#t-networked', sheet.el)?.checked ?? d.networked;
     d.specs.forEach((sp, i) => { sp.label = v(`sp-${i}-label`); sp.value = v(`sp-${i}-value`); });
@@ -152,6 +168,8 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     const dup = names.find((n, i) => names.indexOf(n) !== i);
     if (dup) return render(`Two ports are named “${ports[names.indexOf(dup)].name.trim()}”. Port names must be different.`);
     if (d.manual_url && !/^https?:\/\//i.test(d.manual_url.trim())) d.manual_url = 'https://' + d.manual_url.trim();
+    const foot = d.footText ? Number(d.footText) : null;
+    if (d.footText && !(Number.isInteger(foot) && foot >= 1 && foot <= 512)) { render('The mode you use should be a channel count from 1 to 512.'); $('#t-foot', sheet.el)?.focus(); return; }
     const removed = [...originalPortIds].filter((pid) => !ports.some((p) => p.id === pid)).length;
     if (removed && !force) { confirmRemove = true; return render(); }
     confirmRemove = false;
@@ -161,6 +179,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
         type: {
           id: d.id || '', name: d.name, manufacturer: d.manufacturer, part_number: d.part_number, category: d.category,
           departments: d.departments, description: d.description, manual_url: d.manual_url, notes: d.notes, networked: d.networked !== false,
+          dmx_modes: parseModes(d.modesText), dmx_footprint: foot,
           specs: d.specs.filter((sp) => sp.label.trim() || sp.value.trim()).map((sp) => ({ label: sp.label.trim(), value: sp.value.trim() })),
         },
         ports: ports.map((p) => ({ id: p.id || '', name: p.name.trim(), signal: p.signal, connector: p.connector, direction: p.direction || 'io', notes: p.notes || '' })),
@@ -203,6 +222,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     else if (a === 'save') save();
     else if (a === 'save-anyway') save(true);
     else if (a === 'keep-ports') { confirmRemove = false; render(); }
+    else if (a === 'foot') { collect(); d.footText = d.footText === t.dataset.n ? '' : t.dataset.n; dirty = true; render(); }
     else if (a === 'tag') { collect(); const g = t.dataset.tag; d.departments = d.departments.includes(g) ? d.departments.filter((x) => x !== g) : [...d.departments, g]; dirty = true; render(); }
     else if (a === 'add-spec') { collect(); d.specs.push({ label: '', value: '' }); render(); $$('.spec-row input', sheet.el).at(-2)?.focus(); }
     else if (a === 'rm-spec') { collect(); d.specs.splice(+t.dataset.i, 1); dirty = true; render(); }
@@ -213,13 +233,16 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     else if (a === 'bulk-add') bulkAdd();
   };
   const onInput = (e) => { if (e.target.closest('#type-form') && !e.target.id.startsWith('b-')) dirty = true; };
+  const onChange = (e) => { if (e.target.id === 't-modes') { collect(); render(); } }; // refresh the mode chips
   function detach() {
     sheet.el.removeEventListener('click', onClick, true);
     sheet.el.removeEventListener('input', onInput, true);
+    sheet.el.removeEventListener('change', onChange, true);
   }
   // Capture phase so the editor handles its own buttons before any host sheet does.
   sheet.el.addEventListener('click', onClick, true);
   sheet.el.addEventListener('input', onInput, true);
+  sheet.el.addEventListener('change', onChange, true);
   render();
   $('#t-name', sheet.el)?.focus();
   return { cancel };

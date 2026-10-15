@@ -4,6 +4,7 @@
 import { esc, icon, $, debounce, plural } from '../util.js';
 import { buildIndex } from './devices.js';
 import { brandKey } from './types.js';
+import { takesPatch, rigKey, usedChannels } from '../lighting.js';
 import { ALL, dropdownHtml, locationDropdown } from '../picker.js';
 
 const TOP = 8; // longer lists fold the rest into "Everything else"
@@ -41,6 +42,7 @@ export function mount(el, ctx) {
     const [kind, value] = [t.dataset.go, t.dataset.value];
     if (kind === 'location') { s.campus = ctx.campus = value; loc.update(); draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (kind === 'flag') { ctx.openNetworkFlag(value); return; }
+    if (kind === 'universe') { ctx.openPatch(value === 'all' ? 'all' : Number(value)); return; }
     // A section, category or brand: show those items in Gear.
     ctx.openGear({ dep: kind === 'team' ? value : ALL, cat: kind === 'category' ? value : ALL, brand: kind === 'brand' ? value : ALL });
   });
@@ -87,6 +89,21 @@ export function mount(el, ctx) {
       ? `<button type="button" class="stat is-bad" data-go="flag" data-value="${flag}"><span class="stat-label">${icon('warn')}${label}</span><span class="stat-num">${value}</span><span class="stat-sub">${sub}</span></button>`
       : `<div class="stat is-zero"><span class="stat-label">${label}</span><span class="stat-num">0</span><span class="stat-sub">${ok}</span></div>`;
 
+    // Lighting: fixtures, their patch, and the numbers still to fill in.
+    const fixtures = devices.filter((d) => takesPatch(d, typeOf(d)));
+    const patched = fixtures.filter((d) => d.patch_universe != null);
+    const rigUnis = new Set(patched.map((d) => `${rigKey(d)}#${d.patch_universe}`));
+    const rigsUsed = new Set(patched.map(rigKey)).size;
+    const lxTypes = new Set(devices.filter((d) => d.departments.includes('lighting')).map((d) => d.type_id));
+    const noModelNo = [...lxTypes].filter((id) => !s.ix.type.get(id)?.part_number).length;
+    const withSerial = fixtures.filter((d) => d.serial_number).length;
+    const byUniverse = [...new Set(patched.map((d) => d.patch_universe))].sort((a, b) => a - b).map((u) => {
+      const on = patched.filter((d) => d.patch_universe === u);
+      const rigs = new Set(on.map(rigKey));
+      const ch = [...rigs].reduce((n, k) => n + usedChannels(on.filter((d) => rigKey(d) === k), typeOf), 0);
+      return { key: String(u), label: `Universe ${u}`, n: on.length, note: `${plural(rigs.size, 'room')} · ${ch.toLocaleString()} ch` };
+    });
+
     // Breakdowns of the items here.
     const count = (keyOf) => {
       const m = new Map();
@@ -121,7 +138,18 @@ export function mount(el, ctx) {
           ${alarm('No IP yet', noIp, 'Tap to see them', 'noip', 'Every item has one')}
         </div>
       </section>
+      ${fixtures.length ? `<section class="st-group">
+        <h2 class="st-h">Lighting</h2>
+        <div class="stats">
+          <button type="button" class="stat" data-go="universe" data-value="all"><span class="stat-label">Patched</span><span class="stat-num">${patched.length.toLocaleString()}</span><span class="stat-sub">of ${plural(fixtures.length, 'fixture')}</span></button>
+          ${tile('Universes in use', rigUnis.size, `in ${plural(rigsUsed, 'room')}`)}
+          ${tile('Not patched yet', fixtures.length - patched.length, fixtures.length - patched.length ? 'Fixtures with no patch' : 'Every fixture is patched')}
+          ${tile('Serials recorded', withSerial, `of ${plural(fixtures.length, 'fixture')}`)}
+          ${tile('Need a model #', noModelNo, noModelNo ? 'Lighting models without one' : 'Every lighting model has one')}
+        </div>
+      </section>` : ''}
       <section class="st-group st-bars">
+        ${byUniverse.length ? bars('Fixtures by universe', byUniverse, 'universe', { keepOrder: true }) : ''}
         ${bars('Items by section', byTeam, 'team', { colored: true, keepZero: true })}
         ${s.campus === 'all' ? bars('Items by location', byLocation, 'location') : ''}
         ${bars('Items by category', byCategory, 'category')}
@@ -130,9 +158,9 @@ export function mount(el, ctx) {
   }
 
   /** A ranked bar list. Every value is printed, so nothing hides behind a hover. */
-  function bars(title, rows, kind, { colored = false, keepZero = false } = {}) {
+  function bars(title, rows, kind, { colored = false, keepZero = false, keepOrder = false } = {}) {
     let list = rows.filter((r) => keepZero || r.n > 0);
-    if (!colored) list.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+    if (!colored && !keepOrder) list.sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
     if (list.length > TOP + 1) {
       const rest = list.slice(TOP);
       list = [...list.slice(0, TOP), { key: null, other: true, label: 'Everything else', n: rest.reduce((n, r) => n + r.n, 0) }];
@@ -142,10 +170,10 @@ export function mount(el, ctx) {
       <h3>${esc(title)}</h3>
       ${list.length ? `<ul class="bar-list">${list.map((r) => {
         const pct = (r.n / max) * 100;
-        const inner = `<span class="bar-label">${colored ? `<i class="tag" data-dep="${r.dep}">${esc(r.label[0])}</i>` : ''}${esc(r.label)}</span>
+        const inner = `<span class="bar-label">${colored ? `<i class="tag" data-dep="${r.dep}">${esc(r.label[0])}</i>` : ''}${esc(r.label)}${r.note ? `<small>${esc(r.note)}</small>` : ''}</span>
           <span class="bar-track"><span class="bar-fill ${r.other ? 'is-other' : ''}" ${colored ? `data-dep="${r.dep}"` : ''} style="width:${r.n ? Math.max(2, pct).toFixed(1) : 0}%"></span></span>
           <span class="bar-value">${r.n.toLocaleString()}</span>`;
-        return `<li>${r.key != null && r.n ? `<button type="button" class="bar-row" data-go="${kind}" data-value="${esc(r.key)}" aria-label="${esc(`${r.label}: ${r.n}. ${kind === 'location' ? 'Show this location' : 'Show these items in Gear'}`)}">${inner}</button>` : `<div class="bar-row">${inner}</div>`}</li>`;
+        return `<li>${r.key != null && r.n ? `<button type="button" class="bar-row" data-go="${kind}" data-value="${esc(r.key)}" aria-label="${esc(`${r.label}: ${r.n}. ${kind === 'location' ? 'Show this location' : kind === 'universe' ? 'Show it on the patch sheet' : 'Show these items in Gear'}`)}">${inner}</button>` : `<div class="bar-row">${inner}</div>`}</li>`;
       }).join('')}</ul>` : '<p class="muted">No items here yet.</p>'}
     </div>`;
   }

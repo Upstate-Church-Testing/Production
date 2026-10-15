@@ -2,6 +2,7 @@
 // example data. Used when no Supabase project is configured.
 
 import { createPcoDemo } from './pco-demo.js';
+import { footprint, nameNumber } from './lighting.js';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2));
 const wait = (ms = 90) => new Promise((r) => setTimeout(r, ms));
@@ -57,7 +58,7 @@ function buildExample() {
     if (!t) {
       t = { id: uid(), key, name, manufacturer: d.manufacturer || null, part_number: null, category: d.category || null,
         departments: [...d.departments], description: SPECS[name]?.description || null, specs: SPECS[name]?.specs || [],
-        manual_url: null, notes: null, photo_path: null, networked: d.networked !== false, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
+        manual_url: null, notes: null, photo_path: null, networked: d.networked !== false, dmx_modes: [], dmx_footprint: null, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
       types.push(t);
       (PORTS[name] || []).forEach((p, i) => typePorts.push({ id: uid(), type_id: t.id, connector: null, direction: 'io', notes: null, sort_order: i, ...p }));
     }
@@ -82,8 +83,8 @@ function buildExample() {
     const id = uid();
     const { manufacturer, model, category, networked, ...rest } = d;
     devices.push({ id, type_id: typeFor(d), campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null,
-      serial_number: null, firmware: null, location: null, status: 'active',
-      notes: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
+      serial_number: null, firmware: null, location: null, status: 'active', asset_no: null, stage_no: null,
+      fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
     addr.forEach((a, i) => ips.push({ id: uid(), device_id: id, campus_id: 'c-' + code, network_id: a.net ? 'n-' + code + '-' + a.net : null,
       label: a.label || null, ip: a.ip || null, gateway: a.gw || null, mac: a.mac || null, hostname: null,
       mode: a.mode || 'static', notes: null, sort_order: i }));
@@ -125,7 +126,14 @@ function buildExample() {
   dev('SVL', W, { name: 'Main L Amp', departments: ['audio'], category: 'Amplifier', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.20/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Main R Amp', departments: ['audio'], category: 'Amplifier', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.21/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Sub Amp', departments: ['audio'], category: 'Amplifier', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.22/24', label: 'Dante Primary' }]);
-  for (let i = 1; i <= 6; i++) dev('SVL', W, { name: `R2X Wash ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'Chauvet', model: 'Rogue R2X Wash', networked: false, location: i <= 3 ? 'Upstage truss' : 'Midstage truss' });
+  // A lighting rig with its patch: fixture IDs by model (101…, 201…, 401…), universes 1 and 2.
+  for (let i = 1; i <= 6; i++) dev('SVL', W, { name: `R2X Wash ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'Chauvet Professional', model: 'R2X Wash', networked: false, location: i <= 3 ? 'Upstage truss' : 'Midstage truss',
+    fixture_id: 100 + i, patch_universe: 1, patch_address: 1 + (i - 1) * 22 });
+  for (let i = 1; i <= 8; i++) dev('SVL', W, { name: `ColorSource Par Deep Blue ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'ETC', model: 'ColorSource Par Deep Blue', networked: false, location: 'FOH batten',
+    fixture_id: 200 + i, patch_universe: 1, patch_address: i === 8 ? 130 : 201 + (i - 1) * 5, serial_number: i === 1 ? 'CSP-2219-0417' : null });
+  for (let i = 1; i <= 24; i++) dev('SVL', W, { name: `Jolt Panel FX2 ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'ADJ', model: 'Jolt Panel FX2', location: i <= 12 ? 'Upstage wall' : 'Downstage truss',
+    ...(i <= 22 ? { fixture_id: 400 + i, patch_universe: 2, patch_address: 1 + (i - 1) * 20 } : {}), serial_number: i <= 2 ? `JPF2-21${30 + i}` : null });
+  for (let i = 25; i <= 26; i++) dev('SVL', 'Storage', { name: `Jolt Panel FX2 ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'ADJ', model: 'Jolt Panel FX2' });
   dev('SVL', 'North Auditorium', { name: 'DMX Node', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'DMX-AN2', location: 'Stage Right' }, [{ ip: '10.50.10.120/24', gw: '2.0.0.1' }]);
   dev('SVL', 'North Auditorium', { name: 'EPIX Drive', departments: ['lighting'], category: 'LED Driver', manufacturer: 'Chauvet', model: 'EPIX Drive 2000 IP', location: 'Stage Right' });
 
@@ -137,6 +145,8 @@ function buildExample() {
   dev('HB', W, { name: 'Pathport 8-Port #1', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Pathway', model: 'Pathport 8-port rack mount', location: 'Stage Rack', firmware: '6.3.1' }, [{ net: 'lx', ip: '10.50.50.101/16', gw: '10.50.1.1' }]);
   dev('HB', W, { name: 'Pathport 8-Port #2', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Pathway', model: 'Pathport 8-port rack mount', location: 'Stage Rack', firmware: '6.3.1' }, [{ net: 'lx', ip: '10.50.50.102/16', gw: '10.50.1.1' }]);
   dev('HB', W, { name: 'HL Button Station', departments: ['lighting'], category: 'Wall Station', manufacturer: 'Pathway', model: 'Vignette PoE Wall Station', location: 'House Left', firmware: '6.2.0' }, [{ net: 'lx', ip: '10.50.10.101/16', gw: '10.50.1.1' }]);
+  for (let i = 1; i <= 6; i++) dev('HB', W, { name: `R2X Wash ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'Chauvet Professional', model: 'R2X Wash', networked: false, location: 'Truss',
+    fixture_id: 300 + i, patch_universe: 1, patch_address: 1 + (i - 1) * 15, dmx_channels: 15 });
   dev('HB', W, { name: 'HR Button Station', departments: ['lighting'], category: 'Wall Station', manufacturer: 'Pathway', model: 'Vignette PoE Wall Station', location: 'House Right', firmware: '6.2.0' }, [{ net: 'lx', ip: '10.50.10.102/16', gw: '10.50.1.1' }]);
 
   // Five Forks
@@ -167,9 +177,34 @@ function buildExample() {
   patch(stageGw, 'Ethernet', 'Stage Switch port 4', 'sACN');
   patch(cat, 'DMX 1', 'FOH batten', 'Universe 1');
   patch(cat, 'DMX 2', 'Catwalk positions', 'Universe 2');
+  // What the lighting models offer (from each maker's manual).
+  const setType = (name, o) => Object.assign(types.find((t) => t.name === name) || {}, o);
+  setType('Jolt Panel FX2', { part_number: 'JOL299', dmx_modes: [6, 9, 13, 18, 20, 36, 41, 43, 51, 81, 83, 126, 141, 143], dmx_footprint: 20 });
+  setType('R2X Wash', { part_number: 'ROGUER2XWASH', dmx_modes: [15, 17, 22, 33, 54, 56], dmx_footprint: 22 });
+  setType('ColorSource Par Deep Blue', { dmx_modes: [1, 3, 5, 6], dmx_footprint: 5 });
+  setType('grandMA3 compact XT', { part_number: '4010505' });
+  setType('Hoglet 4', { part_number: '61040064' });
+  numberAll(devices, rooms);
   types.forEach((t) => delete t.key);
 
   return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts };
+}
+
+/** Asset # per model across locations, stage # per model in each room (like the database does). */
+function numberAll(devices, rooms) {
+  const campusAt = (id) => CAMPUSES.findIndex((c) => c.id === id);
+  const roomRank = (d) => { const n = rooms.find((r) => r.id === d.room_id)?.name || ''; return /storage/i.test(n) || !n ? 2 : /^worship/i.test(n) ? 0 : 1; };
+  const sorted = [...devices].sort((a, b) => campusAt(a.campus_id) - campusAt(b.campus_id) || roomRank(a) - roomRank(b)
+    || (nameNumber(a.name) - nameNumber(b.name)) || a.name.localeCompare(b.name));
+  const asset = new Map();
+  const stage = new Map();
+  for (const d of sorted) {
+    asset.set(d.type_id, (asset.get(d.type_id) || 0) + 1);
+    d.asset_no = asset.get(d.type_id);
+    const k = `${d.type_id}|${d.campus_id}|${d.room_id}`;
+    stage.set(k, (stage.get(k) || 0) + 1);
+    d.stage_no = stage.get(k);
+  }
 }
 
 // Example Resi players. The preview makes up what each one is showing.
@@ -213,6 +248,34 @@ export function createDemoStore() {
     return out;
   }
   const blank = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+  const NUMBER_KEYS = ['asset_no', 'stage_no', 'fixture_id', 'patch_universe', 'patch_address', 'dmx_channels'];
+  const assetHigh = new Map(); // highest asset # each model has handed out (never reused)
+
+  /** What the database's numbering trigger does: asset #, stage #, clearing a moved item's patch, the 512 check. */
+  function number(dev, prev, explicit = {}) {
+    for (const k of NUMBER_KEYS) if (k in explicit) dev[k] = explicit[k] === '' || explicit[k] == null ? null : Number(explicit[k]);
+    const moved = prev && (prev.campus_id !== dev.campus_id || (prev.room_id || null) !== (dev.room_id || null));
+    const retyped = prev && prev.type_id !== dev.type_id;
+    const others = db.devices.filter((d) => d.id !== dev.id && d.type_id === dev.type_id);
+    const high = Math.max(assetHigh.get(dev.type_id) || 0, ...others.map((d) => d.asset_no || 0));
+    if (dev.asset_no == null || (retyped && !('asset_no' in explicit))) dev.asset_no = high + 1;
+    else if (others.some((d) => d.asset_no === dev.asset_no)) throw new Error('Another one of this model already has that asset number.');
+    assetHigh.set(dev.type_id, Math.max(high, dev.asset_no));
+    if ((!prev && dev.stage_no == null) || ((moved || retyped) && !('stage_no' in explicit))) {
+      dev.stage_no = Math.max(0, ...others.filter((d) => d.campus_id === dev.campus_id && (d.room_id || null) === (dev.room_id || null)).map((d) => d.stage_no || 0)) + 1;
+    }
+    if (moved) {
+      if (!('fixture_id' in explicit)) dev.fixture_id = null;
+      if (!('patch_universe' in explicit)) { dev.patch_universe = null; dev.patch_address = null; }
+    }
+    if ((dev.patch_universe == null) !== (dev.patch_address == null)) throw new Error('A patch needs both a universe and an address, like 1.333.');
+    if (dev.patch_address != null) {
+      const ch = footprint(dev, db.types.find((t) => t.id === dev.type_id)) || 1;
+      if (dev.patch_address + ch - 1 > 512) {
+        throw new Error(`Patched at ${dev.patch_universe}.${dev.patch_address} with ${ch} channels, it runs past address 512. Start it at ${dev.patch_universe}.${513 - ch} or lower, or on the next universe.`);
+      }
+    }
+  }
 
   const pco = createPcoDemo({ wait, clone, me, changed });
 
@@ -257,11 +320,16 @@ export function createDemoStore() {
         db.devPorts = db.devPorts.filter((x) => x.device_id !== dev.id || keepPorts.has(x.type_port_id));
       }
       if (dev) {
-        const ch = diff(dev, fields, Object.keys(fields));
-        Object.assign(dev, fields, { updated_at: now(), updated_by: me.id });
+        const before = clone(dev);
+        const next = { ...dev, ...fields };
+        number(next, before, payload.numbers || {});
+        const keys = [...Object.keys(fields), ...NUMBER_KEYS];
+        const ch = diff(dev, next, keys);
+        Object.assign(dev, next, { updated_at: now(), updated_by: me.id });
         if (Object.keys(ch).length) log('updated', 'devices', dev, ch);
       } else {
-        dev = { id: uid(), ...fields, created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+        dev = { id: uid(), ...fields, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+        number(dev, null, payload.numbers || {});
         db.devices.push(dev);
         log('created', 'devices', dev, { name: dev.name });
       }
@@ -339,7 +407,8 @@ export function createDemoStore() {
         throw new Error('There’s already a model with that name from that brand.');
       }
       const fields = { name, manufacturer: mfr, part_number: blank(t.part_number), category: blank(t.category), departments: tags, networked: t.networked !== false,
-        description: blank(t.description), specs: t.specs || [], manual_url: blank(t.manual_url), notes: blank(t.notes) };
+        description: blank(t.description), specs: t.specs || [], manual_url: blank(t.manual_url), notes: blank(t.notes),
+        dmx_modes: t.dmx_modes || [], dmx_footprint: t.dmx_footprint || null };
       let row = t.id ? db.types.find((x) => x.id === t.id) : null;
       if (row) Object.assign(row, fields, { updated_at: now(), updated_by: me.id });
       else db.types.push((row = { id: uid(), ...fields, created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id }));
@@ -369,12 +438,41 @@ export function createDemoStore() {
       for (const n of names) {
         const dev = { id: uid(), type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(n) || type.name,
           departments: tags.length ? tags : [...type.departments], serial_number: null, firmware: null, location: blank(d.location),
-          status: d.status || 'active', notes: blank(d.notes), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+          status: d.status || 'active', notes: blank(d.notes), ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
+          created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+        number(dev, null);
         db.devices.push(dev);
         log('created', 'devices', dev, { name: dev.name });
       }
       changed('devices');
       return names.length;
+    },
+    async setDeviceNumbers(rows) {
+      await wait(200);
+      const staged = rows.map((r) => {
+        const dev = db.devices.find((d) => d.id === r.id);
+        if (!dev) return null;
+        const next = { ...dev };
+        const explicit = Object.fromEntries(NUMBER_KEYS.filter((k) => k in r).map((k) => [k, r[k]]));
+        for (const k of Object.keys(explicit)) next[k] = explicit[k] === '' || explicit[k] == null ? null : Number(explicit[k]);
+        return { dev, next, explicit };
+      }).filter(Boolean);
+      // Check everything first so a bad row saves nothing (like one database transaction).
+      for (const { dev, next, explicit } of staged) {
+        const others = db.devices.filter((d) => d.id !== dev.id && d.type_id === dev.type_id).map((d) => staged.find((x) => x.dev === d)?.next || d);
+        if (next.asset_no != null && others.some((d) => d.asset_no === next.asset_no)) throw new Error('Another one of this model already has that asset number.');
+        const { asset_no: _skip, ...rest } = explicit; // asset #s were checked above, across the whole batch
+        number({ ...next, asset_no: dev.asset_no }, dev, rest);
+      }
+      for (const { dev, next, explicit } of staged) {
+        const ch = diff(dev, next, NUMBER_KEYS);
+        if (!Object.keys(ch).length) continue;
+        if (next.asset_no == null) number(next, dev, explicit);
+        Object.assign(dev, next, { updated_at: now(), updated_by: me.id });
+        log('updated', 'devices', dev, ch);
+      }
+      changed('devices');
+      return staged.length;
     },
     async deleteType(id) {
       await wait(150);

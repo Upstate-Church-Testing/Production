@@ -4,7 +4,9 @@
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
-import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, STATUS } from './devices.js';
+import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, STATUS, kv } from './devices.js';
+import { patchView } from './patch.js';
+import { takesPatch, patchOf, footprint, patchPoint, covers } from '../lighting.js';
 import { preparePhoto } from '../photo.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
 
@@ -32,6 +34,13 @@ export function mount(el, ctx) {
     store('ucp.gearmode', 'models');
     ctx.pending = null;
   }
+  // Statistics can open the patch sheet on one universe.
+  if (ctx.pending?.patch) {
+    s.mode = 'patch';
+    s.puni = ctx.pending.patch.universe ?? 'all';
+    store('ucp.gearmode', 'patch');
+    ctx.pending = null;
+  }
   const remember = () => { ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand }; };
   remember();
   let openType = null; // { id, refresh } of the type panel on screen
@@ -44,6 +53,7 @@ export function mount(el, ctx) {
           <button type="button" role="tab" data-gmode="types">Models</button>
           <button type="button" role="tab" data-gmode="models">Items</button>
           <button type="button" role="tab" data-gmode="grid">Grid</button>
+          <button type="button" role="tab" data-gmode="patch">Patch</button>
         </div>
         <p class="tally" id="g-tally" aria-live="polite"></p>
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
@@ -62,17 +72,19 @@ export function mount(el, ctx) {
     <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
   // Filters, in order: location, section, category, brand. Each narrows the next.
-  const unit = () => (s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
+  const itemMode = () => s.mode === 'models' || s.mode === 'patch'; // filters choose from items, not models
+  const unit = () => (s.mode === 'patch' ? ['fixture', 'fixtures'] : s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
   const loc = locationDropdown(ctx, $('#g-loc', el), {
     unit,
     get: () => s.campus,
-    set: (v) => { s.campus = ctx.campus = v; draw(); },
+    set: (v) => { s.campus = ctx.campus = v; patch.cancel(); draw(); },
     counts: () => {
       if (!s.data) return {};
-      const models = s.mode === 'models';
-      const counts = { [ALL]: models ? s.data.devices.length : s.data.types.length };
+      const models = itemMode();
+      const pool = s.mode === 'patch' ? s.data.devices.filter((d) => takesPatch(d, typeOf(d))) : s.data.devices;
+      const counts = { [ALL]: models ? pool.length : s.data.types.length };
       for (const c of ctx.campuses) {
-        const here = s.data.devices.filter((d) => d.campus_id === c.id);
+        const here = pool.filter((d) => d.campus_id === c.id);
         counts[c.id] = models ? here.length : new Set(here.map((d) => d.type_id)).size;
       }
       return counts;
@@ -118,22 +130,34 @@ export function mount(el, ctx) {
   });
   const q = $('#g-q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); draw(); }, 120));
+  const patch = patchView({
+    s, ctx, typeOf: (d) => typeOf(d), matches: (d) => patchMatches(d), openModel: (id) => openModel(id), load: (quiet) => load(quiet),
+    setCampus: (id) => { s.campus = ctx.campus = id; loc.update(); draw(); window.scrollTo({ top: 0 }); },
+    campusName: (id) => campusName(id),
+  });
+  const results = $('#g-results', el);
+  results.addEventListener('click', (e) => { if (s.mode === 'patch') patch.click(e); });
+  results.addEventListener('input', (e) => { if (s.mode === 'patch') patch.input(e); });
+  results.addEventListener('keydown', (e) => { if (s.mode === 'patch') patch.keydown(e); });
   el.addEventListener('click', (e) => {
     const t = e.target.closest('[data-act], [data-type], [data-gmode], [data-model], [data-copy]');
     if (!t) return;
     if (t.dataset.copy) { copyText(t.dataset.copy, t).then((ok) => ctx.toast(ok ? `Copied ${t.dataset.copy}` : 'Selected. Copy it from the menu.')); }
     else if (t.dataset.model) openModel(t.dataset.model);
-    else if (t.dataset.gmode) { s.mode = t.dataset.gmode; store('ucp.gearmode', s.mode); draw(); }
+    else if (t.dataset.gmode) { s.mode = t.dataset.gmode; store('ucp.gearmode', s.mode); patch.cancel(); draw(); }
     else if (t.dataset.type) openTypeSheet(t.dataset.type);
-    else if (t.dataset.act === 'add') s.mode === 'models' ? openModel(null, true) : newType();
+    else if (t.dataset.act === 'add') itemMode() ? openModel(null, true) : newType();
     else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
     else if (t.dataset.act === 'retry') load();
     else if (t.dataset.act === 'grid-rooms') { s.gridRooms = !s.gridRooms; store('ucp.gridrooms', s.gridRooms); drawResults(); }
   });
   el.addEventListener('keydown', (e) => {
-    const row = e.target.closest?.('tr[data-type]');
-    if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openTypeSheet(row.dataset.type); }
+    const row = e.target.closest?.('tr[data-type], tr[data-model]');
+    if (row && e.target === row && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      if (row.dataset.type) openTypeSheet(row.dataset.type); else openModel(row.dataset.model);
+    }
   });
 
   const unsubscribe = ctx.store.subscribe(debounce(() => load(true), 350));
@@ -152,6 +176,7 @@ export function mount(el, ctx) {
       s.ix = buildIndex(s.data);
       s.error = null;
     } catch (e) { s.error = e.message; }
+    if (quiet && s.mode === 'patch' && patch.editing()) { openDev?.refresh(); return; } // keep what's being typed
     draw();
     openType?.refresh();
     openDev?.refresh();
@@ -176,13 +201,16 @@ export function mount(el, ctx) {
   function catOf(t) { return t?.category || 'Uncategorized'; }
   function brandOf(t) { return brandKey(t?.manufacturer) || NO_BRAND; }
   function tagDots(tags = []) { return tagDotsHtml(ctx, tags); }
-  function inDep(tags) { return s.dep === ALL || tags.includes(s.dep); }
+  function inDep(tags) { return s.mode === 'patch' || s.dep === ALL || tags.includes(s.dep); }
   function inCat(t) { return s.cat === ALL || catOf(t) === s.cat; }
   function inBrand(t) { return s.brand === ALL || brandOf(t) === s.brand; }
   function typeOf(d) { return s.ix.type.get(d.type_id); }
   /** What the filters choose from: models or types at this location. */
-  function poolHere() { return s.mode === 'models' ? s.data.devices.filter(inCampus) : typesHere(); }
-  function typeFor(x) { return s.mode === 'models' ? typeOf(x) || {} : x; }
+  function poolHere() {
+    if (s.mode === 'patch') return s.data.devices.filter((d) => inCampus(d) && takesPatch(d, typeOf(d)));
+    return s.mode === 'models' ? s.data.devices.filter(inCampus) : typesHere();
+  }
+  function typeFor(x) { return itemMode() ? typeOf(x) || {} : x; }
 
   /** Types in play: with a campus picked, only types that have models there. */
   function typesHere() {
@@ -220,20 +248,42 @@ export function mount(el, ctx) {
     const t = typeOf(d);
     if (!inDep(d.departments) || !inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
+    if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
     return words([d.name, d.location, d.serial_number, d.firmware, d.notes, s.ix.room.get(d.room_id)?.name, ...campusWords(d.campus_id),
-      t?.name, t?.manufacturer, t?.category, t?.part_number, ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips]);
+      t?.name, t?.manufacturer, t?.category, t?.part_number, ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
+  }
+
+  /** Fixture ID, patch, stage and asset numbers as searchable words: "401", "fid401", "2.041", "u2", "asset 17". */
+  function numberWords(d) {
+    const out = [];
+    if (d.fixture_id != null) out.push(String(d.fixture_id), `fid${d.fixture_id}`, `id${d.fixture_id}`);
+    if (d.patch_universe != null) out.push(patchOf(d), `${d.patch_universe}.${d.patch_address}`, `u${d.patch_universe}`, `universe ${d.patch_universe}`);
+    if (d.asset_no != null) out.push(`asset ${d.asset_no}`, `#${d.asset_no}`);
+    if (d.stage_no != null) out.push(`stage ${d.stage_no}`);
+    return out;
+  }
+
+  /** The patch sheet's filter: category, brand and search (it only shows lighting). */
+  function patchMatches(d) {
+    const t = typeOf(d);
+    if (!inCat(t) || !inBrand(t)) return false;
+    if (!s.q) return true;
+    return words([d.name, d.location, d.serial_number, s.ix.room.get(d.room_id)?.name, t?.name, t?.manufacturer, t?.part_number, ...numberWords(d)]);
   }
 
   // ------------------------------------------------------------ drawing --
 
   function draw() {
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
-    const addLabel = s.mode === 'models' ? 'Add items' : 'Add model';
+    const addLabel = itemMode() ? 'Add items' : 'Add model';
     $('.add-desktop span', el).textContent = addLabel;
     $('.fab', el).setAttribute('aria-label', addLabel);
-    q.placeholder = s.mode === 'models' ? 'Search name, model, brand, location, IP' : 'Search model, brand, port, location';
+    q.placeholder = s.mode === 'patch' ? 'Search fixture, fixture ID or patch (2.041)'
+      : s.mode === 'models' ? 'Search name, model, fixture ID, patch, IP' : 'Search model, brand, port, location';
     el.classList.toggle('is-grid', s.mode === 'grid');
+    el.classList.toggle('is-patch', s.mode === 'patch');
+    $('#g-dep', el).hidden = s.mode === 'patch'; // the patch sheet is lighting only
     if (s.error) {
       drawTally(null);
       $('#g-results', el).innerHTML = `<div class="empty"><h3>Couldn’t load gear</h3><p>${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
@@ -246,7 +296,7 @@ export function mount(el, ctx) {
 
   /** The count up top: whatever is on screen right now. */
   function drawTally(shown, total) {
-    const unit = s.mode === 'models' ? ['item', 'items'] : ['model', 'models'];
+    const unit = itemMode() ? ['item', 'items'] : ['model', 'models'];
     $('#g-tally', el).innerHTML = shown == null ? ''
       : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${filtering() && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
@@ -254,14 +304,14 @@ export function mount(el, ctx) {
   /** Keeps each filter's choice valid for the ones before it, then refreshes the pills. */
   function drawFilters() {
     const valid = (dd, v) => dd === null || v === ALL || (s.data && optionValues(dd).includes(v));
-    if (!valid(depDd, s.dep)) s.dep = ALL;
+    if (s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
     if (!valid(catDd, s.cat)) s.cat = ALL;
     if (!valid(brandDd, s.brand)) s.brand = ALL;
     loc.update(); depDd.update(); catDd.update(); brandDd.update();
   }
   function optionValues(dd) {
     if (dd === depDd) return ctx.departments.map((d) => d.slug);
-    const pool = poolHere().filter((x) => inDep(x.departments));
+    const pool = poolHere().filter((x) => s.mode === 'patch' || inDep(x.departments));
     if (dd === catDd) return pool.map((x) => catOf(typeFor(x)));
     return pool.filter((x) => inCat(typeFor(x))).map((x) => brandOf(typeFor(x)));
   }
@@ -273,6 +323,7 @@ export function mount(el, ctx) {
     if (!s.data) return;
     if (s.mode === 'models') return drawModels(box);
     if (s.mode === 'grid') return drawGrid(box);
+    if (s.mode === 'patch') return patch.draw(box);
 
     const types = s.data.types;
     if (!types.length) {
@@ -451,7 +502,9 @@ export function mount(el, ctx) {
         <b class="g-name">${esc(d.name)}${d.status !== 'active' ? ` <span class="pill">${STATUS[d.status]}</span>` : ''}</b>
         ${sub ? `<span class="g-sub">${esc(sub)}</span>` : ''}
       </span>
-      ${ip ? `<button class="r-ip mono" data-copy="${esc(ip._addr)}" aria-label="Copy ${esc(ip._addr)}">${ipHtml(ip._addr)}</button>` : '<span></span>'}
+      ${ip ? `<button class="r-ip mono" data-copy="${esc(ip._addr)}" aria-label="Copy ${esc(ip._addr)}">${ipHtml(ip._addr)}</button>`
+        : d.patch_universe != null || d.fixture_id != null ? `<span class="r-num mono">${d.fixture_id != null ? `<b>${d.fixture_id}</b>` : ''}${d.patch_universe != null ? `<span>${esc(patchOf(d))}</span>` : ''}</span>`
+        : '<span></span>'}
     </li>`;
   }
 
@@ -504,11 +557,21 @@ export function mount(el, ctx) {
       const units = unitsOf(t.id);
       const byCampus = new Map();
       for (const u of units) { if (!byCampus.has(u.campus_id)) byCampus.set(u.campus_id, []); byCampus.get(u.campus_id).push(u); }
-      for (const list of byCampus.values()) list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })); // R3 Beam 2 before R3 Beam 10
       const campusOrder = ctx.campuses.filter((c) => byCampus.has(c.id));
       const firstIp = (u) => { const ip = s.data.ips.find((i) => i.device_id === u.id && i.ip); return ip ? splitInet(ip.ip).addr : ''; };
       const room = (u) => s.data.rooms.find((r) => r.id === u.room_id)?.name;
       const by = (pid) => ctx.people.get(pid)?.full_name || 'Someone';
+      const roomOrder = (u) => { const n = room(u) || ''; return /storage/i.test(n) || !n ? 2 : /^worship/i.test(n) ? 0 : 1; };
+      for (const list of byCampus.values()) {
+        list.sort((a, b) => roomOrder(a) - roomOrder(b) || (room(a) || '').localeCompare(room(b) || '')
+          || (a.stage_no ?? 1e9) - (b.stage_no ?? 1e9) || a.name.localeCompare(b.name, undefined, { numeric: true })); // R3 Beam 2 before R3 Beam 10
+      }
+      const patched = units.some((u) => takesPatch(u, t));
+      const unitNums = (u) => (u.fixture_id != null || u.patch_universe != null
+        ? `<span class="unit-nums mono">${u.fixture_id != null ? `<b>${u.fixture_id}</b>` : ''}${u.patch_universe != null ? `<i>${esc(patchOf(u))}</i>` : ''}</span>`
+        : `<span class="mono">${esc(firstIp(u))}</span>`);
+      const modes = t.dmx_modes || [];
+      const used = footprint({}, t);
       sheet.render(`
         <header class="sh-head">
           <div class="sh-top">${tagDots(t.departments)}<span class="eyebrow">Model</span>
@@ -521,6 +584,11 @@ export function mount(el, ctx) {
           ${photoBlock()}
           <input type="file" accept="image/*" id="t-photo-in" class="vh" tabindex="-1">
           ${t.description ? `<p class="lede">${esc(t.description)}</p>` : ''}
+          ${t.part_number || modes.length ? `<section class="block"><h3>Numbers</h3><dl class="kv">
+            ${kv('Model #', t.part_number, true)}
+            ${modes.length ? `<div class="kv-wide"><dt>DMX modes (channels)</dt><dd><span class="mode-chips">${modes.map((n) => `<span class="chip small static ${n === used ? 'on' : ''}">${n}</span>`).join('')}</span>
+              <small class="hint">${used ? `Patched as ${used} channels unless an item says otherwise` : 'Set the mode you use with Edit model'}</small></dd></div>` : ''}
+          </dl></section>` : ''}
           ${t.specs?.length ? `<section class="block"><h3>Specs</h3><dl class="kv">${t.specs.map((sp) => `<div><dt>${esc(sp.label)}</dt><dd>${esc(sp.value)}</dd></div>`).join('')}</dl></section>` : ''}
           <section class="block">
             <h3>Ports <span class="count">${t.ports.length}</span></h3>
@@ -532,8 +600,8 @@ export function mount(el, ctx) {
             ${units.length ? campusOrder.map((c) => `<div class="unit-group">
                 <p class="unit-campus">${esc(c.short_name)}</p>
                 <ul class="unit-list">${byCampus.get(c.id).map((u) => `<li><button class="unit" data-unit="${u.id}">
-                  <span><b>${esc(u.name)}</b><small>${esc([room(u), u.location].filter(Boolean).join(' · '))}</small></span>
-                  <span class="mono">${esc(firstIp(u))}</span>${icon('chevron')}
+                  <span><b>${esc(u.name)}</b><small>${esc([room(u), patched && u.stage_no != null ? `Stage #${u.stage_no}` : null, u.location, u.asset_no != null ? `Asset #${u.asset_no}` : null].filter(Boolean).join(' · '))}</small></span>
+                  ${unitNums(u)}${icon('chevron')}
                 </button></li>`).join('')}</ul>
               </div>`).join('')
               : '<p class="muted">None yet. Add one for each location that has this gear.</p>'}
