@@ -42,7 +42,8 @@ campuses ── rooms
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)
 
-device_types     the shared catalog entry ("type" in the app): name, maker, part number, category, tags, specs, manual
+device_types     the shared catalog entry ("type" in the app): name, brand, part number, category, tags, specs, manual, photo
+                 (photos live in the public gear-photos storage bucket: <path>.jpg plus a <path>-t.jpg thumbnail)
     └── device_type_ports (the port layout every unit of that type shares)
 
 departments      audio / video / lighting — the tag on every item
@@ -64,7 +65,8 @@ js/app.js                      sign-in, roles, navigation, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Types and Models (stacked by type), filtered by campus, tag and category
+js/views/gear.js               Types (by category) and Models (every unit A–Z), filtered by campus, tag, category and brand
+js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)
 js/views/devices.js            the model panel and editor (shared by Network and Gear)
 js/views/types.js              the type editor (shared by Gear and the model editor)
 js/views/team.js               people and access

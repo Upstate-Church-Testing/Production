@@ -1,5 +1,5 @@
 // App shell: picks the data source, handles accounts, and hosts each module
-// (Network today; gear, schedules, training and more later).
+// (Gear, Network, Resi, Team and Settings; schedules, training and more later).
 
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, APP_NAME, ORG_NAME } from './config.js';
 import { esc, icon, $, $$, storage, store as save } from './util.js';
@@ -17,8 +17,8 @@ export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunte
 // Modules appear in the nav for anyone at or above `minRole`.
 // New sections (Gear, Schedule, Training, Service flow…) get added here.
 const MODULES = [
-  { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
   { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
+  { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
   { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
   { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
   { id: 'account', label: 'Settings', icon: 'settings', minRole: 'volunteer', view: AccountView },

@@ -16,6 +16,17 @@ export const DIRECTIONS = { in: 'In', out: 'Out', io: 'In / Out' };
 export const typeLabel = (t) => (t ? [t.manufacturer, t.name].filter(Boolean).join(' ') : 'No type');
 export const sortPorts = (ports = []) => [...ports].sort((a, b) => a.sort_order - b.sort_order);
 
+/** Brands group regardless of capitals or stray spaces: "ETC" and "etc " are one brand. */
+export const brandKey = (name) => (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Small square product photo for lists; a quiet placeholder when there isn't one. */
+export function typeThumb(ctx, t, cls = '') {
+  const url = t?.photo_path ? ctx.store.photoUrl(t.photo_path, true) : null;
+  return url
+    ? `<span class="thumb ${cls}"><img src="${esc(url)}" alt="" loading="lazy" decoding="async"></span>`
+    : `<span class="thumb is-empty ${cls}">${icon('box')}</span>`;
+}
+
 /** "Ethernet · RJ45 · In / Out" */
 export const portMeta = (p) => [p.signal, p.connector, p.direction !== 'io' ? DIRECTIONS[p.direction] : null].filter(Boolean).join(' · ');
 

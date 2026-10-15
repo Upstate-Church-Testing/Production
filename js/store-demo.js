@@ -54,7 +54,7 @@ function buildExample() {
     if (!t) {
       t = { id: uid(), key, name, manufacturer: d.manufacturer || null, part_number: null, category: d.category || null,
         departments: [...d.departments], description: SPECS[name]?.description || null, specs: SPECS[name]?.specs || [],
-        manual_url: null, notes: null, networked: d.networked !== false, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
+        manual_url: null, notes: null, photo_path: null, networked: d.networked !== false, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
       types.push(t);
       (PORTS[name] || []).forEach((p, i) => typePorts.push({ id: uid(), type_id: t.id, connector: null, direction: 'io', notes: null, sort_order: i, ...p }));
     }
@@ -187,6 +187,7 @@ export function createDemoStore() {
   let db = buildExample();
   let streams = STREAMS.map((x) => x.stream);
   const demoStatus = new Map(STREAMS.map((x) => [x.stream.embed_id, x.status]));
+  const photos = new Map(); // demo photo path -> object URLs
   let me = clone(PEOPLE[0]);
   let people = clone(PEOPLE);
   let signedIn = true;
@@ -407,6 +408,21 @@ export function createDemoStore() {
       db.rooms.push(r);
       changed('rooms');
       return clone(r);
+    },
+
+    photoUrl(path, thumb = false) { return path ? photos.get(path)?.[thumb ? 'thumb' : 'full'] || null : null; },
+    async setTypePhoto(typeId, { full, thumb }) {
+      await wait(250);
+      const path = `demo/${typeId}/${Date.now().toString(36)}.jpg`;
+      photos.set(path, { full: URL.createObjectURL(full), thumb: URL.createObjectURL(thumb) });
+      db.types.find((t) => t.id === typeId).photo_path = path;
+      changed('device_types');
+      return path;
+    },
+    async removeTypePhoto(typeId) {
+      await wait(120);
+      db.types.find((t) => t.id === typeId).photo_path = null;
+      changed('device_types');
     },
 
     async streams() { await wait(); return clone(streams); },

@@ -102,6 +102,27 @@ export async function createSupabaseStore(url, key) {
     async deleteType(id) {
       ok(await sb.from('device_types').delete().eq('id', id));
     },
+
+    /** Public link to a type's photo; thumb=true for the small list version. */
+    photoUrl(path, thumb = false) {
+      if (!path) return null;
+      const p = thumb ? thumbPath(path) : path;
+      return `${url}/storage/v1/object/public/gear-photos/${p.split('/').map(encodeURIComponent).join('/')}`;
+    },
+    async setTypePhoto(typeId, { full, thumb }, oldPath = null) {
+      const bucket = sb.storage.from('gear-photos');
+      const path = `types/${typeId}/${Date.now().toString(36)}.jpg`;
+      const opts = { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false };
+      ok(await bucket.upload(path, full, opts));
+      ok(await bucket.upload(thumbPath(path), thumb, opts));
+      ok(await sb.from('device_types').update({ photo_path: path }).eq('id', typeId));
+      if (oldPath) bucket.remove([oldPath, thumbPath(oldPath)]).catch(() => {});
+      return path;
+    },
+    async removeTypePhoto(typeId, oldPath = null) {
+      ok(await sb.from('device_types').update({ photo_path: null }).eq('id', typeId));
+      if (oldPath) sb.storage.from('gear-photos').remove([oldPath, thumbPath(oldPath)]).catch(() => {});
+    },
     async credentials(deviceId) {
       return ok(await sb.from('device_credentials').select('*').eq('device_id', deviceId).order('sort_order'));
     },
@@ -156,6 +177,8 @@ export async function createSupabaseStore(url, key) {
   };
 }
 
+const thumbPath = (p) => p.replace(/\.jpg$/i, '-t.jpg');
+
 // Turns database and auth errors into sentences people can act on.
 function friendly(error) {
   const msg = error?.message || String(error);
@@ -172,6 +195,7 @@ function friendly(error) {
     [/devices_type_id_fkey/i, 'This type still has models at campuses. Delete or change those first.'],
     [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],
     [/invalid input syntax for type uuid/i, 'That doesn’t look like a Resi player ID.'],
+    [/Payload too large|exceeded the maximum allowed size/i, 'That photo is too big. Try a smaller one.'],
     [/row-level security|permission denied/i, 'Your account doesn’t have access to change this.'],
     [/Failed to fetch|NetworkError/i, 'Can’t reach the server. Check your connection and try again.'],
   ];

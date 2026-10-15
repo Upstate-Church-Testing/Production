@@ -8,7 +8,7 @@ import {
   esc, icon, $, $$, debounce, storage, store, ipToInt, intToIp, splitInet, prefixToMask, maskToPrefix,
   parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText,
 } from '../util.js';
-import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
+import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb } from './types.js';
 
 export const IP_LABELS = ['Management', 'Control', 'Dante Primary', 'Dante Secondary', 'Art-Net / sACN', 'NDI', 'Video', 'House', 'Production'];
 export const MASKS = ['255.255.255.0', '255.255.0.0', '255.0.0.0', '255.255.255.128', '255.255.254.0', '255.255.252.0'];
@@ -197,10 +197,12 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       <header class="sh-head">
         <div class="sh-top">${tagDots(dev.departments)}${dev.status !== 'active' ? `<span class="pill">${STATUS[dev.status]}</span>` : ''}
           <button class="icon-btn" data-a="close" aria-label="Close">${icon('close')}</button></div>
+        ${ty?.manufacturer ? `<p class="sh-brand">${esc(ty.manufacturer)}</p>` : ''}
         <h2>${esc(dev.name)}</h2>
-        <p class="sh-sub">${esc([ty?.category, typeLabel(ty)].filter(Boolean).join(' · '))}</p>
+        <p class="sh-sub">${esc([ty?.name, ty?.category].filter(Boolean).join(' · '))}</p>
       </header>
       <div class="sh-body">
+        ${ty?.photo_path ? `<div class="photo-hero is-compact"><img src="${esc(ctx.store.photoUrl(ty.photo_path))}" alt="${esc(typeLabel(ty))}"></div>` : ''}
         <section class="ip-list">
           ${ips.length ? ips.map((ip) => ipCard(ip)).join('') : `<div class="ipcard empty-ip"><p>No IP recorded yet.</p><button class="btn" data-a="edit">${icon('plus')}Add an IP</button></div>`}
         </section>
@@ -223,7 +225,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         </section>` : ''}
         ${ty ? `<section class="block type-block">
           <h3>Type</h3>
-          <button class="type-link" data-a="open-type"><span><b>${esc(ty.name)}</b><small>${esc([ty.manufacturer, ty.category, ty.part_number].filter(Boolean).join(' · '))}</small></span>${icon('chevron')}</button>
+          <button class="type-link" data-a="open-type">${typeThumb(ctx, ty)}<span><b>${esc(ty.name)}</b><small>${esc([ty.manufacturer, ty.category, ty.part_number].filter(Boolean).join(' · '))}</small></span>${icon('chevron')}</button>
           ${ty.description ? `<p class="muted">${esc(ty.description)}</p>` : ''}
           ${ty.specs?.length ? `<dl class="kv compact">${ty.specs.map((sp) => `<div><dt>${esc(sp.label)}</dt><dd>${esc(sp.value)}</dd></div>`).join('')}</dl>` : ''}
         </section>` : ''}
