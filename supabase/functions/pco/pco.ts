@@ -63,6 +63,11 @@ export function pcoClient({ appId, secret, base = API, fetchImpl = fetch, perWin
         continue;
       }
       if (res.status >= 500 && attempt < 2) { await res.body?.cancel(); await sleep(1500); continue; }
+      // An `include` Planning Center doesn't offer here shouldn't sink the sync: ask again without it.
+      if (res.status === 400 && /[?&]include=/.test(url)) {
+        await res.body?.cancel();
+        return get(url.replace(/([?&])include=[^&]*&?/, '$1').replace(/[?&]$/, ''));
+      }
       if (!res.ok) throw new PcoError(res.status, url, await res.text().catch(() => ''));
       return await res.json();
     }

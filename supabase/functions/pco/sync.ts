@@ -246,7 +246,7 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     try {
       [members, needed] = await Promise.all([
         pco.all(`${base}/team_members?per_page=100&include=team,person`),
-        pco.all(`${base}/needed_positions?per_page=100&include=team`),
+        pco.all(`${base}/needed_positions?per_page=100`),
       ]);
     } catch (e) {
       if (skippable(e)) return;
