@@ -19,9 +19,7 @@ export function mount(el, ctx) {
   if (s.campus !== 'all' && !ctx.campusById.has(s.campus)) s.campus = 'all';
 
   el.innerHTML = `
-    <div class="page-head">
-      <div class="eyebrow">Statistics</div>
-    </div>
+    <div class="page-head is-empty"></div>
     <div class="toolbar filter-bar stats-filters"><div class="filters">${dropdownHtml('st-loc', 'Location', 'caps')}</div></div>
     <div class="results stats-page" id="st-body"><div class="loading">${'<div class="sk"></div>'.repeat(4)}</div></div>`;
 

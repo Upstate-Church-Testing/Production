@@ -16,7 +16,6 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
-      <div class="eyebrow">Team</div>
       <div class="head-row"><h1 class="h1">People &amp; access</h1></div>
       <p class="head-meta">${isAdmin ? 'Approve new sign-ups and set what each person can see.' : 'Only admins can change roles.'}</p>
     </div>

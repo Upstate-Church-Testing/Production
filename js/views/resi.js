@@ -26,7 +26,6 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
-      <div class="eyebrow">Resi</div>
       <div class="head-row">
         <h1 class="h1" id="r-h1">Checking…</h1>
         ${canEdit ? `<button class="btn add-desktop" data-act="settings">${icon('settings')}<span>Players</span></button>` : ''}

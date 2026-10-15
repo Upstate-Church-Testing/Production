@@ -10,7 +10,6 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
-      <div class="eyebrow">Settings</div>
       <div class="head-row"><h1 class="h1">${esc(me.full_name || 'Your account')}</h1></div>
       <p class="head-meta">${esc(me.email)} <i>·</i> ${esc(ctx.roleLabel[me.role])}</p>
     </div>

@@ -65,7 +65,17 @@ const appEl = () => $('#app');
 
 // ------------------------------------------------------------------ boot --
 
+// No zooming: pinch and double-tap zoom are off (CSS handles double-tap;
+// Safari also needs its gesture events stopped to keep pinch from zooming).
+function blockZoom() {
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+  }
+  document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+}
+
 async function boot() {
+  blockZoom();
   applyTheme();
   // Filters used to be remembered between launches; they now reset every time.
   for (const k of ['ucp.campus', 'ucp.geardep', 'ucp.geartags', 'ucp.gearcat', 'ucp.gearbrand', 'ucp.netdep', 'ucp.tags']) {

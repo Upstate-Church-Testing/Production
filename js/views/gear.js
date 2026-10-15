@@ -38,7 +38,6 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
-      <div class="eyebrow">Gear</div>
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-gmode="types">Models</button>
@@ -301,7 +300,6 @@ export function mount(el, ctx) {
 
   function typeRow(t) {
     const units = unitsHere(t.id);
-    const campuses = new Set(units.map((u) => u.campus_id)).size;
     const sub = [t.category, t.ports?.length ? plural(t.ports.length, 'port') : null, t.networked === false ? 'No IP' : null].filter(Boolean).join(' · ');
     return `<li class="gear-row">
       <button class="row-hit" data-type="${t.id}" aria-label="Open ${esc(typeLabel(t))}"></button>
@@ -311,7 +309,7 @@ export function mount(el, ctx) {
         <b class="g-name">${esc(t.name)}</b>
         ${sub ? `<span class="g-sub">${esc(sub)}</span>` : ''}
       </span>
-      <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'item' : 'items'}${s.campus === 'all' && campuses > 1 ? ` · ${plural(campuses, 'location')}` : ''}</small></span>
+      <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'item' : 'items'}</small></span>
     </li>`;
   }
 

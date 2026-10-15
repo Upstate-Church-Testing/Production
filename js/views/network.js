@@ -26,7 +26,6 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
-      <div class="eyebrow">Network · IP sheet</div>
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-mode="devices">Items</button>
