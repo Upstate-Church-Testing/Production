@@ -1,6 +1,7 @@
 // Services: browse Planning Center by location, then date, then service
-// (Vintage, Traditional, Modern…), and see that service's times and who's on
-// the production teams. Planning Center is connected once for the whole church
+// (Vintage, Traditional, Modern…), and see that service's flow (the order of
+// service, with run times and team notes), its times and who's on the
+// production teams. Planning Center is connected once for the whole church
 // (Settings › Planning Center); nobody signs in to it here. What each person
 // sees comes from their role in this app and the services an admin shares.
 
@@ -16,7 +17,8 @@ export function mount(el, ctx) {
   const isStaff = ctx.roleAtLeast(ctx.me.role, 'staff');
   const isAdmin = ctx.me.role === 'admin';
   // Where you were (location, date, service) lasts while the app is open.
-  const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null });
+  const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null, pane: 'flow', at: 0 });
+  const flows = new Map(); // plan id -> its items, loaded when opened
   const s = {
     status: undefined, // undefined while loading, null when Planning Center isn't connected
     data: null,
@@ -60,12 +62,14 @@ export function mount(el, ctx) {
   });
 
   el.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto]');
+    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at]');
     if (!t) return;
     if (t.dataset.smode) { s.mine = t.dataset.smode === 'mine'; draw(); return; }
     if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
-    if (t.dataset.date) { nav.date = t.dataset.date; nav.plan = null; draw(); return; }
-    if (t.dataset.plan) { nav.plan = t.dataset.plan; draw(); return; }
+    if (t.dataset.date) { nav.date = t.dataset.date; nav.plan = null; nav.at = 0; draw(); return; }
+    if (t.dataset.plan) { nav.plan = t.dataset.plan; nav.at = 0; draw(); return; }
+    if (t.dataset.pane) { nav.pane = t.dataset.pane; draw(); return; }
+    if (t.dataset.at) { nav.at = Number(t.dataset.at); draw(); return; }
     if (t.dataset.goto) { openPlan(t.dataset.goto); return; }
     const act = t.dataset.act;
     if (act === 'settings') ctx.openSettings('pco');
@@ -120,6 +124,7 @@ export function mount(el, ctx) {
       s.status = status;
       s.data = data;
       s.error = null;
+      flows.clear(); // a sync may have changed them
       if (me) ctx.me.pco_person_id = me.pco_person_id ?? null; // matched by email during a sync
     } catch (e) {
       if (!quiet || !s.data) s.error = e.message;
@@ -313,6 +318,10 @@ export function mount(el, ctx) {
     const blocks = teams.map((tm) => teamBlock(tm, roster.filter((r) => r.team_id === tm.id), (p.needed || []).filter((n) => n.team_id === tm.id), m.me, tally)).join('');
     const sub = [p.title && !t.name.toLowerCase().includes(p.title.toLowerCase()) ? p.title : null, p.series_title].filter(Boolean).join(' · ');
     const times = [...p.times].filter((x) => x.starts_at).sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+    const items = flows.get(p.id);
+    if (items === undefined) loadFlow(p.id);
+    const crewCount = roster.filter((r) => r.status !== 'D').length;
+    const pane = nav.pane === 'team' ? 'team' : 'flow';
     return `<article class="svc-detail">
       <header class="svc-dhead">
         <div class="svc-title">
@@ -325,16 +334,86 @@ export function mount(el, ctx) {
       ${times.length ? `<ol class="svc-times-list">${times.map((x) => `<li class="${x.kind === 'service' ? 'is-service' : ''}">
           <b>${esc(m.c.time(x.starts_at))}</b><span>${esc(x.name || (x.kind === 'service' ? 'Service' : x.kind === 'rehearsal' ? 'Rehearsal' : 'Other'))}</span>
         </li>`).join('')}</ol>` : ''}
-      <div class="svc-teams">${blocks || '<p class="svc-none">No production teams on this service.</p>'}</div>
-      <footer class="svc-foot">
-        <span class="svc-counts">${[
-          tally.C ? `<span class="is-C">${tally.C} confirmed</span>` : '',
-          tally.U ? `<span class="is-U">${tally.U} not yet</span>` : '',
-          tally.D ? `<span class="is-D">${tally.D} declined</span>` : '',
-          tally.open ? `<span class="is-open">${tally.open} open</span>` : '',
-        ].filter(Boolean).join('') || '<span>No one scheduled yet</span>'}</span>
-      </footer>
+      <div class="seg svc-panes" role="tablist" aria-label="Show">
+        <button type="button" role="tab" data-pane="flow" aria-selected="${pane === 'flow'}">${icon('list')}Flow${items?.length ? `<small>${items.filter((x) => x.kind !== 'header').length}</small>` : ''}</button>
+        <button type="button" role="tab" data-pane="team" aria-selected="${pane === 'team'}">${icon('team')}Team<small>${crewCount}</small></button>
+      </div>
+      <div class="svc-split" data-show="${pane}">
+        <section class="svc-flow" aria-label="Flow of service">${flowHtml(m, p, items)}</section>
+        <section class="svc-crew" aria-label="Team">
+          <div class="svc-teams">${blocks || '<p class="svc-none">No production teams on this service.</p>'}</div>
+          <footer class="svc-foot">
+            <span class="svc-counts">${[
+              tally.C ? `<span class="is-C">${tally.C} confirmed</span>` : '',
+              tally.U ? `<span class="is-U">${tally.U} not yet</span>` : '',
+              tally.D ? `<span class="is-D">${tally.D} declined</span>` : '',
+              tally.open ? `<span class="is-open">${tally.open} open</span>` : '',
+            ].filter(Boolean).join('') || '<span>No one scheduled yet</span>'}</span>
+          </footer>
+        </section>
+      </div>
     </article>`;
+  }
+
+  async function loadFlow(planId) {
+    flows.set(planId, null); // loading
+    try {
+      const items = await ctx.store.pcoItems(planId);
+      flows.set(planId, items || []);
+    } catch (e) {
+      flows.set(planId, { error: e.message });
+    }
+    if (alive && nav.plan === planId) draw();
+  }
+
+  // The order of service with a running clock: pre-service items lead up to the
+  // start, the service runs from it, post-service items follow the end.
+  function flowHtml(m, p, items) {
+    if (items === undefined || items === null) return `<div class="loading">${'<div class="sk"></div>'.repeat(3)}</div>`;
+    if (items.error) return `<p class="svc-none">Couldn’t load the flow: ${esc(items.error)}</p>`;
+    if (!items.some((x) => x.kind !== 'header')) return '<p class="svc-none">No flow in Planning Center for this service yet.</p>';
+    const list = [...items].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const starts = p.times.filter((x) => x.kind === 'service' && x.starts_at).map((x) => Date.parse(x.starts_at)).sort((a, b) => a - b);
+    const at = Math.min(nav.at || 0, Math.max(0, starts.length - 1));
+    const start = starts[at] ?? Date.parse(p.sort_date);
+    const secs = (x) => (x.kind === 'header' ? 0 : Math.max(0, x.length || 0));
+    const total = (pos) => list.filter((x) => x.position === pos).reduce((n, x) => n + secs(x), 0);
+    const during = total('during');
+    const clockAt = { pre: start - total('pre') * 1000, during: start, post: start + during * 1000 };
+    const hhmm = (ms) => m.c.time(ms).replace(/\s?[AP]M$/, '');
+    const rows = list.map((x) => {
+      if (x.kind === 'header') return `<li class="fl-head"><span>${esc(x.title || 'Section')}</span></li>`;
+      const pos = x.position === 'pre' || x.position === 'post' ? x.position : 'during';
+      const when = clockAt[pos];
+      clockAt[pos] += secs(x) * 1000;
+      const desc = x.description || '';
+      const short = desc && desc.length <= 60 && !/\n/.test(desc);
+      const meta = [
+        pos === 'pre' ? 'Pre-service' : pos === 'post' ? 'Post-service' : null,
+        x.kind === 'song' ? 'Song' : x.kind === 'media' ? 'Media' : null,
+        x.key_name ? `Key ${x.key_name}` : null,
+        short ? desc : null,
+        x.arrangement,
+      ].filter(Boolean);
+      return `<li class="fl-item fl-${esc(x.kind)} ${pos !== 'during' ? 'is-out' : ''}">
+        <span class="fl-time">${esc(hhmm(when))}</span>
+        <div class="fl-main">
+          <b>${esc(x.title || 'Untitled')}</b>
+          ${meta.length ? `<span class="fl-meta">${meta.map((t) => esc(t)).join(' <i>·</i> ')}</span>` : ''}
+          ${(x.notes || []).map((n) => `<span class="fl-note"><em ${noteDep(n.category)}>${esc(n.category)}</em>${esc(n.content)}</span>`).join('')}
+          ${desc && !short ? `<details class="fl-desc"><summary>${esc(desc.split('\n')[0].slice(0, 70))}${desc.length > 70 || /\n/.test(desc) ? '…' : ''}</summary><p>${esc(desc).replace(/\n/g, '<br>')}</p></details>` : ''}
+        </div>
+        <span class="fl-len">${secs(x) ? esc(duration(secs(x))) : ''}</span>
+      </li>`;
+    }).join('');
+    const pick = starts.length > 1 ? `<div class="seg svc-at" role="radiogroup" aria-label="Times for">
+        ${starts.map((t, i) => `<button type="button" role="radio" data-at="${i}" aria-checked="${i === at}" aria-selected="${i === at}">${esc(m.c.time(t))}</button>`).join('')}
+      </div>` : '';
+    return `<div class="fl-top">
+        <p class="fl-sum">Runs <b>${esc(duration(during))}</b> <i>·</i> ${esc(m.c.time(start))} to ${esc(m.c.time(start + during * 1000))}</p>
+        ${pick}
+      </div>
+      <ol class="flow">${rows}</ol>`;
   }
 
   function mySchedule(m) {
@@ -414,6 +493,20 @@ export function mount(el, ctx) {
       ${statusMark(r.status)}
     </li>`;
   }
+}
+
+// A note's team, by its Planning Center category, so cues read in their section's color.
+function noteDep(category) {
+  const c = String(category || '').toLowerCase();
+  const dep = /light/.test(c) ? 'lighting' : /audio|sound|foh|mix/.test(c) ? 'audio' : /video|media|cg|camera|graphic|propresenter|lyric|broadcast/.test(c) ? 'video' : null;
+  return dep ? `data-dep="${dep}"` : '';
+}
+
+function duration(sec) {
+  const h = Math.floor(sec / 3600);
+  const mm = Math.floor((sec % 3600) / 60);
+  const ss = String(sec % 60).padStart(2, '0');
+  return h ? `${h}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
 }
 
 function statusMark(st) {

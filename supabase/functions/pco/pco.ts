@@ -27,7 +27,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export type Doc = { data: any; included?: any[]; links?: { next?: string }; meta?: any };
 
-export function pcoClient({ appId, secret, base = API, fetchImpl = fetch, perWindow = 85, windowMs = 20000 }:
+export function pcoClient({ appId, secret, base = API, fetchImpl = fetch, perWindow = 92, windowMs = 20000 }:
   { appId: string; secret: string; base?: string; fetchImpl?: typeof fetch; perWindow?: number; windowMs?: number }) {
   const auth = 'Basic ' + btoa(`${appId}:${secret}`);
   const host = new URL(base).host;

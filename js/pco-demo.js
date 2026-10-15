@@ -121,6 +121,32 @@ export function createPcoDemo({ wait, clone, me, changed }) {
         .map((p) => (p.person_id === 'pp-me' ? { ...p, name: myName() } : p));
       return clone({ types, teams, plans, people });
     },
+    async pcoItems(planId) {
+      await wait(120);
+      const plan = db.plans.find((p) => p.id === planId);
+      if (!plan) return [];
+      const it = (n, title, kind, position, length, extra = {}) => ({ id: `${planId}-i${n}`, plan_id: planId, sequence: n, title, kind, position, length, description: null, key_name: null, arrangement: null, notes: [], ...extra });
+      return [
+        it(1, 'Pre-Service', 'header', 'during', 0),
+        it(2, 'Online Welcome Host', 'item', 'pre', 67),
+        it(3, 'Campus Countdown Video', 'media', 'pre', 300, { notes: [{ category: 'Video', content: 'Roll at 5:00 to go' }] }),
+        it(4, 'Worship', 'header', 'during', 0),
+        it(5, 'Holy Spirit Welcome', 'song', 'during', 261, { key_name: 'E', description: 'Jordan', arrangement: 'I V1 C V2 C B C' }),
+        it(6, 'Holy Forever', 'song', 'during', 315, { key_name: 'F', description: 'Jordan', notes: [{ category: 'Lighting', content: 'Blue wash through the bridge' }] }),
+        it(7, 'Opening Host', 'header', 'during', 0),
+        it(8, 'Welcome and announcements', 'item', 'during', 180, { description: '- Welcome to Upstate Church\n- Engage the online audience\n- Introduce yourself\nCONNECT - If this is your first time with us, text CONNECT to 85321.\nGIVE - Text GIVE to 85321 to give online.' }),
+        it(9, 'Video', 'header', 'during', 0),
+        it(10, 'Series Bumper', 'media', 'during', 40, { notes: [{ category: 'Audio', content: 'CG' }] }),
+        it(11, 'Message', 'header', 'during', 0),
+        it(12, 'Message', 'item', 'during', 2100, { description: 'Teaching pastor' }),
+        it(13, 'Prayer', 'item', 'during', 30),
+        it(14, 'Worship', 'header', 'during', 0),
+        it(15, 'Living Hope', 'song', 'during', 278, { key_name: 'C', description: 'Jordan' }),
+        it(16, 'Closing Comments / Prayer', 'item', 'during', 30),
+        it(17, 'Post-Service', 'header', 'during', 0),
+        it(18, 'Online Closing Host', 'item', 'post', 27),
+      ];
+    },
     async pco(action, payload = {}) {
       await wait(500);
       if (action === 'connect') {

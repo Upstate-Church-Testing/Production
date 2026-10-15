@@ -39,7 +39,8 @@ and nobody's own Planning Center permissions matter here.
   the secret in Supabase Vault. The app can never read it back.
 - Every 15 minutes (pg_cron → the edge function) the server copies service types and
   their folders, teams, upcoming plans (6 weeks by default), and the rosters and open
-  spots of the **shown teams** (Broadcast, FOH… an admin picks) into `pco_*` tables.
+  spots of the **shown teams** (Broadcast, FOH… an admin picks), and each service's
+  flow (its items, lengths and Audio/Video/Lighting notes) into `pco_*` tables.
 - Who sees a service is set per service in Settings: **Everyone** (volunteers and up),
   **Staff**, or **Off**. A campus's weekly services that have a production team start
   shared with everyone; everything else starts off. RLS enforces it.
@@ -74,6 +75,7 @@ pco_connection   the one Planning Center connection (token secret in Vault; the 
 pco_service_types ── pco_teams (shown or not; positions)
         │            who sees it: access = everyone | staff | hidden, and which location
         └── pco_plans (upcoming: dates, times, open spots) ── pco_plan_people (shown teams only)
+                                                          └─ pco_plan_items (the flow: songs, hosts, media, lengths, team notes)
 ```
 
 Every production table carries `departments text[]`, checked against `departments`,
@@ -101,7 +103,7 @@ js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on
 js/views/account.js            Settings: your profile, Planning Center, Resi players, theme, sign out
-js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its times and production-team rosters; My schedule
+js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its flow with run times and cues, times and production-team rosters; My schedule
 js/views/pco-settings.js       Settings › Planning Center (connect, who sees which services, which teams show)
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
 js/pco-demo.js                 made-up Planning Center data for the preview

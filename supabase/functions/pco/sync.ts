@@ -28,13 +28,14 @@ export type Db = {
   savePlans(rows: any[]): Promise<void>;
   removePlansExcept(typeId: string, keepIds: string[]): Promise<void>;
   savePeople(planId: string, rows: any[]): Promise<void>;
+  saveItems(planId: string, rows: any[]): Promise<void>;
   updatePlan(id: string, patch: any): Promise<void>;
   profilesToMatch(checkedBefore: string, limit: number): Promise<{ id: string; email: string }[]>;
   setProfileMatch(id: string, personId: string | null, at: string): Promise<void>;
 };
 
 export type SyncResult = {
-  types: number; shared: number; teamsFetched: number; plans: number; rosters: number; people: number;
+  types: number; shared: number; teamsFetched: number; plans: number; rosters: number; people: number; items: number;
   matched: number; skipped: string[]; partial: boolean; peopleNote: string | null; requests: number;
 };
 
@@ -71,7 +72,7 @@ export const isWeekly = (path: string[], name: string) => path.length === 1 && C
 // allRosters: re-read every roster now, not just the next two weeks' (when someone asks).
 export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allRosters = false, now = new Date(), deadline = Infinity }:
   { pco: Pco; db: Db; weeksAhead?: number; fullTeams?: boolean; allRosters?: boolean; now?: Date; deadline?: number }): Promise<SyncResult> {
-  const out: SyncResult = { types: 0, shared: 0, teamsFetched: 0, plans: 0, rosters: 0, people: 0, matched: 0, skipped: [], partial: false, peopleNote: null, requests: 0 };
+  const out: SyncResult = { types: 0, shared: 0, teamsFetched: 0, plans: 0, rosters: 0, people: 0, items: 0, matched: 0, skipped: [], partial: false, peopleNote: null, requests: 0 };
   const stamp = now.toISOString();
   const nowMs = now.getTime();
   const late = () => Date.now() > deadline;
@@ -248,16 +249,17 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     out.plans += rows.length;
   });
 
-  // 4. Who's on the shown teams, soonest services first.
+  // 4. Who's on the shown teams, and the flow of the service, soonest services first.
   rosterJobs.sort((a, b) => a.when - b.when);
   await pool(rosterJobs, 4, async ({ plan, typeId }) => {
     if (late()) { out.partial = true; return; }
     const base = `/services/v2/service_types/${typeId}/plans/${plan.id}`;
-    let members, needed;
+    let members, needed, items;
     try {
-      [members, needed] = await Promise.all([
-        pco.all(`${base}/team_members?per_page=100&include=team,person`),
+      [members, needed, items] = await Promise.all([
+        pco.all(`${base}/team_members?per_page=100`),
         pco.all(`${base}/needed_positions?per_page=100`),
+        pco.all(`${base}/items?per_page=100&include=item_notes`),
       ]);
     } catch (e) {
       if (skippable(e)) return;
@@ -274,10 +276,28 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     const open = needed.data
       .map((n) => ({ team_id: relId(n, 'team'), position: text(n.attributes?.team_position_name) || null, quantity: Number(n.attributes?.quantity) || 1 }))
       .filter((n) => n.team_id && shownTeams.has(n.team_id));
+    const notesById = new Map(items.included.filter((x) => x.type === 'ItemNote').map((x) => [x.id, x]));
+    const flow = items.data.map((it) => ({
+      id: String(it.id), plan_id: plan.id,
+      sequence: Number.isFinite(it.attributes?.sequence) ? it.attributes.sequence : null,
+      title: text(it.attributes?.title),
+      kind: text(it.attributes?.item_type) || 'item',
+      position: text(it.attributes?.service_position) || 'during',
+      length: Number.isFinite(it.attributes?.length) ? it.attributes.length : null,
+      description: text(it.attributes?.description) || null,
+      key_name: text(it.attributes?.key_name) || null,
+      arrangement: text(it.attributes?.custom_arrangement_sequence_short) || null,
+      notes: relIds(it, 'item_notes').map((id) => notesById.get(id)).filter(Boolean)
+        .map((n: any) => ({ category: text(n.attributes?.category_name) || 'Note', content: text(n.attributes?.content) }))
+        .filter((n: any) => n.content),
+      synced_at: stamp,
+    }));
     await db.savePeople(plan.id, people);
+    await db.saveItems(plan.id, flow);
     await db.updatePlan(plan.id, { needed: open, synced_at: stamp });
     out.rosters++;
     out.people += people.length;
+    out.items += flow.length;
   });
 
   // 5. Match app accounts to Planning Center people by email, a few at a time.

@@ -171,6 +171,10 @@ export async function createSupabaseStore(url, key) {
       ]);
       return { types, teams, plans, people };
     },
+    /** The flow of one service (its Planning Center items), in order. */
+    async pcoItems(planId) {
+      return ok(await sb.from('pco_plan_items').select('*').eq('plan_id', planId).order('sequence'));
+    },
     /** connect { app_id, secret } · disconnect · sync */
     async pco(action, payload = {}) {
       const { data, error } = await sb.functions.invoke('pco', { body: { action, ...payload } });

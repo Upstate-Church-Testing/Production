@@ -57,6 +57,12 @@ export function dbAdapter(sb: any): Db {
       if (rows.length) q = q.not('id', 'in', list(rows.map((r) => r.id)));
       ok(await q);
     },
+    async saveItems(planId, rows) {
+      if (rows.length) await upsert('pco_plan_items', rows);
+      let q = sb.from('pco_plan_items').delete().eq('plan_id', planId);
+      if (rows.length) q = q.not('id', 'in', list(rows.map((r) => r.id)));
+      ok(await q);
+    },
     async updatePlan(id, patch) {
       ok(await sb.from('pco_plans').update(patch).eq('id', id));
     },
