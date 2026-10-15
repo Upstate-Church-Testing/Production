@@ -5,7 +5,7 @@ import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo,
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, STATUS } from './devices.js';
 import { preparePhoto } from '../photo.js';
-import { locationPill, wireLocationPicker } from '../picker.js';
+import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
 
 const NO_BRAND = '__none';
 
@@ -13,9 +13,9 @@ export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
   const s = {
     q: '',
-    tags: new Set(storage('ucp.geartags', [])),
-    cat: storage('ucp.gearcat', null),
-    brand: storage('ucp.gearbrand', null),
+    dep: storage('ucp.geardep', storage('ucp.geartags', [])[0] || ALL), // Section: audio, video, lighting, network
+    cat: storage('ucp.gearcat', null) || ALL,
+    brand: storage('ucp.gearbrand', null) || ALL,
     mode: storage('ucp.gearmode', 'types'),
     campus: storage('ucp.campus', ctx.me.home_campus_id || 'all'), // shared with Network
     data: null,
@@ -29,53 +29,91 @@ export function mount(el, ctx) {
   el.innerHTML = `
     <div class="page-head">
       <div class="eyebrow">Gear</div>
-      <div class="head-row">
-        ${locationPill('g-loc')}
-        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add type</span></button>
-      </div>
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-gmode="types">Types</button>
           <button type="button" role="tab" data-gmode="models">Models</button>
         </div>
         <p class="tally" id="g-tally" aria-live="polite"></p>
+        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add type</span></button>
       </div>
     </div>
-    <div class="toolbar">
+    <div class="toolbar filter-bar">
       <div class="search">${icon('search')}<input id="g-q" type="search" autocomplete="off" enterkeyhint="search" aria-label="Search gear"></div>
-      <div class="chips" id="g-chips"></div>
-      <div class="chips scroll-chips" id="g-cats" aria-label="Categories"></div>
-      <div class="chips scroll-chips" id="g-brands" aria-label="Brands"></div>
+      <div class="filters">
+        ${dropdownHtml('g-loc', 'Location', 'caps')}
+        ${dropdownHtml('g-dep', 'Section')}
+        ${dropdownHtml('g-cat', 'Category')}
+        ${dropdownHtml('g-brand', 'Brand')}
+      </div>
     </div>
     <div id="g-results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add type">${icon('plus')}</button>`;
 
-  const loc = wireLocationPicker(ctx, $('#g-loc', el), {
+  // Filters, in order: location, section, category, brand. Each narrows the next.
+  const unit = () => (s.mode === 'models' ? ['model', 'models'] : ['type', 'types']);
+  const loc = locationDropdown(ctx, $('#g-loc', el), {
+    unit,
     get: () => s.campus,
     set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
     counts: () => {
-      if (!s.data) return null;
+      if (!s.data) return {};
       const models = s.mode === 'models';
-      const counts = { all: models ? s.data.devices.length : s.data.types.length };
+      const counts = { [ALL]: models ? s.data.devices.length : s.data.types.length };
       for (const c of ctx.campuses) {
         const here = s.data.devices.filter((d) => d.campus_id === c.id);
         counts[c.id] = models ? here.length : new Set(here.map((d) => d.type_id)).size;
       }
-      return { counts, unit: models ? 'models' : 'types', one: models ? 'model' : 'type' };
+      return counts;
+    },
+  });
+  const depDd = wireDropdown($('#g-dep', el), {
+    label: 'Section',
+    unit,
+    get: () => s.dep,
+    set: (v) => { s.dep = v; store('ucp.geardep', v); draw(); },
+    options: () => {
+      const pool = s.data ? poolHere() : [];
+      return [{ value: ALL, label: 'All', count: pool.length },
+        ...ctx.departments.map((d) => ({ value: d.slug, label: d.name, dep: d.slug, count: pool.filter((x) => x.departments.includes(d.slug)).length }))];
+    },
+  });
+  const catDd = wireDropdown($('#g-cat', el), {
+    label: 'Category',
+    unit,
+    get: () => s.cat,
+    set: (v) => { s.cat = v; store('ucp.gearcat', v); draw(); },
+    options: () => {
+      const pool = s.data ? poolHere().filter((x) => inDep(x.departments)) : [];
+      const m = new Map();
+      for (const x of pool) { const k = catOf(typeFor(x)); m.set(k, (m.get(k) || 0) + 1); }
+      const keys = [...m.keys()].sort((a, b) => (a === 'Uncategorized') - (b === 'Uncategorized') || a.localeCompare(b));
+      return [{ value: ALL, label: 'All', count: pool.length }, ...keys.map((k) => ({ value: k, label: k, count: m.get(k) }))];
+    },
+  });
+  const brandDd = wireDropdown($('#g-brand', el), {
+    label: 'Brand',
+    unit,
+    get: () => s.brand,
+    set: (v) => { s.brand = v; store('ucp.gearbrand', v); draw(); },
+    options: () => {
+      const pool = s.data ? poolHere().filter((x) => inDep(x.departments) && inCat(typeFor(x))) : [];
+      const names = s.data ? brandNames() : new Map();
+      const m = new Map();
+      for (const x of pool) { const k = brandOf(typeFor(x)); m.set(k, (m.get(k) || 0) + 1); }
+      const keys = [...m.keys()].sort((a, b) => (a === NO_BRAND) - (b === NO_BRAND) || (names.get(a) || a).localeCompare(names.get(b) || b));
+      return [{ value: ALL, label: 'All', count: pool.length }, ...keys.map((k) => ({ value: k, label: k === NO_BRAND ? 'No brand' : names.get(k), count: m.get(k) }))];
     },
   });
   const q = $('#g-q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); draw(); }, 120));
   el.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-act], [data-type], [data-tag], [data-cat], [data-brand], [data-gmode], [data-model], [data-copy]');
+    const t = e.target.closest('[data-act], [data-type], [data-gmode], [data-model], [data-copy]');
     if (!t) return;
     if (t.dataset.copy) { copyText(t.dataset.copy, t).then((ok) => ctx.toast(ok ? `Copied ${t.dataset.copy}` : 'Selected. Copy it from the menu.')); }
     else if (t.dataset.model) openModel(t.dataset.model);
     else if (t.dataset.gmode) { s.mode = t.dataset.gmode; store('ucp.gearmode', s.mode); draw(); }
     else if (t.dataset.type) openTypeSheet(t.dataset.type);
-    else if (t.dataset.cat !== undefined) { s.cat = t.dataset.cat === '' || t.dataset.cat === s.cat ? null : t.dataset.cat; store('ucp.gearcat', s.cat); draw(); }
-    else if (t.dataset.brand !== undefined) { s.brand = t.dataset.brand === '' || t.dataset.brand === s.brand ? null : t.dataset.brand; store('ucp.gearbrand', s.brand); draw(); }
-    else if (t.dataset.tag) { s.tags.has(t.dataset.tag) ? s.tags.delete(t.dataset.tag) : s.tags.add(t.dataset.tag); store('ucp.geartags', [...s.tags]); draw(); }
     else if (t.dataset.act === 'add') s.mode === 'models' ? openModel(null, true) : newType();
     else if (t.dataset.act === 'all-campuses') { s.campus = 'all'; store('ucp.campus', 'all'); loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
@@ -105,8 +143,8 @@ export function mount(el, ctx) {
   }
 
   function clearFilters() {
-    s.q = ''; q.value = ''; s.tags.clear(); s.cat = null; s.brand = null;
-    store('ucp.geartags', []); store('ucp.gearcat', null); store('ucp.gearbrand', null);
+    s.q = ''; q.value = ''; s.dep = ALL; s.cat = ALL; s.brand = ALL;
+    store('ucp.geardep', ALL); store('ucp.gearcat', ALL); store('ucp.gearbrand', ALL);
     draw();
   }
 
@@ -122,8 +160,13 @@ export function mount(el, ctx) {
   function catOf(t) { return t?.category || 'Uncategorized'; }
   function brandOf(t) { return brandKey(t?.manufacturer) || NO_BRAND; }
   function tagDots(tags = []) { return tagDotsHtml(ctx, tags); }
-  function inTags(tags) { return !s.tags.size || tags.some((x) => s.tags.has(x)); }
+  function inDep(tags) { return s.dep === ALL || tags.includes(s.dep); }
+  function inCat(t) { return s.cat === ALL || catOf(t) === s.cat; }
+  function inBrand(t) { return s.brand === ALL || brandOf(t) === s.brand; }
   function typeOf(d) { return s.ix.type.get(d.type_id); }
+  /** What the filters choose from: models or types at this location. */
+  function poolHere() { return s.mode === 'models' ? s.data.devices.filter(inCampus) : typesHere(); }
+  function typeFor(x) { return s.mode === 'models' ? typeOf(x) || {} : x; }
 
   /** Types in play: with a campus picked, only types that have models there. */
   function typesHere() {
@@ -149,9 +192,7 @@ export function mount(el, ctx) {
   }
 
   function typeMatches(t) {
-    if (!inTags(t.departments)) return false;
-    if (s.cat && catOf(t) !== s.cat) return false;
-    if (s.brand && brandOf(t) !== s.brand) return false;
+    if (!inDep(t.departments) || !inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
     return words([t.name, t.manufacturer, t.category, t.part_number, t.description, ...t.departments.map((x) => ctx.dep[x]?.name || x),
       ...(t.ports || []).map((p) => `${p.name} ${p.signal || ''}`),
@@ -161,9 +202,7 @@ export function mount(el, ctx) {
   function modelMatches(d) {
     if (!inCampus(d)) return false;
     const t = typeOf(d);
-    if (!inTags(d.departments)) return false;
-    if (s.cat && catOf(t) !== s.cat) return false;
-    if (s.brand && brandOf(t) !== s.brand) return false;
+    if (!inDep(d.departments) || !inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
     return words([d.name, d.location, d.serial_number, d.firmware, d.notes, s.ix.room.get(d.room_id)?.name, ...campusWords(d.campus_id),
@@ -173,7 +212,6 @@ export function mount(el, ctx) {
   // ------------------------------------------------------------ drawing --
 
   function draw() {
-    loc.update();
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
     const addLabel = s.mode === 'models' ? 'Add models' : 'Add type';
     $('.add-desktop span', el).textContent = addLabel;
@@ -196,42 +234,22 @@ export function mount(el, ctx) {
       : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${filtering() && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
 
+  /** Keeps each filter's choice valid for the ones before it, then refreshes the pills. */
   function drawFilters() {
-    const models = s.mode === 'models';
-    const pool = models ? s.data.devices.filter(inCampus) : typesHere();
-    const typeFor = (x) => (models ? typeOf(x) || {} : x);
-    $('#g-chips', el).innerHTML = pool.length ? ctx.departments.map((d) => `<button type="button" class="chip dep" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${s.tags.has(d.slug)}"><i class="dot"></i>${esc(d.name)}<small>${pool.filter((x) => x.departments.includes(d.slug)).length}</small></button>`).join('') : '';
-
-    // Category chips: the categories within the chosen tags, so Lighting → Fixture or Console.
-    const cats = new Map();
-    for (const x of pool) {
-      if (!inTags(x.departments)) continue;
-      const k = catOf(typeFor(x));
-      cats.set(k, (cats.get(k) || 0) + 1);
-    }
-    if (s.cat && !cats.has(s.cat)) s.cat = null;
-    const catKeys = [...cats.keys()].sort((a, b) => (a === 'Uncategorized') - (b === 'Uncategorized') || a.localeCompare(b));
-    $('#g-cats', el).innerHTML = cats.size > 1
-      ? `<span class="chip-label">Category</span><button type="button" class="chip" data-cat="" aria-pressed="${!s.cat}">All</button>${catKeys.map((k) => `<button type="button" class="chip" data-cat="${esc(k)}" aria-pressed="${s.cat === k}">${esc(k)}<small>${cats.get(k)}</small></button>`).join('')}`
-      : '';
-
-    // Brand chips: the brands within the chosen tags and category.
-    const names = brandNames();
-    const brands = new Map();
-    for (const x of pool) {
-      const t = typeFor(x);
-      if (!inTags(x.departments) || (s.cat && catOf(t) !== s.cat)) continue;
-      const k = brandOf(t);
-      brands.set(k, (brands.get(k) || 0) + 1);
-    }
-    if (s.brand && !brands.has(s.brand)) s.brand = null;
-    const brandKeys = [...brands.keys()].sort((a, b) => (a === NO_BRAND) - (b === NO_BRAND) || (names.get(a) || a).localeCompare(names.get(b) || b));
-    $('#g-brands', el).innerHTML = brands.size > 1
-      ? `<span class="chip-label">Brand</span><button type="button" class="chip" data-brand="" aria-pressed="${!s.brand}">All</button>${brandKeys.map((k) => `<button type="button" class="chip brand-chip" data-brand="${esc(k)}" aria-pressed="${s.brand === k}">${esc(k === NO_BRAND ? 'No brand' : names.get(k))}<small>${brands.get(k)}</small></button>`).join('')}`
-      : '';
+    const valid = (dd, v) => dd === null || v === ALL || (s.data && optionValues(dd).includes(v));
+    if (!valid(depDd, s.dep)) s.dep = ALL;
+    if (!valid(catDd, s.cat)) s.cat = ALL;
+    if (!valid(brandDd, s.brand)) s.brand = ALL;
+    loc.update(); depDd.update(); catDd.update(); brandDd.update();
+  }
+  function optionValues(dd) {
+    if (dd === depDd) return ctx.departments.map((d) => d.slug);
+    const pool = poolHere().filter((x) => inDep(x.departments));
+    if (dd === catDd) return pool.map((x) => catOf(typeFor(x)));
+    return pool.filter((x) => inCat(typeFor(x))).map((x) => brandOf(typeFor(x)));
   }
 
-  function filtering() { return !!(s.q || s.tags.size || s.cat || s.brand); }
+  function filtering() { return !!(s.q || s.dep !== ALL || s.cat !== ALL || s.brand !== ALL); }
 
   function drawResults() {
     const box = $('#g-results', el);
@@ -331,7 +349,7 @@ export function mount(el, ctx) {
   function newType() {
     const sheet = ctx.openSheet({ label: 'New type', beforeClose: () => { api.cancel(); return false; } });
     const api = typeEditor({
-      ctx, sheet, types: s.data?.types || [], defaults: { departments: [...s.tags].slice(0, 1) },
+      ctx, sheet, types: s.data?.types || [], defaults: { departments: s.dep !== ALL ? [s.dep] : [] },
       onDone: async (id) => { sheet.close(true); await load(true); openTypeSheet(id); },
       onCancel: () => sheet.close(true),
     });

@@ -11,6 +11,7 @@ const DEPARTMENTS = [
   { slug: 'audio', name: 'Audio', color: '#4DA3FF', sort_order: 1 },
   { slug: 'video', name: 'Video', color: '#A78BFA', sort_order: 2 },
   { slug: 'lighting', name: 'Lighting', color: '#F5B544', sort_order: 3 },
+  { slug: 'network', name: 'Network', color: '#2DD4BF', sort_order: 4 },
 ];
 
 const CAMPUSES = [
@@ -92,10 +93,10 @@ function buildExample() {
   net('SVL', 'dante', { name: 'Dante Primary', purpose: 'Audio network', subnet: '192.168.50.0/24', departments: ['audio'], is_isolated: true });
   net('SVL', 'house', { name: 'House Network', purpose: 'Church LAN, internet access', subnet: '10.60.20.0/24', gateway: '10.60.20.1', vlan_id: 203, departments: ['video'] });
   const W = 'Worship Center';
-  const sw = dev('SVL', W, { name: 'FOH Switch', departments: ['video', 'lighting'], category: 'Switch', manufacturer: 'Cisco', model: 'SG350-10', location: 'FOH Rack' }, [{ net: 'ctl', ip: '10.50.10.102/24', label: 'Management' }]);
+  const sw = dev('SVL', W, { name: 'FOH Switch', departments: ['network'], category: 'Switch', manufacturer: 'Cisco', model: 'SG350-10', location: 'FOH Rack' }, [{ net: 'ctl', ip: '10.50.10.102/24', label: 'Management' }]);
   creds.push({ id: uid(), device_id: sw, label: 'Web UI', username: 'admin', password: 'example-only', notes: null, sort_order: 0 });
-  dev('SVL', W, { name: 'A-Control Switch', departments: ['video'], category: 'Switch', manufacturer: 'Cisco', model: 'SF300-24PP (PoE+)', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.103/24', label: 'Management' }]);
-  dev('SVL', W, { name: 'Stage Switch', departments: ['video', 'lighting'], category: 'Switch', manufacturer: 'Cisco', model: 'SG300-10', location: 'Stage Rack' }, [{ net: 'ctl', ip: '10.50.10.104/24', label: 'Management' }]);
+  dev('SVL', W, { name: 'A-Control Switch', departments: ['network'], category: 'Switch', manufacturer: 'Cisco', model: 'SF300-24PP (PoE+)', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.103/24', label: 'Management' }]);
+  dev('SVL', W, { name: 'Stage Switch', departments: ['network'], category: 'Switch', manufacturer: 'Cisco', model: 'SG300-10', location: 'Stage Rack' }, [{ net: 'ctl', ip: '10.50.10.104/24', label: 'Management' }]);
   const ma = dev('SVL', W, { name: 'Lighting Console', departments: ['lighting'], category: 'Console', manufacturer: 'MA Lighting', model: 'grandMA3 compact XT', location: 'FOH', firmware: '2.3.1.1' }, [{ net: 'ctl', ip: '10.50.10.105/24' }]);
   const stageGw = dev('SVL', W, { name: 'Stage Gateway', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'Net-X II', location: 'Stage Rack', firmware: 'B1.0 V3.4' }, [{ net: 'ctl', ip: '10.50.10.106/24', label: 'Art-Net / sACN' }]);
   const cat = dev('SVL', W, { name: 'Catwalk Gateway', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'Net-X II', location: 'Catwalk', firmware: 'B1.0 V3.7' }, [{ net: 'ctl', ip: '10.50.10.107/24', label: 'Art-Net / sACN' }]);

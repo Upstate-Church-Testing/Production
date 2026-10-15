@@ -4,7 +4,7 @@
 import { esc, icon, $, debounce, storage, store, plural } from '../util.js';
 import { buildIndex } from './devices.js';
 import { brandKey } from './types.js';
-import { locationPill, wireLocationPicker } from '../picker.js';
+import { ALL, dropdownHtml, locationDropdown } from '../picker.js';
 
 const TOP = 8; // longer lists fold the rest into "Everything else"
 
@@ -21,18 +21,19 @@ export function mount(el, ctx) {
   el.innerHTML = `
     <div class="page-head">
       <div class="eyebrow">Statistics</div>
-      <div class="head-row">${locationPill('st-loc')}</div>
     </div>
+    <div class="toolbar filter-bar stats-filters"><div class="filters">${dropdownHtml('st-loc', 'Location', 'caps')}</div></div>
     <div class="results stats-page" id="st-body"><div class="loading">${'<div class="sk"></div>'.repeat(4)}</div></div>`;
 
-  const loc = wireLocationPicker(ctx, $('#st-loc', el), {
+  const loc = locationDropdown(ctx, $('#st-loc', el), {
+    unit: ['model', 'models'],
     get: () => s.campus,
     set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
     counts: () => {
       if (!s.data) return null;
-      const counts = { all: s.data.devices.length };
+      const counts = { [ALL]: s.data.devices.length };
       for (const c of ctx.campuses) counts[c.id] = s.data.devices.filter((d) => d.campus_id === c.id).length;
-      return { counts, unit: 'models', one: 'model' };
+      return counts;
     },
   });
 
@@ -44,9 +45,9 @@ export function mount(el, ctx) {
     if (kind === 'flag') { ctx.openNetworkFlag(value); return; }
     // A team, category or brand: show those models in Gear.
     store('ucp.gearmode', 'models');
-    store('ucp.geartags', kind === 'team' ? [value] : []);
-    store('ucp.gearcat', kind === 'category' ? value : null);
-    store('ucp.gearbrand', kind === 'brand' ? value : null);
+    store('ucp.geardep', kind === 'team' ? value : ALL);
+    store('ucp.gearcat', kind === 'category' ? value : ALL);
+    store('ucp.gearbrand', kind === 'brand' ? value : ALL);
     ctx.go('gear');
   });
 
@@ -127,7 +128,7 @@ export function mount(el, ctx) {
         </div>
       </section>
       <section class="st-group st-bars">
-        ${bars('Models by team', byTeam, 'team', { colored: true, keepZero: true })}
+        ${bars('Models by section', byTeam, 'team', { colored: true, keepZero: true })}
         ${s.campus === 'all' ? bars('Models by location', byLocation, 'location') : ''}
         ${bars('Models by category', byCategory, 'category')}
         ${bars('Models by brand', byBrand, 'brand')}

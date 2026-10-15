@@ -105,6 +105,10 @@ async function start() {
     ctx.dep = Object.fromEntries(ref.departments.map((d) => [d.slug, d]));
     ctx.campusById = new Map(ref.campuses.map((c) => [c.id, c]));
     for (const d of ref.departments) document.documentElement.style.setProperty(`--dep-${d.slug}`, d.color);
+    // Each section's color for tags and dots, including sections added later (like Network).
+    let depCss = document.getElementById('dep-css');
+    if (!depCss) { depCss = document.createElement('style'); depCss.id = 'dep-css'; document.head.appendChild(depCss); }
+    depCss.textContent = ref.departments.map((d) => `[data-dep="${CSS.escape(d.slug)}"]{--c:var(--dep-${CSS.escape(d.slug)})}`).join('');
     if (roleAtLeast(me.role, 'staff')) {
       const people = await ctx.store.profiles();
       ctx.people = new Map(people.map((p) => [p.id, p]));

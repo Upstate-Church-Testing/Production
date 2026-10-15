@@ -46,7 +46,7 @@ device_types     the shared catalog entry ("type" in the app): name, brand, part
                  (photos live in the public gear-photos storage bucket: <path>.jpg plus a <path>-t.jpg thumbnail)
     └── device_type_ports (the port layout every unit of that type shares)
 
-departments      audio / video / lighting — the tag on every item
+departments      audio / video / lighting / network — the section tag on every item
 profiles         one per login: role, teams, home campus
 activity         every change: who, when, old → new (passwords never copied)
 ```
@@ -71,7 +71,7 @@ js/views/devices.js            the model panel and editor (shared by Network and
 js/views/types.js              the type editor (shared by Gear and the model editor)
 js/views/team.js               people and access
 js/views/stats.js              Statistics: gear and network numbers for one location or all of them
-js/picker.js                   the location pill and its menu (Gear, Network, Statistics)
+js/picker.js                   the filter dropdowns and their menus (location, section, category, brand…)
 js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on

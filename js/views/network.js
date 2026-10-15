@@ -7,7 +7,7 @@ import {
 } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet as openModelSheet, STATUS, kv } from './devices.js';
-import { locationPill, wireLocationPicker } from '../picker.js';
+import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
 
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
@@ -15,8 +15,8 @@ export function mount(el, ctx) {
     campus: storage('ucp.campus', ctx.me.home_campus_id || 'all'),
     mode: storage('ucp.netmode', 'devices'),
     q: '',
-    tags: new Set(storage('ucp.tags', [])),
-    flag: null,
+    dep: storage('ucp.netdep', storage('ucp.tags', [])[0] || ALL), // Section: audio, video, lighting, network
+    flag: ALL, // or 'conflicts' / 'noip'
     data: null,
     ix: null,
     error: null,
@@ -27,44 +27,72 @@ export function mount(el, ctx) {
   el.innerHTML = `
     <div class="page-head">
       <div class="eyebrow">Network · IP sheet</div>
-      <div class="head-row">
-        ${locationPill('n-loc')}
-        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
-      </div>
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-mode="devices">Models</button>
           <button type="button" role="tab" data-mode="networks">Networks</button>
         </div>
         <p class="tally" id="n-tally" aria-live="polite"></p>
+        <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
       </div>
     </div>
-    <div class="toolbar">
-      <div class="search">${icon('search')}<input id="q" type="search" placeholder="Search name, IP, type, MAC, location" autocomplete="off" enterkeyhint="search" aria-label="Search"></div>
-      <div class="chips" id="chips"></div>
+    <div class="toolbar filter-bar">
+      <div class="search" id="n-search">${icon('search')}<input id="q" type="search" placeholder="Search name, IP, type, MAC, location" autocomplete="off" enterkeyhint="search" aria-label="Search"></div>
+      <div class="filters">
+        ${dropdownHtml('n-loc', 'Location', 'caps')}
+        ${dropdownHtml('n-dep', 'Section')}
+        ${dropdownHtml('n-flag', 'Show')}
+      </div>
     </div>
     <div id="results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
-  const loc = wireLocationPicker(ctx, $('#n-loc', el), {
+  // Filters, in order: location, section, and problems to chase down.
+  const loc = locationDropdown(ctx, $('#n-loc', el), {
+    unit: () => (s.mode === 'networks' ? ['network', 'networks'] : ['model', 'models']),
     get: () => s.campus,
     set: (v) => { s.campus = v; store('ucp.campus', v); draw(); },
     counts: () => {
-      if (!s.data) return null;
+      if (!s.data) return {};
       const nets = s.mode === 'networks';
-      const counts = { all: nets ? s.data.networks.length : listedDevices().length };
+      const counts = { [ALL]: nets ? s.data.networks.length : listedDevices().length };
       for (const c of ctx.campuses) {
         counts[c.id] = nets ? s.data.networks.filter((n) => n.campus_id === c.id).length : listedDevices().filter((d) => d.campus_id === c.id).length;
       }
-      return { counts, unit: nets ? 'networks' : 'models', one: nets ? 'network' : 'model' };
+      return counts;
+    },
+  });
+  const devsIn = (list) => [...new Map(list.map((e) => [e.dev.id, e.dev])).values()];
+  const depDd = wireDropdown($('#n-dep', el), {
+    label: 'Section',
+    unit: ['model', 'models'],
+    get: () => s.dep,
+    set: (v) => { s.dep = v; store('ucp.netdep', v); drawFilters(); drawResults(); },
+    options: () => {
+      const devs = s.data ? devsIn(entries()) : [];
+      return [{ value: ALL, label: 'All', count: devs.length },
+        ...ctx.departments.map((d) => ({ value: d.slug, label: d.name, dep: d.slug, count: devs.filter((x) => x.departments.includes(d.slug)).length }))];
+    },
+  });
+  const flagDd = wireDropdown($('#n-flag', el), {
+    label: 'Show',
+    unit: ['model', 'models'],
+    get: () => s.flag,
+    set: (v) => { s.flag = v; drawFilters(); drawResults(); },
+    options: () => {
+      const list = s.data ? entries().filter((e) => s.dep === ALL || e.dev.departments.includes(s.dep)) : [];
+      const n = (f) => devsIn(list.filter(f)).length;
+      return [{ value: ALL, label: 'Everything', count: devsIn(list).length },
+        { value: 'conflicts', label: 'Same IP twice', count: n((e) => e.ip && s.ix.conflicts.has(e.ip.id)) },
+        { value: 'noip', label: 'No IP yet', count: n((e) => !e.ip?._addr) }];
     },
   });
   $$('[data-mode]', el).forEach((b) => b.addEventListener('click', () => { s.mode = b.dataset.mode; store('ucp.netmode', s.mode); draw(); }));
   const q = $('#q', el);
-  q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); drawResults(); drawChips(); }, 120));
+  q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); drawResults(); }, 120));
 
   el.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-act], [data-open], [data-net], [data-copy], [data-tag], [data-flag]');
+    const t = e.target.closest('[data-act], [data-open], [data-net], [data-copy]');
     if (!t) return;
     if (t.dataset.copy) {
       copyText(t.dataset.copy, t).then((ok) => ctx.toast(ok ? `Copied ${t.dataset.copy}` : 'Selected. Copy it from the menu.'));
@@ -72,15 +100,10 @@ export function mount(el, ctx) {
       openDeviceSheet(t.dataset.open);
     } else if (t.dataset.net) {
       openNetworkSheet(t.dataset.net === 'new' ? null : t.dataset.net, t.dataset.campus);
-    } else if (t.dataset.tag) {
-      s.tags.has(t.dataset.tag) ? s.tags.delete(t.dataset.tag) : s.tags.add(t.dataset.tag);
-      store('ucp.tags', [...s.tags]); drawChips(); drawResults();
-    } else if (t.dataset.flag) {
-      s.flag = s.flag === t.dataset.flag ? null : t.dataset.flag; drawChips(); drawResults();
     } else if (t.dataset.act === 'add') {
       s.mode === 'networks' ? openNetworkSheet(null) : openDeviceSheet(null, true);
     } else if (t.dataset.act === 'clear') {
-      s.q = ''; q.value = ''; s.tags.clear(); s.flag = null; store('ucp.tags', []); drawChips(); drawResults();
+      s.q = ''; q.value = ''; s.dep = ALL; s.flag = ALL; store('ucp.netdep', ALL); drawFilters(); drawResults();
     } else if (t.dataset.act === 'add-net') {
       openNetworkSheet(null, t.dataset.campus);
     } else if (t.dataset.act === 'retry') {
@@ -177,7 +200,7 @@ export function mount(el, ctx) {
   }
 
   function matches({ dev, ip }) {
-    if (s.tags.size && !dev.departments.some((t) => s.tags.has(t))) return false;
+    if (s.dep !== ALL && !dev.departments.includes(s.dep)) return false;
     if (s.flag === 'conflicts' && !(ip && s.ix.conflicts.has(ip.id))) return false;
     if (s.flag === 'noip' && ip?._addr) return false;
     if (!s.q) return true;
@@ -193,12 +216,15 @@ export function mount(el, ctx) {
   // ------------------------------------------------------------ drawing --
 
   function draw() {
-    loc.update();
     $$('[data-mode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.mode === s.mode)));
     $('.fab', el).setAttribute('aria-label', s.mode === 'networks' ? 'Add network' : 'Add model');
     $('.add-desktop span', el).textContent = s.mode === 'networks' ? 'Add network' : 'Add model';
-    $('.toolbar', el).hidden = s.mode === 'networks';
-    drawChips(); drawResults();
+    // Networks mode only needs the location.
+    const nets = s.mode === 'networks';
+    $('#n-search', el).hidden = nets;
+    $('#n-dep', el).hidden = nets;
+    $('#n-flag', el).hidden = nets;
+    drawFilters(); drawResults();
   }
 
   /** The count up top: whatever is on screen right now. */
@@ -207,20 +233,9 @@ export function mount(el, ctx) {
       : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${total != null && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
 
-  function drawChips() {
-    const box = $('#chips', el);
-    if (!s.data) { box.innerHTML = ''; return; }
-    const all = entries();
-    const devs = new Map();
-    for (const e of all) devs.set(e.dev.id, e.dev);
-    const count = (slug) => [...devs.values()].filter((d) => d.departments.includes(slug)).length;
-    // Problems to chase down, as filters: the same IP twice, and models with no address.
-    const conflicts = all.filter((e) => e.ip && s.ix.conflicts.has(e.ip.id)).length;
-    const noip = all.filter((e) => !e.ip?._addr).length;
-    box.innerHTML = `
-      ${ctx.departments.map((d) => `<button type="button" class="chip dep" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${s.tags.has(d.slug)}"><i class="dot"></i>${esc(d.name)}<small>${count(d.slug)}</small></button>`).join('')}
-      ${conflicts || s.flag === 'conflicts' ? `<button type="button" class="chip bad" data-flag="conflicts" aria-pressed="${s.flag === 'conflicts'}">${icon('warn')}Same IP twice<small>${conflicts}</small></button>` : ''}
-      ${noip || s.flag === 'noip' ? `<button type="button" class="chip" data-flag="noip" aria-pressed="${s.flag === 'noip'}">No IP yet<small>${noip}</small></button>` : ''}`;
+  function drawFilters() {
+    if (s.data && s.dep !== ALL && !ctx.departments.some((d) => d.slug === s.dep)) s.dep = ALL;
+    loc.update(); depDd.update(); flagDd.update();
   }
 
   function drawResults() {
@@ -236,7 +251,7 @@ export function mount(el, ctx) {
     const all = entries();
     const shown = all.filter(matches);
     const devCount = (list) => new Set(list.map((e) => e.dev.id)).size;
-    const filtered = s.q || s.tags.size || s.flag;
+    const filtered = s.q || s.dep !== ALL || s.flag !== ALL;
     drawTally(devCount(shown), filtered ? devCount(all) : null, ['model', 'models']);
     if (!all.length) {
       const c = ctx.campusById.get(s.campus);
