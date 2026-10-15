@@ -13,6 +13,8 @@ const SERVICES = [
   ['st-svl-m', 'Simpsonville - Modern', ['09 UC Simpsonville'], 'c-SVL', 'everyone', ['09:30', '11:30'], '06:00'],
   ['st-svl-n', 'Simpsonville - Modern [North Auditorium]', ['09 UC Simpsonville'], 'c-SVL', 'everyone', ['11:30'], '08:30'],
   ['st-svl-v', 'Simpsonville - Vintage', ['09 UC Simpsonville'], 'c-SVL', 'everyone', ['09:30'], '07:30'],
+  ['st-svl-t', 'Traditional', ['09 UC Simpsonville'], 'c-SVL', 'everyone', ['11:00'], '09:00'],
+  ['st-and-v', 'Anderson - Vintage', ['01 UC Anderson'], 'c-AND', 'everyone', ['09:00'], '07:30'],
   ['st-and-m', 'Anderson - Modern', ['01 UC Anderson'], 'c-AND', 'everyone', ['10:00', '11:30'], '07:30'],
   ['st-ff-m', 'Five Forks - Modern', ['02 UC Five Forks'], 'c-FF', 'everyone', ['10:00'], '07:30'],
   ['st-gvl-m', 'Greenville - Modern', ['04 UC Greenville'], 'c-GVL', 'staff', ['11:00'], '08:00'],

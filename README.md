@@ -101,7 +101,7 @@ js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on
 js/views/account.js            Settings: your profile, Planning Center, Resi players, theme, sign out
-js/views/services.js           Services: upcoming plans by day with production-team rosters; My schedule
+js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its times and production-team rosters; My schedule
 js/views/pco-settings.js       Settings › Planning Center (connect, who sees which services, which teams show)
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
 js/pco-demo.js                 made-up Planning Center data for the preview

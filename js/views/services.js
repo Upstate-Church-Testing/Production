@@ -1,10 +1,11 @@
-// Services: what's coming up in Planning Center and who's on the production
-// teams. Planning Center is connected once for the whole church (Settings ›
-// Planning Center); nobody signs in to it here. What each person sees comes
-// from their role in this app and the services an admin shares.
+// Services: browse Planning Center by location, then date, then service
+// (Vintage, Traditional, Modern…), and see that service's times and who's on
+// the production teams. Planning Center is connected once for the whole church
+// (Settings › Planning Center); nobody signs in to it here. What each person
+// sees comes from their role in this app and the services an admin shares.
 
 import { esc, icon, $, debounce, plural, timeAgo, initials } from '../util.js';
-import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
+import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js';
 
 const POLL_MS = 60000;
@@ -14,15 +15,16 @@ export function mount(el, ctx) {
   let alive = true;
   const isStaff = ctx.roleAtLeast(ctx.me.role, 'staff');
   const isAdmin = ctx.me.role === 'admin';
+  // Where you were (location, date, service) lasts while the app is open.
+  const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null });
   const s = {
     status: undefined, // undefined while loading, null when Planning Center isn't connected
     data: null,
     error: null,
     campus: ctx.campus, // shared with Gear and Network; All on every launch
-    type: ALL,
-    team: ALL,
     mine: false,
     refreshing: false,
+    picked: false,      // a location was chosen on this screen (or by default)
   };
   if (s.campus !== ALL && !ctx.campusById.has(s.campus)) s.campus = ALL;
   let timer = null;
@@ -31,72 +33,46 @@ export function mount(el, ctx) {
     <div class="page-head">
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show" id="s-seg" hidden>
-          <button type="button" role="tab" data-smode="all">All services</button>
+          <button type="button" role="tab" data-smode="all">Services</button>
           <button type="button" role="tab" data-smode="mine">My schedule</button>
         </div>
         <p class="tally" id="s-tally" aria-live="polite"></p>
       </div>
       <p class="head-meta svc-meta" id="s-meta"></p>
     </div>
-    <div class="toolbar filter-bar" id="s-bar" hidden>
-      <div class="filters">
-        ${dropdownHtml('s-loc', 'Location', 'caps')}
-        ${dropdownHtml('s-type', 'Service')}
-        ${dropdownHtml('s-team', 'Team')}
-      </div>
+    <div class="toolbar filter-bar svc-bar" id="s-bar" hidden>
+      <div class="filters">${dropdownHtml('s-loc', 'Location', 'caps')}</div>
     </div>
-    <div class="results svc" id="s-body"><div class="loading">${'<div class="sk tall"></div>'.repeat(3)}</div></div>`;
+    <div class="results svc" id="s-body"><div class="loading">${'<div class="sk tall"></div>'.repeat(2)}</div></div>`;
 
-  // ---------------------------------------------------------- filters ---
-  const view = () => model(); // recomputed on demand; cheap
-  const loc = locationDropdown(ctx, $('#s-loc', el), {
+  // Only locations that have shared services are offered.
+  const loc = wireDropdown($('#s-loc', el), {
+    label: 'Location',
     unit: ['service', 'services'],
     get: () => s.campus,
-    set: (v) => { s.campus = ctx.campus = v; s.type = ALL; draw(); },
-    counts: () => {
-      const m = view();
-      if (!m) return {};
-      const counts = { [ALL]: m.plans.length };
-      for (const c of ctx.campuses) counts[c.id] = m.plans.filter((p) => m.type(p).campus_id === c.id).length;
-      return counts;
-    },
-  });
-  const typeDd = wireDropdown($('#s-type', el), {
-    label: 'Service',
-    unit: ['service', 'services'],
-    get: () => s.type,
-    set: (v) => { s.type = v; draw(); },
+    set: (v) => { pickCampus(v); },
     options: () => {
-      const m = view();
-      if (!m) return [{ value: ALL, label: 'All services' }];
-      const here = m.plans.filter((p) => s.campus === ALL || m.type(p).campus_id === s.campus);
-      const types = m.types.filter((t) => s.campus === ALL || t.campus_id === s.campus);
-      return [{ value: ALL, label: 'All services', count: here.length },
-        ...types.map((t) => ({ value: t.id, label: t.name, count: here.filter((p) => p.service_type_id === t.id).length }))];
-    },
-  });
-  const teamDd = wireDropdown($('#s-team', el), {
-    label: 'Team',
-    get: () => s.team,
-    set: (v) => { s.team = v; draw(); },
-    options: () => {
-      const m = view();
-      const names = new Map();
-      for (const t of m?.teams || []) if (!names.has(teamKey(t.name))) names.set(teamKey(t.name), t.name);
-      return [{ value: ALL, label: 'All teams' }, ...[...names].map(([value, label]) => ({ value, label }))];
+      const m = model();
+      if (!m) return [{ value: ALL, label: 'All locations' }];
+      return [{ value: ALL, label: 'All locations', count: m.plans.length },
+        ...m.places.map((c) => ({ value: c.id, label: c.short_name, count: m.plansAt(c.id).length }))];
     },
   });
 
   el.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-act], [data-smode]');
+    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto]');
     if (!t) return;
     if (t.dataset.smode) { s.mine = t.dataset.smode === 'mine'; draw(); return; }
+    if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (t.dataset.date) { nav.date = t.dataset.date; nav.plan = null; draw(); return; }
+    if (t.dataset.plan) { nav.plan = t.dataset.plan; draw(); return; }
+    if (t.dataset.goto) { openPlan(t.dataset.goto); return; }
     const act = t.dataset.act;
     if (act === 'settings') ctx.openSettings('pco');
     else if (act === 'refresh') refresh();
     else if (act === 'retry') load();
-    else if (act === 'clear') { s.campus = ctx.campus = ALL; s.type = ALL; s.team = ALL; s.mine = false; draw(); }
     else if (act === 'mine') { s.mine = true; draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    else if (act === 'all-places') pickCampus(ALL);
   });
 
   const onVisible = () => { if (document.visibilityState === 'visible') checkStatus(); };
@@ -114,6 +90,28 @@ export function mount(el, ctx) {
     },
   };
 
+  function pickCampus(id) {
+    s.campus = ctx.campus = id;
+    s.picked = true;
+    s.mine = false;
+    nav.date = null; nav.plan = null;
+    draw();
+  }
+
+  /** Jump straight to one plan (from My schedule or "You're on"). */
+  function openPlan(planId) {
+    const m = model();
+    const p = m?.plans.find((x) => x.id === planId);
+    if (!p) return;
+    s.campus = ctx.campus = m.type(p).campus_id || ALL;
+    s.picked = true;
+    s.mine = false;
+    nav.date = clock(s.status?.time_zone).day(p.sort_date);
+    nav.plan = p.id;
+    draw();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   // ------------------------------------------------------------- data ---
 
   async function load(quiet = false) {
@@ -127,6 +125,12 @@ export function mount(el, ctx) {
       if (!quiet || !s.data) s.error = e.message;
     }
     if (!alive) return;
+    // First time in: go straight to your home location if it has services.
+    if (!s.picked && s.campus === ALL) {
+      const m = model();
+      const home = ctx.me.home_campus_id;
+      if (m && home && m.plansAt(home).length) s.campus = home;
+    }
     draw();
     schedule();
   }
@@ -167,20 +171,25 @@ export function mount(el, ctx) {
   function model() {
     const d = s.data;
     if (!d) return null;
+    const c = clock(s.status?.time_zone);
     const types = d.types.filter((t) => t.access !== 'hidden'); // admins can read hidden ones; they don't show here
     const typeById = new Map(types.map((t) => [t.id, t]));
     const teams = d.teams.filter((t) => t.shown && teamServices(t).some((id) => typeById.has(id)));
+    const start = (p) => {
+      const first = p.times.find((x) => x.kind === 'service' && x.starts_at);
+      return Date.parse(first?.starts_at || p.sort_date);
+    };
     const plans = d.plans.filter((p) => typeById.has(p.service_type_id))
-      .sort((a, b) => Date.parse(a.sort_date) - Date.parse(b.sort_date) || placeOrder(typeById.get(a.service_type_id)) - placeOrder(typeById.get(b.service_type_id)));
+      .map((p) => ({ ...p, _day: c.day(p.sort_date), _start: start(p) }))
+      .sort((a, b) => a._start - b._start || (typeById.get(a.service_type_id).sequence ?? 99) - (typeById.get(b.service_type_id).sequence ?? 99));
     const people = new Map();
     for (const p of d.people) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]);
     const me = ctx.me.pco_person_id;
     const mine = me ? plans.filter((p) => (people.get(p.id) || []).some((x) => x.person_id === me)) : [];
-    return { types, teams, plans, people, me, mine, type: (p) => typeById.get(p.service_type_id) };
-  }
-  function placeOrder(t) {
-    const c = t?.campus_id ? ctx.campusById.get(t.campus_id) : null;
-    return (c?.sort_order ?? 99) * 1000 + (t?.sequence ?? 999);
+    const type = (p) => typeById.get(p.service_type_id);
+    const plansAt = (campusId) => plans.filter((p) => type(p).campus_id === campusId);
+    const places = ctx.campuses.filter((cp) => plansAt(cp.id).length);
+    return { c, types, teams, plans, people, me, mine, type, plansAt, places };
   }
 
   // ---------------------------------------------------------- drawing ---
@@ -202,55 +211,149 @@ export function mount(el, ctx) {
     const box = $('#s-body', el);
     const m = model();
     const connected = !!s.status;
-    $('#s-bar', el).hidden = !connected || !m?.plans.length;
     const seg = $('#s-seg', el);
     seg.hidden = !connected || !m?.me;
     seg.querySelectorAll('[data-smode]').forEach((b) => b.setAttribute('aria-selected', String((b.dataset.smode === 'mine') === s.mine)));
+    $('#s-bar', el).hidden = !connected || !m?.plans.length || s.mine;
     drawHead();
-    loc.update(); typeDd.update(); teamDd.update();
+    loc.update();
+    $('#s-tally', el).innerHTML = '';
 
     if (s.error) {
-      $('#s-tally', el).innerHTML = '';
       box.innerHTML = `<div class="empty"><h3>Couldn’t load services</h3><p>${esc(s.error)}</p><div class="empty-actions"><button class="btn" data-act="retry">Try again</button></div></div>`;
       return;
     }
     if (s.status === undefined) return; // still loading
-    if (!connected) { $('#s-tally', el).innerHTML = ''; box.innerHTML = notConnected(); return; }
+    if (!connected) { box.innerHTML = notConnected(); return; }
     if (!m.types.length) {
-      $('#s-tally', el).innerHTML = '';
       box.innerHTML = s.status.syncing || !s.status.last_sync_at
         ? `<div class="empty"><h3>Getting services from Planning Center…</h3><p>The first update takes about a minute. This page fills in by itself.</p></div><div class="loading">${'<div class="sk tall"></div>'.repeat(2)}</div>`
         : `<div class="empty"><h3>No services are shared yet</h3><p>${isAdmin ? 'Pick which Planning Center services the team sees, and which teams show on them.' : 'An admin hasn’t shared any Planning Center services with your role yet.'}</p>${isAdmin ? `<div class="empty-actions"><button class="btn primary" data-act="settings">${icon('settings')}Choose services</button></div>` : ''}</div>`;
       return;
     }
-
-    let plans = s.mine ? m.mine : m.plans;
-    plans = plans.filter((p) => (s.campus === ALL || m.type(p).campus_id === s.campus) && (s.type === ALL || p.service_type_id === s.type));
     const weeks = s.status.weeks_ahead || 6;
-    const filtering = s.campus !== ALL || s.type !== ALL || s.team !== ALL;
-    $('#s-tally', el).innerHTML = `<b>${plans.length}</b><span>${plans.length === 1 ? 'service' : 'services'}</span><small>next ${plural(weeks, 'week')}${filtering ? ` · <button class="btn link" data-act="clear">Clear</button>` : ''}</small>`;
-
-    const nextUp = !s.mine && m.me ? youBanner(m) : '';
-    if (!plans.length) {
-      box.innerHTML = `${nextUp}<div class="empty"><h3>${s.mine ? 'You’re not on anything coming up' : 'Nothing scheduled here'}</h3><p>${s.mine
-        ? `Nothing in the next ${plural(weeks, 'week')}${filtering ? ' with these filters' : ''}. When you’re scheduled in Planning Center, it shows up here.`
-        : `No ${s.type === ALL ? 'shared services' : 'plans for this service'}${s.campus !== ALL ? ` at ${esc(ctx.campusById.get(s.campus)?.short_name || 'this location')}` : ''} in the next ${plural(weeks, 'week')}.`}</p>
-        ${filtering ? '<div class="empty-actions"><button class="btn" data-act="clear">Show everything</button></div>' : ''}</div>`;
+    if (!m.plans.length) {
+      box.innerHTML = `<div class="empty"><h3>Nothing scheduled yet</h3><p>No shared services in the next ${plural(weeks, 'week')}.</p></div>`;
       return;
     }
 
-    const c = clock(s.status.time_zone);
-    const days = new Map();
-    for (const p of plans) {
-      const k = c.day(p.sort_date);
-      if (!days.has(k)) days.set(k, []);
-      days.get(k).push(p);
+    if (s.mine) { box.innerHTML = mySchedule(m); return; }
+    if (s.campus === ALL || !m.plansAt(s.campus).length) { box.innerHTML = (m.me ? youBanner(m) : '') + placePicker(m); return; }
+    box.innerHTML = campusView(m);
+    $('.svc-dates .is-on', box)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
+  // Step 1: pick a location.
+  function placePicker(m) {
+    return `<section class="svc-step">
+      <h2 class="svc-step-h">Pick a location</h2>
+      <div class="svc-places">${m.places.map((cp) => {
+        const list = m.plansAt(cp.id);
+        const kinds = new Set(list.map((p) => p.service_type_id)).size;
+        const next = list[0];
+        return `<button type="button" class="svc-place" data-campus="${cp.id}">
+          <b>${esc(cp.short_name)}</b>
+          <small>${plural(kinds, 'service')} <i>·</i> next ${esc(m.c.weekday(next.sort_date).slice(0, 3))} ${esc(m.c.date(next.sort_date))}</small>
+          ${icon('chevron', 'svc-place-go')}
+        </button>`;
+      }).join('')}</div>
+    </section>`;
+  }
+
+  // Steps 2 and 3: pick a date, then a service on that date; then the service itself.
+  function campusView(m) {
+    const here = m.plansAt(s.campus);
+    const days = [...new Set(here.map((p) => p._day))];
+    if (!days.includes(nav.date)) { nav.date = days[0]; nav.plan = null; }
+    const onDay = here.filter((p) => p._day === nav.date);
+    if (!onDay.some((p) => p.id === nav.plan)) nav.plan = onDay[0]?.id || null;
+    const plan = onDay.find((p) => p.id === nav.plan);
+    const campus = ctx.campusById.get(s.campus);
+    const kinds = new Set(here.map((p) => p.service_type_id)).size;
+    $('#s-tally', el).innerHTML = `<b>${kinds}</b><span>${kinds === 1 ? 'service' : 'services'}</span><small>at ${esc(campus?.short_name || '')}</small>`;
+
+    return `
+      <div class="svc-dates" role="tablist" aria-label="Date">${days.map((d) => {
+        const p = here.find((x) => x._day === d);
+        const on = d === nav.date;
+        return `<button type="button" role="tab" class="svc-date ${on ? 'is-on' : ''}" data-date="${d}" aria-selected="${on}">
+          <small>${esc(m.c.weekday(p.sort_date).slice(0, 3))}</small><b>${esc(m.c.date(p.sort_date))}</b>
+        </button>`;
+      }).join('')}</div>
+      ${onDay.length > 1 ? `<div class="seg svc-kinds" role="tablist" aria-label="Service">${onDay.map((p) => {
+        const on = p.id === nav.plan;
+        return `<button type="button" role="tab" data-plan="${p.id}" aria-selected="${on}">${esc(kindName(m.type(p), p))}<small>${esc(firstTime(m, p))}</small></button>`;
+      }).join('')}</div>` : ''}
+      ${plan ? detail(m, plan) : ''}`;
+  }
+
+  // "Simpsonville - Modern [North Auditorium]" → "North Modern"; "GCC - Vintage" → "Vintage".
+  function kindName(t, p) {
+    const campus = t.campus_id ? ctx.campusById.get(t.campus_id) : null;
+    const room = (t.name.match(/\[([^\]]+)\]/) || [])[1];
+    let n = t.name.replace(/\[[^\]]*\]/g, ' ');
+    if (campus) n = n.replace(new RegExp(campus.short_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), ' ');
+    n = n.replace(/^[\s:\-–—·|]+|[\s:\-–—·|]+$/g, '').replace(/\s+/g, ' ').trim();
+    if (room) n = `${room.trim().split(/\s+/)[0]} ${n}`.trim();
+    return n || p?.title || 'Service';
+  }
+
+  function firstTime(m, p) {
+    const services = p.times.filter((x) => x.kind === 'service').map((x) => x.starts_at).filter(Boolean);
+    return services.length ? m.c.times(services) : m.c.time(p.sort_date);
+  }
+
+  function detail(m, p) {
+    const t = m.type(p);
+    const campus = t.campus_id ? ctx.campusById.get(t.campus_id)?.short_name : null;
+    const teams = m.teams.filter((tm) => teamServices(tm).includes(p.service_type_id))
+      .sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99) || a.name.localeCompare(b.name));
+    const roster = m.people.get(p.id) || [];
+    const tally = { C: 0, U: 0, D: 0, open: 0 };
+    const blocks = teams.map((tm) => teamBlock(tm, roster.filter((r) => r.team_id === tm.id), (p.needed || []).filter((n) => n.team_id === tm.id), m.me, tally)).join('');
+    const sub = [p.title && !t.name.toLowerCase().includes(p.title.toLowerCase()) ? p.title : null, p.series_title].filter(Boolean).join(' · ');
+    const times = [...p.times].filter((x) => x.starts_at).sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+    return `<article class="svc-detail">
+      <header class="svc-dhead">
+        <div class="svc-title">
+          <small class="svc-loc">${esc([campus, `${m.c.weekday(p.sort_date)}, ${m.c.date(p.sort_date)}`].filter(Boolean).join(' · '))}</small>
+          <h2>${esc(kindName(t, p))}</h2>
+          <p class="svc-sub">${esc(t.name)}${sub ? ` · ${esc(sub)}` : ''}</p>
+        </div>
+        ${isStaff && p.url && p.url !== '#' ? `<a class="btn small ghost" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('open')}<span>Planning Center</span></a>` : ''}
+      </header>
+      ${times.length ? `<ol class="svc-times-list">${times.map((x) => `<li class="${x.kind === 'service' ? 'is-service' : ''}">
+          <b>${esc(m.c.time(x.starts_at))}</b><span>${esc(x.name || (x.kind === 'service' ? 'Service' : x.kind === 'rehearsal' ? 'Rehearsal' : 'Other'))}</span>
+        </li>`).join('')}</ol>` : ''}
+      <div class="svc-teams">${blocks || '<p class="svc-none">No production teams on this service.</p>'}</div>
+      <footer class="svc-foot">
+        <span class="svc-counts">${[
+          tally.C ? `<span class="is-C">${tally.C} confirmed</span>` : '',
+          tally.U ? `<span class="is-U">${tally.U} not yet</span>` : '',
+          tally.D ? `<span class="is-D">${tally.D} declined</span>` : '',
+          tally.open ? `<span class="is-open">${tally.open} open</span>` : '',
+        ].filter(Boolean).join('') || '<span>No one scheduled yet</span>'}</span>
+      </footer>
+    </article>`;
+  }
+
+  function mySchedule(m) {
+    const rows = [];
+    for (const p of m.mine) for (const r of m.people.get(p.id) || []) if (r.person_id === m.me) rows.push({ p, r });
+    $('#s-tally', el).innerHTML = rows.length ? `<b>${rows.length}</b><span>${rows.length === 1 ? 'time' : 'times'}</span><small>you’re scheduled</small>` : '';
+    if (!rows.length) {
+      return `<div class="empty"><h3>You’re not on anything coming up</h3><p>Nothing in the next ${plural(s.status.weeks_ahead || 6, 'week')}. When you’re scheduled in Planning Center, it shows up here.</p></div>`;
     }
-    box.innerHTML = nextUp + [...days.values()].map((list) => `
-      <section class="svc-day">
-        <h2 class="svc-day-h"><span>${esc(c.weekday(list[0].sort_date))}</span> ${esc(c.date(list[0].sort_date))}<small>${esc(c.relative(list[0].sort_date))}</small></h2>
-        <div class="svc-grid">${list.map((p) => card(p, m, c)).join('')}</div>
-      </section>`).join('');
+    return `<ul class="svc-mine">${rows.map(({ p, r }) => {
+      const t = m.type(p);
+      const campus = t.campus_id ? ctx.campusById.get(t.campus_id)?.short_name : '';
+      return `<li><button type="button" class="svc-mine-row" data-goto="${p.id}">
+        <span class="svc-you-when"><b>${esc(m.c.weekday(p.sort_date).slice(0, 3))} ${esc(m.c.date(p.sort_date))}</b><small>${esc(firstTime(m, p))}</small></span>
+        <span class="svc-you-what"><b>${esc(r.position || teamName(m, r.team_id))}</b><small>${esc([campus, kindName(t, p)].filter(Boolean).join(' · '))}</small></span>
+        ${statusMark(r.status)}
+        ${icon('chevron', 'svc-place-go')}
+      </button></li>`;
+    }).join('')}</ul>`;
   }
 
   function notConnected() {
@@ -264,60 +367,21 @@ export function mount(el, ctx) {
   }
 
   function youBanner(m) {
-    const c = clock(s.status.time_zone);
     const mineRows = [];
     for (const p of m.mine) for (const r of m.people.get(p.id) || []) if (r.person_id === m.me && r.status !== 'D') mineRows.push({ p, r });
     if (!mineRows.length) return '';
-    const first = mineRows.slice(0, 3);
     return `<section class="svc-you">
       <div class="svc-you-head"><h2>You’re on ${plural(new Set(mineRows.map((x) => x.p.id)).size, 'service')}</h2>
         <button class="btn small ghost" data-act="mine">${icon('calendar')}My schedule</button></div>
-      <ul>${first.map(({ p, r }) => `<li>
-        <span class="svc-you-when"><b>${esc(c.weekday(p.sort_date).slice(0, 3))} ${esc(c.date(p.sort_date))}</b><small>${esc(c.times(p.times.filter((t) => t.kind === 'service').map((t) => t.starts_at)) || c.time(p.sort_date))}</small></span>
+      <ul>${mineRows.slice(0, 3).map(({ p, r }) => `<li><button type="button" class="svc-mine-row" data-goto="${p.id}">
+        <span class="svc-you-when"><b>${esc(m.c.weekday(p.sort_date).slice(0, 3))} ${esc(m.c.date(p.sort_date))}</b><small>${esc(firstTime(m, p))}</small></span>
         <span class="svc-you-what"><b>${esc(r.position || teamName(m, r.team_id))}</b><small>${esc(m.type(p).name)}</small></span>
         ${statusMark(r.status)}
-      </li>`).join('')}</ul>
+      </button></li>`).join('')}</ul>
     </section>`;
   }
 
   const teamName = (m, id) => m.teams.find((t) => t.id === id)?.name || 'Team';
-
-  function card(p, m, c) {
-    const t = m.type(p);
-    const campus = t.campus_id ? ctx.campusById.get(t.campus_id)?.short_name : null;
-    const services = p.times.filter((x) => x.kind === 'service').map((x) => x.starts_at).filter(Boolean);
-    const call = p.times.filter((x) => x.kind !== 'service' && x.starts_at).sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))[0];
-    const teams = m.teams.filter((tm) => teamServices(tm).includes(p.service_type_id) && (s.team === ALL || teamKey(tm.name) === s.team))
-      .sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99) || a.name.localeCompare(b.name));
-    const roster = m.people.get(p.id) || [];
-    const tally = { C: 0, U: 0, D: 0, open: 0 };
-    const blocks = teams.map((tm) => teamBlock(tm, roster.filter((r) => r.team_id === tm.id), (p.needed || []).filter((n) => n.team_id === tm.id), m.me, tally)).join('');
-    const sub = [p.title && !t.name.toLowerCase().includes(p.title.toLowerCase()) ? p.title : null, p.series_title].filter(Boolean).join(' · ');
-    const mineHere = m.me && roster.some((r) => r.person_id === m.me);
-    return `<article class="svc-card ${mineHere ? 'is-mine' : ''}">
-      <header class="svc-top">
-        <div class="svc-title">
-          ${campus ? `<small class="svc-loc">${esc(campus)}</small>` : ''}
-          <h3>${esc(t.name)}</h3>
-          ${sub ? `<p class="svc-sub">${esc(sub)}</p>` : ''}
-        </div>
-        <div class="svc-times">
-          <b>${esc(services.length ? c.times(services) : c.time(p.sort_date))}</b>
-          ${call ? `<small>${esc(call.name || (call.kind === 'rehearsal' ? 'Rehearsal' : 'Call'))} ${esc(c.time(call.starts_at))}</small>` : ''}
-        </div>
-      </header>
-      ${blocks || `<p class="svc-none">${teams.length ? '' : 'No production teams on this service.'}</p>`}
-      <footer class="svc-foot">
-        <span class="svc-counts">${[
-          tally.C ? `<span class="is-C">${tally.C} confirmed</span>` : '',
-          tally.U ? `<span class="is-U">${tally.U} not yet</span>` : '',
-          tally.D ? `<span class="is-D">${tally.D} declined</span>` : '',
-          tally.open ? `<span class="is-open">${tally.open} open</span>` : '',
-        ].filter(Boolean).join('') || '<span>No one scheduled yet</span>'}</span>
-        ${isStaff && p.url && p.url !== '#' ? `<a class="btn small ghost" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('open')}<span>Planning Center</span></a>` : ''}
-      </footer>
-    </article>`;
-  }
 
   function teamBlock(tm, rows, needed, me, tally) {
     const order = new Map((tm.positions || []).map((x, i) => [teamKey(x.name), i]));

@@ -1258,25 +1258,9 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .svc-err { display: inline-flex; align-items: flex-start; gap: 6px; color: var(--bad); font-size: 13px; font-weight: 600; }
 .svc-err .ico { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 
-.svc-day { display: grid; gap: 12px; }
-.svc-day-h { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font: 300 26px/1.1 var(--f-display); letter-spacing: -0.01em; padding: 4px 4px 0; }
-.svc-day-h span { font-weight: 400; }
-.svc-day-h small { font: 600 12.5px/1 var(--f-body); color: var(--muted); letter-spacing: 0.02em; }
-.svc-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); align-items: start; }
-
-.svc-card {
-  display: grid; gap: 14px; padding: 18px 18px 14px;
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl);
-}
-.svc-card.is-mine { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent); }
-.svc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .svc-title { display: grid; gap: 3px; min-width: 0; }
-.svc-loc { font: 700 11px/1.2 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); }
-.svc-title h3 { font: 500 19px/1.2 var(--f-display); letter-spacing: -0.005em; }
-.svc-sub { font-size: 13px; color: var(--muted); }
-.svc-times { display: grid; justify-items: end; gap: 3px; text-align: right; flex: none; max-width: 48%; }
-.svc-times b { font: 700 16px/1.15 var(--f-body); font-variant-numeric: tabular-nums; }
-.svc-times small { font-size: 12px; color: var(--muted); }
+.svc-loc { font: 700 11px/1.3 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); }
+.svc-sub { font-size: 13.5px; color: var(--muted); }
 .svc-none { font-size: 13px; color: var(--faint); }
 
 .svc-team { display: grid; gap: 6px; }
@@ -1332,6 +1316,75 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .svc-you small { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .svc-connect { border-style: solid; }
 
+/* step 1: locations */
+.svc-step { display: grid; gap: 12px; }
+.svc-step-h { font: 300 26px/1.1 var(--f-display); letter-spacing: -0.01em; padding: 4px 4px 0; }
+.svc-places { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); }
+.svc-place {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; text-align: left;
+  min-height: 76px; padding: 14px 16px 14px 18px; border-radius: var(--r-lg);
+  background: var(--panel); border: 1px solid var(--line); color: var(--fg);
+}
+.svc-place:hover { border-color: var(--line-2); background: var(--panel-2); }
+.svc-place b { font: 500 20px/1.15 var(--f-display); }
+.svc-place small { grid-column: 1; font-size: 13px; color: var(--muted); }
+.svc-place small i { font-style: normal; color: var(--faint); margin: 0 3px; }
+.svc-place-go { grid-row: 1 / span 2; grid-column: 2; width: 18px; height: 18px; color: var(--faint); }
+
+/* step 2: dates */
+.svc-dates {
+  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity;
+  margin: 0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter-l)); padding: 2px var(--gutter-r) 4px var(--gutter-l);
+}
+.svc-dates::-webkit-scrollbar { display: none; }
+@media (min-width: 860px) { .svc-dates { margin: 0; padding: 2px 0 4px; flex-wrap: wrap; overflow: visible; } }
+.svc-date {
+  display: grid; justify-items: center; gap: 2px; flex: none; min-width: 78px; padding: 10px 14px; scroll-snap-align: center;
+  border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); color: var(--fg);
+}
+.svc-date small { font: 700 11px/1.2 var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.svc-date b { font: 700 16px/1.2 var(--f-body); white-space: nowrap; }
+.svc-date:hover { border-color: var(--line-2); }
+.svc-date.is-on { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); }
+.svc-date.is-on small { color: var(--accent-ink); }
+
+/* step 3: which service that day */
+.svc-kinds { justify-self: start; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.svc-kinds::-webkit-scrollbar { display: none; }
+.svc-kinds button { display: grid; justify-items: center; gap: 1px; padding: 8px 16px; white-space: nowrap; font-size: 14px; }
+.svc-kinds button small { font-size: 11.5px; font-weight: 600; color: var(--faint); }
+.svc-kinds button[aria-selected="true"] small { color: var(--muted); }
+
+/* the service */
+.svc-detail {
+  display: grid; gap: 16px; padding: 20px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl);
+}
+.svc-dhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.svc-dhead h2 { font: 400 30px/1.1 var(--f-display); letter-spacing: -0.01em; }
+.svc-dhead .btn { flex: none; }
+.svc-times-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.svc-times-list li {
+  display: grid; gap: 1px; padding: 8px 12px; border-radius: var(--r-sm);
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.svc-times-list b { font: 700 15px/1.2 var(--f-body); font-variant-numeric: tabular-nums; }
+.svc-times-list span { font-size: 12px; color: var(--muted); }
+.svc-times-list .is-service { background: color-mix(in srgb, var(--accent) 12%, var(--panel-2)); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.svc-times-list .is-service span { color: var(--accent-ink); font-weight: 600; }
+.svc-teams { display: grid; gap: 16px 22px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); align-items: start; }
+.svc-teams .svc-team + .svc-team { padding-top: 0; border-top: 0; }
+
+/* my schedule */
+.svc-mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.svc-mine-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); color: var(--fg);
+}
+.svc-mine-row:hover { border-color: var(--line-2); }
+.svc-you .svc-mine-row { background: transparent; border: 0; padding: 4px 0; }
+.svc-mine-row .svc-place-go { width: 18px; height: 18px; color: var(--faint); flex: none; }
+
 /* ---------------------------------------------- settings › planning center */
 
 .pc-state { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; margin-left: auto; border-radius: 999px; background: var(--panel-3); color: var(--muted); font-size: 12px; font-weight: 700; }
@@ -1369,3 +1422,9 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .pc-access button { padding: 7px 12px; font-size: 13px; }
 .pc-access button[data-v="everyone"][aria-selected="true"] { background: color-mix(in srgb, var(--accent) 20%, var(--panel-3)); color: var(--fg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
 .pc-danger { padding-top: 6px; }
+.svc-bar .filters > .dd { max-width: 420px; }
+@media (max-width: 599px) {
+  /* every service that day stays in view on a phone: two per row */
+  .svc-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; border-radius: var(--r-lg); overflow: visible; }
+  .svc-kinds button { border-radius: var(--r); white-space: normal; }
+}
