@@ -38,8 +38,6 @@ function build(meId) {
   const teams = [];
   const plans = [];
   const people = [];
-  let n = 0;
-  const name = () => NAMES[(n++ * 7) % NAMES.length];
   const today = new Date();
   const base = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const daysToSunday = (7 - base.getUTCDay()) % 7 || 7;
@@ -65,16 +63,22 @@ function build(meId) {
         url: '#', needed: [], synced_at: new Date().toISOString(),
       });
       const plan = plans[plans.length - 1];
+      // Like the real schedule: one person covers a position for every service at a
+      // location that day (Traditional has its own crew), and answers each one separately.
+      const crew = id === 'st-svl-t' ? 'trad' : campus;
       const fill = (team, roles, gaps) => roles.forEach((pos, k) => {
         if (gaps.includes(k)) { plan.needed.push({ team_id: team.id, position: pos, quantity: 1 }); return; }
-        const roll = (k * 3 + w * 5 + i) % 9;
-        const mine = meId && id === 'st-svl-m' && team === tb && pos === 'Director' && w < 3;
+        const seed = [...`${crew}|${team.name}|${pos}|${w}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+        const roll = (seed + i * (seed % 3 === 0 ? 1 : 0)) % 9; // now and then a different answer per service
+        const mine = meId && campus === 'c-SVL' && crew !== 'trad' && team === tb && pos === 'Director' && w < 3;
+        const who = NAMES[seed % NAMES.length];
         people.push({
-          id: `${pid}-${team.id}-${k}`, plan_id: pid, team_id: team.id, person_id: mine ? 'pp-me' : `pp-${n}`,
-          name: mine ? null : name(), position: pos, status: mine ? (w === 2 ? 'U' : 'C') : roll === 0 ? 'D' : roll < 3 ? 'U' : 'C', photo: null,
+          id: `${pid}-${team.id}-${k}`, plan_id: pid, team_id: team.id, person_id: mine ? 'pp-me' : `pp-${who.replace(/\W/g, '')}`,
+          name: mine ? null : who, position: pos, status: mine ? (w === 2 && id === 'st-svl-v' ? 'U' : 'C') : roll === 0 ? 'D' : roll < 3 ? 'U' : 'C', photo: null,
         });
       });
-      fill(tb, BROADCAST, w === 0 ? [5] : w === 1 ? [3, 6] : [2, 4, 5, 6]);
+      const broadcast = !['st-svl-n', 'st-svl-t'].includes(id); // no broadcast in Traditional or the North Auditorium
+      if (broadcast) fill(tb, BROADCAST, w === 0 ? [5] : w === 1 ? [3, 6] : [2, 4, 5, 6]);
       fill(tf, FOH, w >= 2 ? [1] : []);
     }
   });

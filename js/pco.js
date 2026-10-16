@@ -2,7 +2,7 @@
 
 export const PCO_TOKENS_URL = 'https://api.planningcenteronline.com/oauth/applications';
 
-export const STATUS_LABEL = { C: 'Confirmed', U: 'Not answered yet', D: 'Declined' };
+export const STATUS_LABEL = { C: 'Confirmed', U: 'Requested', D: 'Declined' };
 
 export const ACCESS = [
   ['hidden', 'Off', 'Nobody sees it here'],

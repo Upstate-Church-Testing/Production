@@ -1,7 +1,8 @@
 // Services: browse Planning Center by location, then date, then service
 // (Vintage, Traditional, Modern…), and see that service's flow (the order of
 // service, with run times and team notes), its times and who's on the
-// production teams. Planning Center is connected once for the whole church
+// production teams. Roster is the whole schedule at a glance: every position
+// at every location, date by date, one pill per person. Planning Center is connected once for the whole church
 // (Settings › Planning Center); nobody signs in to it here. What each person
 // sees comes from their role in this app and the services an admin shares.
 
@@ -17,14 +18,14 @@ export function mount(el, ctx) {
   const isStaff = ctx.roleAtLeast(ctx.me.role, 'staff');
   const isAdmin = ctx.me.role === 'admin';
   // Where you were (location, date, service) lasts while the app is open.
-  const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null, pane: 'flow', at: 0 });
+  const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null, pane: 'flow', at: 0, mode: 'services' });
+  let pills = new Map(); // roster pill id -> its person and services, for the detail sheet
   const flows = new Map(); // plan id -> its items, loaded when opened
   const s = {
     status: undefined, // undefined while loading, null when Planning Center isn't connected
     data: null,
     error: null,
     campus: ctx.campus, // shared with Gear and Network; All on every launch
-    mine: false,
     refreshing: false,
     picked: false,      // a location was chosen on this screen (or by default)
   };
@@ -35,7 +36,8 @@ export function mount(el, ctx) {
     <div class="page-head">
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show" id="s-seg" hidden>
-          <button type="button" role="tab" data-smode="all">Services</button>
+          <button type="button" role="tab" data-smode="services">Services</button>
+          <button type="button" role="tab" data-smode="roster">Roster</button>
           <button type="button" role="tab" data-smode="mine">My schedule</button>
         </div>
         <p class="tally" id="s-tally" aria-live="polite"></p>
@@ -62,9 +64,10 @@ export function mount(el, ctx) {
   });
 
   el.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at]');
+    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp]');
     if (!t) return;
-    if (t.dataset.smode) { s.mine = t.dataset.smode === 'mine'; draw(); return; }
+    if (t.dataset.smode) { nav.mode = t.dataset.smode; draw(); return; }
+    if (t.dataset.rp) { openPill(t.dataset.rp); return; }
     if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (t.dataset.date) { nav.date = t.dataset.date; nav.plan = null; nav.at = 0; draw(); return; }
     if (t.dataset.plan) { nav.plan = t.dataset.plan; nav.at = 0; draw(); return; }
@@ -75,7 +78,7 @@ export function mount(el, ctx) {
     if (act === 'settings') ctx.openSettings('pco');
     else if (act === 'refresh') refresh();
     else if (act === 'retry') load();
-    else if (act === 'mine') { s.mine = true; draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    else if (act === 'mine') { nav.mode = 'mine'; draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     else if (act === 'all-places') pickCampus(ALL);
   });
 
@@ -97,7 +100,7 @@ export function mount(el, ctx) {
   function pickCampus(id) {
     s.campus = ctx.campus = id;
     s.picked = true;
-    s.mine = false;
+    if (nav.mode === 'mine') nav.mode = 'services';
     nav.date = null; nav.plan = null;
     draw();
   }
@@ -109,7 +112,7 @@ export function mount(el, ctx) {
     if (!p) return;
     s.campus = ctx.campus = m.type(p).campus_id || ALL;
     s.picked = true;
-    s.mine = false;
+    nav.mode = 'services';
     nav.date = clock(s.status?.time_zone).day(p.sort_date);
     nav.plan = p.id;
     draw();
@@ -217,9 +220,12 @@ export function mount(el, ctx) {
     const m = model();
     const connected = !!s.status;
     const seg = $('#s-seg', el);
-    seg.hidden = !connected || !m?.me;
-    seg.querySelectorAll('[data-smode]').forEach((b) => b.setAttribute('aria-selected', String((b.dataset.smode === 'mine') === s.mine)));
-    $('#s-bar', el).hidden = !connected || !m?.plans.length || s.mine;
+    if (nav.mode === 'mine' && !m?.me) nav.mode = 'services';
+    seg.hidden = !connected || !m?.plans.length;
+    seg.querySelector('[data-smode="mine"]').hidden = !m?.me;
+    seg.querySelectorAll('[data-smode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.smode === nav.mode)));
+    el.classList.toggle('is-roster', nav.mode === 'roster');
+    $('#s-bar', el).hidden = !connected || !m?.plans.length || nav.mode === 'mine';
     drawHead();
     loc.update();
     $('#s-tally', el).innerHTML = '';
@@ -242,7 +248,8 @@ export function mount(el, ctx) {
       return;
     }
 
-    if (s.mine) { box.innerHTML = mySchedule(m); return; }
+    if (nav.mode === 'mine') { box.innerHTML = mySchedule(m); return; }
+    if (nav.mode === 'roster') { box.innerHTML = roster(m); $('.ros-wrap', box)?.scrollTo?.({ left: 0 }); return; }
     if (s.campus === ALL || !m.plansAt(s.campus).length) { box.innerHTML = (m.me ? youBanner(m) : '') + placePicker(m); return; }
     box.innerHTML = campusView(m);
     $('.svc-dates .is-on', box)?.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -345,7 +352,7 @@ export function mount(el, ctx) {
           <footer class="svc-foot">
             <span class="svc-counts">${[
               tally.C ? `<span class="is-C">${tally.C} confirmed</span>` : '',
-              tally.U ? `<span class="is-U">${tally.U} not yet</span>` : '',
+              tally.U ? `<span class="is-U">${tally.U} requested</span>` : '',
               tally.D ? `<span class="is-D">${tally.D} declined</span>` : '',
               tally.open ? `<span class="is-open">${tally.open} open</span>` : '',
             ].filter(Boolean).join('') || '<span>No one scheduled yet</span>'}</span>
@@ -414,6 +421,187 @@ export function mount(el, ctx) {
         ${pick}
       </div>
       <ol class="flow">${rows}</ol>`;
+  }
+
+  // ------------------------------------------------------------ roster ---
+  // Rows are positions at each location, columns are dates. A person on the same
+  // position for several services that day (Vintage and Modern, say) is one pill
+  // with a small dot per service. The pill shows the day as a whole: declined if
+  // they declined any of them, requested if any still needs an answer, confirmed
+  // only when every one is confirmed.
+
+  function rosterData(m) {
+    const scope = s.campus === ALL ? m.plans : m.plansAt(s.campus);
+    const teamOf = new Map(m.teams.map((t) => [t.id, t]));
+    const days = [...new Set(scope.map((p) => p._day))].sort();
+    const campusAt = (id) => { const i = ctx.campuses.findIndex((c) => c.id === id); return i < 0 ? 999 : i; };
+    // Teams with the same name (each service type has its own "Broadcast") are one team here.
+    const teamRank = new Map();
+    const posRank = new Map();
+    for (const t of [...m.teams].sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99))) {
+      const k = teamKey(t.name);
+      if (!teamRank.has(k)) teamRank.set(k, teamRank.size);
+      (t.positions || []).forEach((x, i) => { const pk = `${k}|${teamKey(x.name)}`; if (!posRank.has(pk)) posRank.set(pk, i); });
+    }
+    const rows = new Map();
+    const cellFor = (p, team, position) => {
+      const campusId = m.type(p).campus_id || '';
+      const tk = teamKey(team.name);
+      const pk = teamKey(position || team.name);
+      const key = `${campusId}|${tk}|${pk}`;
+      let row = rows.get(key);
+      if (!row) {
+        rows.set(key, row = { key, campusId, team: team.name, position: position || team.name, cells: new Map(),
+          at: [campusAt(campusId), teamRank.get(tk) ?? 99, posRank.get(`${tk}|${pk}`) ?? 500] });
+      }
+      let cell = row.cells.get(p._day);
+      if (!cell) row.cells.set(p._day, cell = { people: new Map(), openBy: new Map() });
+      return cell;
+    };
+    for (const p of scope) {
+      for (const r of m.people.get(p.id) || []) {
+        const team = teamOf.get(r.team_id);
+        if (!team) continue;
+        const cell = cellFor(p, team, r.position);
+        const who = r.person_id || r.name || r.id;
+        let pill = cell.people.get(who);
+        if (!pill) cell.people.set(who, pill = { person_id: r.person_id, name: r.name, photo: r.photo, entries: [] });
+        pill.entries.push({ plan: p, status: r.status || 'U' });
+      }
+      for (const n of p.needed || []) {
+        const team = teamOf.get(n.team_id);
+        if (!team) continue;
+        const cell = cellFor(p, team, n.position);
+        cell.openBy.set(p.id, (cell.openBy.get(p.id) || 0) + Math.max(1, n.quantity || 1));
+      }
+    }
+    const typeSeq = (p) => m.type(p).sequence ?? 99;
+    for (const row of rows.values()) {
+      for (const cell of row.cells.values()) {
+        for (const pill of cell.people.values()) {
+          pill.entries.sort((a, b) => typeSeq(a.plan) - typeSeq(b.plan) || a.plan._start - b.plan._start);
+          pill.status = wholeDay(pill.entries.map((e) => e.status));
+        }
+        // An open spot on Vintage and Modern is one spot for one person, not two.
+        cell.open = Math.max(0, ...cell.openBy.values());
+      }
+    }
+    const list = [...rows.values()].sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1] || a.at[2] - b.at[2] || a.position.localeCompare(b.position));
+    return { days, rows: list };
+  }
+
+  function roster(m) {
+    const { days, rows } = rosterData(m);
+    pills = new Map();
+    const campus = s.campus === ALL ? null : ctx.campusById.get(s.campus);
+    $('#s-tally', el).innerHTML = rows.length ? `<b>${rows.length}</b><span>${rows.length === 1 ? 'position' : 'positions'}</span><small>${campus ? `at ${esc(campus.short_name)}` : `at ${plural(new Set(rows.map((r) => r.campusId)).size, 'location')}`}</small>` : '';
+    if (!rows.length) {
+      return `<div class="empty"><h3>No one scheduled yet</h3><p>Nobody is on the shared teams${campus ? ` at ${esc(campus.short_name)}` : ''} in the next ${plural(s.status.weeks_ahead || 6, 'week')}.</p></div>`;
+    }
+    const today = m.c.day(Date.now());
+    const totals = days.map(() => ({ C: 0, U: 0, D: 0, open: 0 }));
+    let lastCampus = null;
+    const body = rows.map((row) => {
+      const group = !campus && row.campusId !== lastCampus
+        ? `<tr class="ros-group"><th colspan="${days.length + 1}"><span>${esc(ctx.campusById.get(row.campusId)?.short_name || 'Other')}</span></th></tr>` : '';
+      lastCampus = row.campusId;
+      const cells = days.map((d, i) => {
+        const cell = row.cells.get(d);
+        if (!cell) return `<td class="ros-none ${d === today ? 'is-today' : ''}"></td>`;
+        // Same order every week: whoever's on the first service (by Planning Center order) comes first.
+        const seq = (pill) => m.type(pill.entries[0].plan).sequence ?? 99;
+        const people = [...cell.people.values()].sort((a, b) => seq(a) - seq(b) || b.entries.length - a.entries.length || String(a.name).localeCompare(String(b.name)));
+        for (const pill of people) totals[i][pill.status]++;
+        totals[i].open += cell.open;
+        return `<td class="${d === today ? 'is-today' : ''}"><div class="ros-cell">${people.map((pill) => pillHtml(m, row, d, pill)).join('')}${
+          Array.from({ length: cell.open }, () => '<span class="rp is-open">Open</span>').join('')}</div></td>`;
+      }).join('');
+      return `${group}<tr>
+        <th class="ros-pos" scope="row"><b>${esc(row.position)}</b><small>${esc(row.team)}</small></th>
+        ${cells}
+      </tr>`;
+    }).join('');
+    const head = days.map((d) => {
+      const p = m.plans.find((x) => x._day === d);
+      return `<th class="ros-day ${d === today ? 'is-today' : ''}" scope="col"><small>${esc(d === today ? 'Today' : m.c.weekday(p.sort_date).slice(0, 3))}</small><b>${esc(m.c.date(p.sort_date))}</b></th>`;
+    }).join('');
+    const foot = totals.map((t) => `<td><span class="ros-tot">${[
+      t.C ? `<span class="st-C" title="Confirmed">${t.C}</span>` : '',
+      t.U ? `<span class="st-U" title="Requested">${t.U}</span>` : '',
+      t.D ? `<span class="st-D" title="Declined">${t.D}</span>` : '',
+      t.open ? `<span class="is-open" title="Open">${t.open}</span>` : '',
+    ].join('')}</span></td>`).join('');
+    return `
+      <div class="ros-legend">
+        <span class="rp st-C"><span class="rp-dots"><i class="st-C"></i></span>Confirmed</span>
+        <span class="rp st-U"><span class="rp-dots"><i class="st-U"></i></span>Requested</span>
+        <span class="rp st-D"><span class="rp-dots"><i class="st-D"></i></span>Declined</span>
+        <p>One dot for each service they’re on that day. The whole pill is red if they declined any of them, yellow if any still needs an answer, and green only when every one is confirmed. Tap a name to see which.</p>
+      </div>
+      <div class="ros-wrap">
+        <table class="ros ${campus ? 'one-place' : ''}">
+          <thead><tr><th class="ros-corner" scope="col">Position</th>${head}</tr></thead>
+          <tbody>${body}</tbody>
+          <tfoot><tr><th class="ros-pos">Totals</th>${foot}</tr></tfoot>
+        </table>
+      </div>`;
+  }
+
+  function pillHtml(m, row, day, pill) {
+    const id = `p${pills.size}`;
+    pills.set(id, { row, day, pill });
+    const isMe = m.me && pill.person_id === m.me;
+    const name = pill.name || (isMe ? ctx.me.full_name || 'You' : 'Someone');
+    const label = `${name}: ${STATUS_LABEL[pill.status]}${pill.entries.length > 1 ? ` (${pill.entries.map((e) => `${kindName(m.type(e.plan), e.plan)} ${(STATUS_LABEL[e.status] || STATUS_LABEL.U).toLowerCase()}`).join(', ')})` : ''}`;
+    return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
+      <span class="rp-dots">${pill.entries.map((e) => `<i class="st-${esc(e.status)}"></i>`).join('')}</span><b>${esc(name)}</b>
+    </button>`;
+  }
+
+  /** One person's day on one position: each service and their answer to it. */
+  function openPill(id) {
+    const x = pills.get(id);
+    const m = model();
+    if (!x || !m) return;
+    const { row, pill } = x;
+    const isMe = m.me && pill.person_id === m.me;
+    const name = pill.name || (isMe ? ctx.me.full_name || 'You' : 'Someone');
+    const first = pill.entries[0].plan;
+    const place = ctx.campusById.get(row.campusId)?.short_name;
+    const counts = { C: 0, U: 0, D: 0 };
+    for (const e of pill.entries) counts[e.status in counts ? e.status : 'U']++;
+    const n = pill.entries.length;
+    const all = n === 2 ? 'both' : `all ${n}`;
+    const summary = pill.status === 'C' ? (n > 1 ? `Confirmed for ${all} services` : 'Confirmed')
+      : pill.status === 'D' ? (counts.D === n ? (n > 1 ? `Declined ${all} services` : 'Declined') : `Declined ${counts.D} of ${n} services`)
+      : counts.U === n ? (n > 1 ? `Hasn’t answered ${n === 2 ? 'either' : `any of the ${n}`} yet` : 'Hasn’t answered yet')
+      : `Hasn’t answered ${counts.U} of ${n} services yet`;
+    const photo = realPhoto(pill.photo);
+    const sheet = ctx.openSheet({ label: name, className: 'rp-sheet' });
+    sheet.render(`
+      <header class="sh-head">
+        <div class="sh-top"><span class="eyebrow">${esc([place, `${m.c.weekday(first.sort_date)}, ${m.c.date(first.sort_date)}`].filter(Boolean).join(' · '))}</span>
+          <button class="icon-btn" data-close aria-label="Close">${icon('close')}</button></div>
+        <div class="rp-who">
+          <span class="ro-av">${photo ? `<img src="${esc(photo)}" alt="" referrerpolicy="no-referrer">` : esc(initials(name))}</span>
+          <div><h2>${esc(name)}${isMe ? ' <em class="you">You</em>' : ''}</h2><p class="sh-sub">${esc(row.position)} · ${esc(row.team)}</p></div>
+        </div>
+      </header>
+      <div class="sh-body">
+        <p class="rp-sum st-${pill.status}">${statusMark(pill.status)}<b>${esc(summary)}</b></p>
+        <ul class="svc-mine">${pill.entries.map((e) => `<li><button type="button" class="svc-mine-row" data-goto="${e.plan.id}">
+          <span class="svc-you-when"><b>${esc(firstTime(m, e.plan))}</b><small>${esc(m.c.weekday(e.plan.sort_date).slice(0, 3))} ${esc(m.c.date(e.plan.sort_date))}</small></span>
+          <span class="svc-you-what"><b>${esc(kindName(m.type(e.plan), e.plan))}</b><small>${esc(STATUS_LABEL[e.status] || STATUS_LABEL.U)}</small></span>
+          ${statusMark(e.status)}
+          ${icon('chevron', 'svc-place-go')}
+        </button></li>`).join('')}</ul>
+      </div>`);
+    sheet.el.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-goto]');
+      if (!t) return;
+      sheet.close(true);
+      openPlan(t.dataset.goto);
+    });
   }
 
   function mySchedule(m) {
@@ -513,4 +701,11 @@ function statusMark(st) {
   const label = STATUS_LABEL[st] || STATUS_LABEL.U;
   const glyph = st === 'C' ? icon('check') : st === 'D' ? icon('close') : '<i aria-hidden="true">?</i>';
   return `<span class="ro-st st-${esc(st || 'U')}" role="img" aria-label="${label}" title="${label}">${glyph}</span>`;
+}
+
+/** A person's answer for the whole day: any decline wins, then any request still out. */
+function wholeDay(statuses) {
+  if (statuses.includes('D')) return 'D';
+  if (statuses.some((x) => x !== 'C')) return 'U';
+  return 'C';
 }

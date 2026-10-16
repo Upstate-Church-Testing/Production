@@ -1521,11 +1521,11 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .chip.on { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
 .kv dd .mode-chips { margin-top: 4px; }
 .kv dd .hint { display: block; margin-top: 6px; font-weight: 400; }
-.field .ro {
+.field .ro-box {
   margin: 0; min-height: 48px; display: flex; align-items: center; padding: 0 14px;
   border: 1px dashed var(--line-2); border-radius: 14px; font-size: 15px;
 }
-.field .ro i { font-family: var(--f-body); font-style: normal; color: var(--faint); font-size: 14px; }
+.field .ro-box i { font-family: var(--f-body); font-style: normal; color: var(--faint); font-size: 14px; }
 .field > label { font-size: 13px; font-weight: 600; color: var(--muted); }
 .warn-text { color: var(--soft); }
 
@@ -1679,3 +1679,78 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 }
 .px-etable .px-name b { white-space: normal; overflow-wrap: anywhere; }
 .kv > .kv-wide { grid-column: 1 / -1; }
+
+/* ------------------------------------------------------------- roster -- */
+/* Services › Roster: positions down the side, dates across, one pill per person.
+   Dots are each service they're on; the pill is the whole day's answer. */
+
+.view-services.is-roster .toolbar { position: static; }
+.view-services.is-roster .results { gap: 12px; }
+.ros-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.ros-legend .rp { cursor: default; }
+.ros-legend p { flex: 1 1 320px; margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.ros-wrap {
+  overflow: auto; overscroll-behavior: contain; max-height: calc(100dvh - 190px);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl);
+}
+@media (min-width: 860px) { .ros-wrap { max-height: calc(100dvh - 60px); } }
+.ros { border-collapse: separate; border-spacing: 0; width: 100%; }
+.ros th, .ros td { border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); }
+.ros thead th {
+  position: sticky; top: 0; z-index: 3; background: var(--panel-2);
+  height: 54px; padding: 6px 10px; text-align: left; vertical-align: middle;
+}
+.ros-day small { display: block; font: 600 11px/1.3 var(--f-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.ros-day b { display: block; font: 600 15px/1.25 var(--f-body); white-space: nowrap; }
+.ros-day.is-today small, .ros-day.is-today b { color: var(--accent-ink); }
+.ros .ros-corner, .ros .ros-pos {
+  position: sticky; left: 0; z-index: 2; text-align: left; border-left: 0;
+  background: var(--panel); box-shadow: 1px 0 0 var(--line-2);
+}
+.ros thead .ros-corner { z-index: 4; background: var(--panel-2); font: 700 11px/1 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); padding-left: 16px; }
+.ros-pos { width: 1%; min-width: 150px; max-width: 210px; padding: 5px 12px 5px 16px; }
+.ros-pos b { display: block; font: 600 13.5px/1.2 var(--f-body); overflow-wrap: anywhere; }
+.ros-pos small { display: block; font: 500 11.5px/1.25 var(--f-body); color: var(--muted); }
+.ros td { padding: 5px 6px; vertical-align: middle; min-width: 150px; }
+.ros td.is-today { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.ros-cell { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.ros-group th { padding: 16px 0 8px !important; text-align: left; background: var(--panel); border-left: 0 !important; font: 500 17px/1.2 var(--f-display); color: var(--fg); }
+.ros-group th span { position: sticky; left: 16px; }
+.ros tfoot th, .ros tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--panel-2); height: 44px; border-bottom: 0; box-shadow: 0 -1px 0 var(--line-2); }
+.ros tfoot .ros-pos { z-index: 3; background: var(--panel-2); font: 700 11px/1 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.ros-tot { display: flex; flex-wrap: wrap; gap: 5px; }
+.ros-tot span { display: inline-grid; place-items: center; min-width: 26px; height: 22px; padding: 0 7px; border-radius: 999px; font: 700 12px/1 var(--f-body); font-variant-numeric: tabular-nums; }
+.ros-tot .is-open { border: 1.5px dashed var(--line-2); color: var(--muted); }
+
+/* the pill: whole-day color, a small dot per service */
+.rp {
+  display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; min-height: 32px;
+  padding: 4px 11px 4px 8px; border-radius: 999px; border: 1px solid transparent;
+  font: 600 13px/1.2 var(--f-body); color: var(--fg); text-align: left;
+}
+.rp b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp.st-C { background: color-mix(in srgb, var(--ok) 26%, var(--panel)); border-color: color-mix(in srgb, var(--ok) 60%, transparent); color: var(--fg); box-shadow: none; }
+.rp.st-U { background: color-mix(in srgb, var(--soft) 28%, var(--panel)); border-color: color-mix(in srgb, var(--soft) 65%, transparent); color: var(--fg); box-shadow: none; }
+.rp.st-D { background: color-mix(in srgb, var(--bad) 28%, var(--panel)); border-color: color-mix(in srgb, var(--bad) 65%, transparent); color: var(--fg); box-shadow: none; }
+.rp.is-open { justify-content: center; background: transparent; border: 1.5px dashed var(--line-2); color: var(--faint); }
+.rp.is-me { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.rp:hover { filter: brightness(1.15); }
+.rp-dots { display: inline-flex; gap: 3px; flex: none; }
+.rp-dots i { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--bg) 60%, transparent); }
+.rp-dots i.st-C { background: var(--ok); }
+.rp-dots i.st-U { background: var(--soft); }
+.rp-dots i.st-D { background: var(--bad); }
+.legend-dot { display: inline-block; }
+
+.rp-who { display: flex; align-items: center; gap: 14px; margin-top: 6px; }
+.rp-who .ro-av { width: 52px; height: 52px; font-size: 16px; }
+.rp-who h2 { margin: 0; }
+.rp-sum { display: flex; align-items: center; gap: 10px; margin: 0; padding: 12px 14px; border-radius: var(--r-lg); font-size: 15px; }
+.rp-sum b { color: var(--fg); }
+.rp-sheet .svc-mine { display: grid; gap: 8px; }
+
+@container results (max-width: 599px) {
+  .ros-pos { min-width: 112px; padding-left: 12px; }
+  .ros td { min-width: 128px; padding: 5px; }
+  .rp { font-size: 12.5px; padding-inline: 7px 9px; }
+}

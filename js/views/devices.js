@@ -516,7 +516,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         ${bulk ? '' : `<fieldset class="group"><legend>This item</legend>
           <div class="grid2">
             <label class="field"><span>Serial number</span><input id="f-serial_number" class="mono" value="${esc(draft.serial_number)}" autocapitalize="characters" spellcheck="false" placeholder="From the label on the unit"></label>
-            <div class="field"><span>Model number</span><p class="ro mono">${ty?.part_number ? esc(ty.part_number) : '<i>Not set on the model</i>'}</p><small class="hint">Comes from the model, the same for every one.</small></div>
+            <div class="field"><span>Model number</span><p class="ro-box mono">${ty?.part_number ? esc(ty.part_number) : '<i>Not set on the model</i>'}</p><small class="hint">Comes from the model, the same for every one.</small></div>
             <label class="field"><span>Firmware / software</span><input id="f-firmware" class="mono" value="${esc(draft.firmware)}"></label>
             <label class="field"><span>Status</span><select id="f-status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === draft.status ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
           </div>
