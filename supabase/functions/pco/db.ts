@@ -28,7 +28,7 @@ export function dbAdapter(sb: any): Db {
   return {
     campuses: () => selectAll('campuses', 'id, short_name, code'),
     serviceTypes: () => selectAll('pco_service_types', 'id, access, access_set, campus_id, campus_set, teams_synced_at'),
-    teams: () => selectAll('pco_teams', 'id, service_type_id, service_type_ids, name, shown'),
+    teams: () => selectAll('pco_teams', 'id, service_type_id, service_type_ids, name, shown, positions'),
     plans: () => selectAll('pco_plans', 'id, service_type_id, synced_at, needed'),
 
     saveServiceTypes: (rows) => upsert('pco_service_types', rows),
@@ -76,12 +76,11 @@ export function dbAdapter(sb: any): Db {
       ok(await sb.from('profiles').update({ pco_person_id: personId, pco_checked_at: at }).eq('id', id));
     },
     teamPeopleSyncedAt: () => selectAll('pco_teams', 'id, people_synced_at'),
-    async saveTeamPeople(teamId, personIds, at) {
-      const ids = [...new Set(personIds)];
-      if (ids.length) {
-        for (let i = 0; i < ids.length; i += CHUNK) {
-          ok(await sb.from('pco_team_people').upsert(ids.slice(i, i + CHUNK).map((person_id) => ({ team_id: teamId, person_id, synced_at: at })), { onConflict: 'team_id,person_id' }));
-        }
+    async saveTeamPeople(teamId, rows, at) {
+      const unique = [...new Map(rows.map((r) => [r.person_id, r])).values()];
+      const ids = unique.map((r) => r.person_id);
+      for (let i = 0; i < unique.length; i += CHUNK) {
+        ok(await sb.from('pco_team_people').upsert(unique.slice(i, i + CHUNK).map((r) => ({ team_id: teamId, person_id: r.person_id, positions: r.positions, synced_at: at })), { onConflict: 'team_id,person_id' }));
       }
       let q = sb.from('pco_team_people').delete().eq('team_id', teamId);
       if (ids.length) q = q.not('person_id', 'in', list(ids));

@@ -12,6 +12,11 @@ export const ACCESS = [
 
 export const teamKey = (name) => String(name || '').trim().toLowerCase();
 
+/** Positions left out everywhere: this app is for FOH (CG, lighting) and broadcast, not audio.
+ *  "Audio" is left out; "CG / Lighting" or "Audio / CG" stay. (The sync leaves them out too.) */
+export const hiddenPosition = (name) =>
+  !!name && String(name).split(/[/&,+]/).every((part) => /^\s*(audio|sound)\b/i.test(part));
+
 /** The services a team is on (a Planning Center team can be shared by several). */
 export const teamServices = (t) => (t.service_type_ids?.length ? t.service_type_ids : [t.service_type_id]);
 

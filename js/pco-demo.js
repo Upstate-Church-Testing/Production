@@ -116,16 +116,18 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       }));
       vols.push({ id: 'v-manual-1', pco_person_id: null, name: 'Tommy Johnson', photo: null, home_campus_id: 'c-FF', lanyard: 'volunteer', lanyard_at: new Date(Date.now() - 12 * 864e5).toISOString(), lanyard_by: 'p-bethany',
         tags: [], notes: 'Not in Planning Center yet.', last_seen_at: null, created_at: new Date(Date.now() - 20 * 864e5).toISOString(), updated_at: new Date().toISOString(), created_by: 'p-bethany', updated_by: 'p-bethany' });
-      // Team members: who's scheduled on each team, plus the unscheduled ones on Simpsonville FOH and Five Forks.
-      const m = new Set();
-      for (const p of db.people) if (p.person_id) m.add(`${p.team_id}|${p.person_id}`);
-      extra.forEach((n, i) => m.add(`${i < 3 ? 'st-svl-m-f' : 'st-ff-m-f'}|pp-${n.replace(/\W/g, '')}`));
-      members = [...m].map((k) => { const [team_id, person_id] = k.split('|'); return { team_id, person_id }; });
+      // Team members and the positions they can fill: who's scheduled on each team, plus the
+      // unscheduled ones on Simpsonville FOH and Five Forks (one of them only runs audio).
+      const m = new Map();
+      const add = (team, person, pos) => { const k = `${team}|${person}`; if (!m.has(k)) m.set(k, new Set()); if (pos) m.get(k).add(pos); };
+      for (const p of db.people) if (p.person_id) add(p.team_id, p.person_id, p.position);
+      extra.forEach((n, i) => add(i < 3 ? 'st-svl-m-f' : 'st-ff-m-f', `pp-${n.replace(/\W/g, '')}`, i === 4 ? 'Audio' : i % 2 ? 'Lighting' : 'CG'));
+      members = [...m].map(([k, set]) => { const [team_id, person_id] = k.split('|'); return { team_id, person_id, positions: [...set].sort() }; });
     }
     return { people: vols, members };
   }
   function lanyardFields(row, lanyard) {
-    const v = lanyard === 'volunteer' || lanyard === 'coach' ? lanyard : null;
+    const v = ['volunteer', 'coach', 'staff'].includes(lanyard) ? lanyard : null;
     if (row && row.lanyard === v) return {};
     return { lanyard: v, lanyard_at: v ? new Date().toISOString() : null, lanyard_by: v ? me.id : null };
   }

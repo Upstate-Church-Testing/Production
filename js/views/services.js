@@ -8,7 +8,7 @@
 
 import { esc, icon, $, debounce, plural, timeAgo, initials } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
-import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js';
+import { clock, teamKey, teamServices, realPhoto, hiddenPosition, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
 
 const POLL_MS = 60000;
@@ -221,10 +221,10 @@ export function mount(el, ctx) {
       return Date.parse(first?.starts_at || p.sort_date);
     };
     const plans = d.plans.filter((p) => typeById.has(p.service_type_id))
-      .map((p) => ({ ...p, _day: c.day(p.sort_date), _start: start(p) }))
+      .map((p) => ({ ...p, needed: (p.needed || []).filter((n) => !hiddenPosition(n.position)), _day: c.day(p.sort_date), _start: start(p) }))
       .sort((a, b) => a._start - b._start || (typeById.get(a.service_type_id).sequence ?? 99) - (typeById.get(b.service_type_id).sequence ?? 99));
     const people = new Map();
-    for (const p of d.people) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]);
+    for (const p of d.people) if (!hiddenPosition(p.position)) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]); // no audio
     const me = ctx.me.pco_person_id;
     const mine = me ? plans.filter((p) => (people.get(p.id) || []).some((x) => x.person_id === me)) : [];
     const type = (p) => typeById.get(p.service_type_id);
@@ -644,19 +644,35 @@ export function mount(el, ctx) {
     const below = tabs && tabs.top > window.innerHeight / 2 ? window.innerHeight - tabs.top + 8 : 0; // the phone tab bar
     const room = Math.max(220, window.innerHeight - top - below - 14);
     const clamp = (z) => Math.max(0.55, Math.min(1.25, z)); // past 0.55 it scrolls instead of shrinking
-    let z = clamp((room - 2) / natural);
-    // Borders and text don't shrink exactly in step, so measure and adjust a couple of times.
-    for (let i = 0; i < 4; i++) {
+    const apply = (z) => {
       table.style.zoom = z.toFixed(3);
-      const bar = wrap.offsetHeight - wrap.clientHeight - 2; // a sideways scrollbar (desktops; not iPad)
-      const space = room - 2 - Math.max(0, bar);
+      const bar = Math.max(0, wrap.offsetHeight - wrap.clientHeight - 2); // a sideways scrollbar (desktops; not iPad)
       const h = table.getBoundingClientRect().height;
-      wrap.style.height = `${Math.min(room, Math.ceil(h) + 2 + Math.max(0, bar))}px`;
-      if (h <= space + 0.5 && h > space - 6) break;
-      const next = clamp(z * (space / h));
+      wrap.style.height = `${Math.min(room, Math.ceil(h) + 2 + bar)}px`;
+      return { h, space: room - 2 - bar };
+    };
+    // Text and borders snap to pixels, so height doesn't follow zoom smoothly (a step down
+    // can drop a lot, a step up add a lot). Measure, and close in on the biggest zoom that fits.
+    let z = clamp((room - 2) / natural);
+    let fits = null; // biggest zoom seen that fits
+    let tall = null; // smallest zoom seen that doesn't
+    for (let i = 0; i < 8; i++) {
+      const { h, space } = apply(z);
+      if (h <= space + 0.5) {
+        fits = fits == null ? z : Math.max(fits, z);
+        if (h > space - 6) break;
+      } else {
+        tall = tall == null ? z : Math.min(tall, z);
+      }
+      let next = clamp(z * (space / h));
+      if (tall != null && next >= tall) next = fits != null ? (fits + tall) / 2 : tall - 0.01;
+      if (fits != null && next <= fits) next = tall != null ? (fits + tall) / 2 : fits + 0.01;
+      next = clamp(next);
       if (Math.abs(next - z) < 0.002) break;
       z = next;
     }
+    // End on a zoom that fits (if none does, even at the smallest, the table scrolls).
+    if (fits != null && Number(table.style.zoom) !== Number(fits.toFixed(3))) apply(fits);
   }
 
   /** One person's day on one position: each service and their answer to it. */

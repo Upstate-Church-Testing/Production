@@ -1,16 +1,18 @@
 // Services › People: everyone on the production teams, whether or not they
 // have a login. Staff keep a record on each person: the lanyard they've been
-// given (Production Volunteer or Production Coach), tags and notes. Nobody
+// given (Production Volunteer, Coach or Staff), tags and notes. Audio isn't part
+// of this app, so people who only run audio are left off the list. Nobody
 // signs in as these; they're the staff's records.
 //
 // Planning Center fills the list (everyone on the shown teams of shared
 // services, and anyone on a roster). Staff can add people by hand too.
 
 import { esc, icon, $, $$, plural, initials, timeAgo } from '../util.js';
-import { realPhoto } from '../pco.js';
+import { realPhoto, hiddenPosition } from '../pco.js';
 
-export const LANYARDS = { volunteer: 'Production Volunteer', coach: 'Production Coach' };
-const SHORT = { volunteer: 'Volunteer', coach: 'Coach' };
+export const LANYARDS = { volunteer: 'Production Volunteer', coach: 'Production Coach', staff: 'Production Staff' };
+const SHORT = { volunteer: 'Volunteer', coach: 'Coach', staff: 'Staff' };
+const KINDS = ['volunteer', 'coach', 'staff'];
 const ALL = 'all';
 
 /**
@@ -33,13 +35,17 @@ export function peopleView(host) {
       .map((id) => m.typeById.get(id)?.campus_id).filter(Boolean));
     const byPerson = new Map();
     const at = (pid) => {
-      if (!byPerson.has(pid)) byPerson.set(pid, { campuses: new Set(), teams: new Map(), upcoming: [] });
+      if (!byPerson.has(pid)) byPerson.set(pid, { campuses: new Set(), teams: new Map(), upcoming: [], assigned: new Set() });
       return byPerson.get(pid);
     };
     for (const mem of members) {
       const t = teamById.get(mem.team_id);
       if (!t) continue;
       const x = at(mem.person_id);
+      for (const pos of mem.positions || []) x.assigned.add(pos);
+      // A location counts when they can do something there besides audio (or we don't know their positions).
+      const real = !(mem.positions || []).length || (mem.positions || []).some((pos) => !hiddenPosition(pos));
+      if (!real) continue;
       for (const c of campusesOfTeam(t)) { x.campuses.add(c); x.teams.set(`${c}|${t.name}`, { campusId: c, team: t.name }); }
     }
     for (const p of m.plans) {
@@ -52,13 +58,15 @@ export function peopleView(host) {
       }
     }
     return people.map((person) => {
-      const x = (person.pco_person_id && byPerson.get(person.pco_person_id)) || { campuses: new Set(), teams: new Map(), upcoming: [] };
+      const x = (person.pco_person_id && byPerson.get(person.pco_person_id)) || { campuses: new Set(), teams: new Map(), upcoming: [], assigned: new Set() };
       const campuses = new Set(x.campuses);
       if (person.home_campus_id) campuses.add(person.home_campus_id);
       const upcoming = [...x.upcoming].sort((a, b) => a.plan._start - b.plan._start);
-      const positions = [...new Set(upcoming.map((u) => u.position))];
-      return { ...person, campuses, teams: [...x.teams.values()], upcoming, next: upcoming[0] || null, positions };
-    });
+      const positions = [...new Set([...upcoming.map((u) => u.position), ...[...x.assigned].filter((pos) => !hiddenPosition(pos))])];
+      // Only runs audio (everything Planning Center lists for them is audio, and nothing else is coming up).
+      const audioOnly = !!person.pco_person_id && x.assigned.size > 0 && !positions.length && !upcoming.length;
+      return { ...person, campuses, teams: [...x.teams.values()], upcoming, next: upcoming[0] || null, positions, audioOnly };
+    }).filter((p) => !p.audioOnly);
   }
 
   const placeName = (id) => ctx.campusById.get(id)?.short_name || '';
@@ -97,18 +105,18 @@ export function peopleView(host) {
     const list = $('#v-list');
     if (!list || !m) return;
     const everyone = build(m).filter(matches);
-    const count = { all: everyone.length, coach: 0, volunteer: 0, none: 0 };
+    const count = { all: everyone.length, coach: 0, volunteer: 0, staff: 0, none: 0 };
     for (const p of everyone) count[p.lanyard || 'none']++;
     const scheduledNone = everyone.filter((p) => !p.lanyard && p.next).length;
     $('#v-lans').innerHTML = [
-      ['all', 'Everyone'], ['coach', 'Production Coach'], ['volunteer', 'Production Volunteer'], ['none', 'No lanyard'],
+      ['all', 'Everyone'], ['none', 'No lanyard'], ['volunteer', LANYARDS.volunteer], ['coach', LANYARDS.coach], ['staff', LANYARDS.staff],
     ].map(([k, label]) => `<button type="button" role="tab" data-vlan="${k}" aria-selected="${v.lan === k}" class="${k === 'none' && scheduledNone ? 'has-alert' : ''}">${k !== 'all' && k !== 'none' ? `<i class="lan-dot is-${k}"></i>` : ''}${esc(label)}<small>${count[k]}</small></button>`).join('');
     $('#s-tally').innerHTML = `<b>${count.all}</b><span>${count.all === 1 ? 'person' : 'people'}</span><small>${s.campus === ALL ? 'on the production teams' : `at ${esc(placeName(s.campus))}`}</small>`;
 
     rows = everyone.filter(inLan);
     if (!rows.length) {
       list.innerHTML = `<div class="empty"><h3>${v.q ? 'No one matches' : v.lan === 'none' ? 'Everyone here has a lanyard' : 'No one yet'}</h3>
-        <p>${v.q ? `Nobody matches “${esc(v.q)}”.` : v.lan === 'coach' || v.lan === 'volunteer' ? `Nobody has a ${esc(LANYARDS[v.lan])} lanyard${s.campus === ALL ? '' : ' here'} yet. Tap Volunteer or Coach beside someone’s name to give them one.` : ''}</p></div>`;
+        <p>${v.q ? `Nobody matches “${esc(v.q)}”.` : LANYARDS[v.lan] ? `Nobody has a ${esc(LANYARDS[v.lan])} lanyard${s.campus === ALL ? '' : ' here'} yet. Tap ${esc(SHORT[v.lan])} beside someone’s name to give them one.` : ''}</p></div>`;
       return;
     }
     const byName = (a, b) => a.name.localeCompare(b.name);
@@ -144,7 +152,7 @@ export function peopleView(host) {
 
   /** The two quick buttons: tap to give that lanyard, tap again to take it back. */
   function lanyardChips(p) {
-    return `<span class="vol-lan" role="group" aria-label="Lanyard for ${esc(p.name)}">${['volunteer', 'coach'].map((k) =>
+    return `<span class="vol-lan" role="group" aria-label="Lanyard for ${esc(p.name)}">${KINDS.map((k) =>
       `<button type="button" class="lan-chip is-${k}" data-lan="${k}" data-vid="${p.id}" aria-pressed="${p.lanyard === k}" title="${p.lanyard === k ? `Take back the ${LANYARDS[k]} lanyard` : `Give a ${LANYARDS[k]} lanyard`}">${esc(SHORT[k])}</button>`).join('')}</span>`;
   }
 
@@ -223,7 +231,7 @@ export function peopleView(host) {
           <section class="block">
             <h3>Lanyard</h3>
             <div class="seg vol-pick" role="radiogroup" aria-label="Lanyard">
-              ${[[null, 'None'], ['volunteer', LANYARDS.volunteer], ['coach', LANYARDS.coach]].map(([k, label]) =>
+              ${[[null, 'None'], ...KINDS.map((k) => [k, LANYARDS[k]])].map(([k, label]) =>
                 `<button type="button" role="radio" data-pa="lan" data-k="${k || ''}" aria-checked="${(p.lanyard || null) === k}" aria-selected="${(p.lanyard || null) === k}">${k ? `<i class="lan-dot is-${k}"></i>` : ''}${esc(label)}</button>`).join('')}
             </div>
             <p class="fine">${p.lanyard ? `Given ${esc(timeAgo(p.lanyard_at))}${gaveBy ? ` by ${esc(gaveBy)}` : ''}.` : 'No lanyard yet.'}</p>
@@ -353,7 +361,7 @@ export function peopleView(host) {
           <label class="field"><span>Name <b class="req">required</b></span><input id="vn-name" value="${esc(draft.name)}" placeholder="First and last name"></label>
           <label class="field"><span>Location</span><select id="vn-home">${['', ...ctx.campuses.map((c) => c.id)].map((cid) => `<option value="${cid}" ${cid === draft.home_campus_id ? 'selected' : ''}>${cid ? esc(placeName(cid)) : 'No location'}</option>`).join('')}</select></label>
           <div class="field"><span>Lanyard</span>
-            <div class="seg vol-pick" role="radiogroup" aria-label="Lanyard">${[[null, 'None'], ['volunteer', LANYARDS.volunteer], ['coach', LANYARDS.coach]].map(([k, label]) =>
+            <div class="seg vol-pick" role="radiogroup" aria-label="Lanyard">${[[null, 'None'], ...KINDS.map((k) => [k, LANYARDS[k]])].map(([k, label]) =>
               `<button type="button" role="radio" data-na="lan" data-k="${k || ''}" aria-checked="${draft.lanyard === k}" aria-selected="${draft.lanyard === k}">${k ? `<i class="lan-dot is-${k}"></i>` : ''}${esc(label)}</button>`).join('')}</div></div>
           <label class="field"><span>Notes</span><textarea id="vn-notes" rows="3">${esc(draft.notes)}</textarea></label>
         </form>

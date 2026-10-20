@@ -11,6 +11,10 @@ export const PRODUCTION_TEAM =
 const CAMPUS_FOLDER = /^\s*\d+\s+U[A-Z]\b/i;
 // Services in a campus folder that aren't the weekly ones.
 const SPECIAL = /christmas|easter|event|retreat|camp|archive|vbs|conference|getting to know/i;
+// Positions left out everywhere: the app is for FOH (CG, lighting) and broadcast, not audio.
+// "Audio" is left out; "CG / Lighting" or "Audio / CG" stay.
+export const hiddenPosition = (name: string | null | undefined) =>
+  !!name && String(name).split(/[\/&,+]/).every((part) => /^\s*(audio|sound)\b/i.test(part));
 
 const DAY = 864e5;
 const HOUR = 36e5;
@@ -18,7 +22,7 @@ const HOUR = 36e5;
 export type Db = {
   campuses(): Promise<{ id: string; short_name: string; code: string | null }[]>;
   serviceTypes(): Promise<{ id: string; access: string; access_set: boolean; campus_id: string | null; campus_set: boolean; teams_synced_at: string | null }[]>;
-  teams(): Promise<{ id: string; service_type_id: string; service_type_ids?: string[]; name: string; shown: boolean }[]>;
+  teams(): Promise<{ id: string; service_type_id: string; service_type_ids?: string[]; name: string; shown: boolean; positions?: { id: string; name: string }[] }[]>;
   plans(): Promise<{ id: string; service_type_id: string; synced_at: string | null; needed: any }[]>;
   saveServiceTypes(rows: any[]): Promise<void>;
   removeServiceTypesExcept(ids: string[]): Promise<void>;
@@ -32,7 +36,7 @@ export type Db = {
   updatePlan(id: string, patch: any): Promise<void>;
   profilesToMatch(checkedBefore: string, limit: number): Promise<{ id: string; email: string }[]>;
   teamPeopleSyncedAt(): Promise<{ id: string; people_synced_at: string | null }[]>;
-  saveTeamPeople(teamId: string, personIds: string[], at: string): Promise<void>;
+  saveTeamPeople(teamId: string, rows: { person_id: string; positions: string[] }[], at: string): Promise<void>;
   saveVolunteers(rows: { pco_person_id: string; name: string; photo: string | null; last_seen_at: string }[]): Promise<void>;
   setProfileMatch(id: string, personId: string | null, at: string): Promise<void>;
 };
@@ -275,10 +279,10 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
         status: text(pp.attributes?.status).slice(0, 1).toUpperCase() || null,
         photo: pp.attributes?.photo_thumbnail || null, synced_at: stamp,
       }))
-      .filter((p) => p.team_id && shownTeams.has(p.team_id));
+      .filter((p) => p.team_id && shownTeams.has(p.team_id) && !hiddenPosition(p.position));
     const open = needed.data
       .map((n) => ({ team_id: relId(n, 'team'), position: text(n.attributes?.team_position_name) || null, quantity: Number(n.attributes?.quantity) || 1 }))
-      .filter((n) => n.team_id && shownTeams.has(n.team_id));
+      .filter((n) => n.team_id && shownTeams.has(n.team_id) && !hiddenPosition(n.position));
     const notesById = new Map(items.included.filter((x) => x.type === 'ItemNote').map((x) => [x.id, x]));
     const flow = items.data.map((it) => ({
       id: String(it.id), plan_id: plan.id,
@@ -329,8 +333,24 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
           last_seen_at: stamp,
         }))
         .filter((p) => p.name);
+      // Which positions each of them can fill (so audio-only people can be left out of the app).
+      const positionsOf = new Map<string, Set<string>>();
+      for (const pos of t.positions || []) {
+        if (late()) break;
+        try {
+          const a = await pco.all(`/services/v2/service_types/${t.service_type_id}/team_positions/${pos.id}/person_team_position_assignments?per_page=100`);
+          for (const x of a.data) {
+            const pid = relId(x, 'person');
+            if (!pid) continue;
+            if (!positionsOf.has(pid)) positionsOf.set(pid, new Set());
+            positionsOf.get(pid)!.add(pos.name);
+          }
+        } catch (e) {
+          if (!skippable(e)) throw e;
+        }
+      }
       await db.saveVolunteers(people);
-      await db.saveTeamPeople(t.id, people.map((p) => p.pco_person_id), stamp);
+      await db.saveTeamPeople(t.id, people.map((p) => ({ person_id: p.pco_person_id, positions: [...(positionsOf.get(p.pco_person_id) || [])].sort() })), stamp);
       out.teamPeople += people.length;
     });
   }

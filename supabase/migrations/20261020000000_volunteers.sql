@@ -6,7 +6,8 @@
 --   * Everyone on a shown team of a shared Planning Center service is added by
 --     the sync (pco_team_people), and so is anyone who shows up on a roster.
 --   * Staff can also add people by hand (no Planning Center link).
---   * Lanyards: 'volunteer' (Production Volunteer) or 'coach' (Production Coach).
+--   * Lanyards: 'volunteer' (Production Volunteer), 'coach' (Production Coach) or
+--     'staff' (Production Staff, added at the end of this file).
 --     When and by whom it was given is kept with it.
 -- Staff only: volunteers never see this.
 -- =============================================================================
@@ -115,3 +116,10 @@ $$;
 -- People added by hand can be removed; Planning Center people come back with the next sync.
 create policy "staff remove people added by hand" on public.volunteers for delete
   using ((select public.has_role('staff')) and pco_person_id is null);
+
+-- Production Staff lanyard, and which positions each team member can fill
+-- (so people who only run audio can be left out).
+alter table public.volunteers
+  drop constraint volunteers_lanyard_check,
+  add constraint volunteers_lanyard_check check (lanyard in ('volunteer', 'coach', 'staff'));
+alter table public.pco_team_people add column positions text[] not null default '{}';

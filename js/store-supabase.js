@@ -212,7 +212,7 @@ export async function createSupabaseStore(url, key) {
     async volunteers() {
       const [people, members] = await Promise.all([
         all(() => sb.from('volunteers').select('*').order('name')),
-        all(() => sb.from('pco_team_people').select('team_id, person_id')),
+        all(() => sb.from('pco_team_people').select('team_id, person_id, positions')),
       ]);
       return { people, members };
     },

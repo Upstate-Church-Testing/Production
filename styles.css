@@ -1789,6 +1789,7 @@ button.rp:hover { filter: brightness(1.15); }
 .lan-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .lan-dot.is-volunteer { background: #4da3ff; box-shadow: 0 0 8px #4da3ff88; }
 .lan-dot.is-coach { background: #c084fc; box-shadow: 0 0 8px #c084fc88; }
+.lan-dot.is-staff { background: #2dd4bf; box-shadow: 0 0 8px #2dd4bf88; }
 .vol-h { display: flex; align-items: center; gap: 8px; margin: 10px 4px 2px; font: 600 13px/1 var(--f-body); color: var(--muted); }
 .vol-list { list-style: none; margin: 0; padding: 4px; display: grid; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); }
 .vol-row {
@@ -1805,12 +1806,13 @@ button.rp:hover { filter: brightness(1.15); }
 .vol-tag { font-style: normal; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--panel-3); border-radius: 999px; padding: 2px 7px; vertical-align: 1px; }
 .vol-lan { display: inline-flex; gap: 6px; }
 .lan-chip {
-  height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: transparent;
+  height: 34px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line-2); background: transparent;
   font: 600 13px/1 var(--f-body); color: var(--muted);
 }
 .lan-chip:hover { color: var(--fg); border-color: var(--faint); }
 .lan-chip.is-volunteer[aria-pressed="true"] { background: color-mix(in srgb, #4da3ff 26%, var(--panel)); border-color: #4da3ff; color: var(--fg); }
 .lan-chip.is-coach[aria-pressed="true"] { background: color-mix(in srgb, #c084fc 26%, var(--panel)); border-color: #c084fc; color: var(--fg); }
+.lan-chip.is-staff[aria-pressed="true"] { background: color-mix(in srgb, #2dd4bf 24%, var(--panel)); border-color: #2dd4bf; color: var(--fg); }
 .vol-pick { flex-wrap: wrap; border-radius: 22px; }
 .vol-pick button { display: inline-flex; align-items: center; gap: 7px; }
 .vol-pick button[aria-checked="true"] { color: var(--fg); background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-2); }
@@ -1821,6 +1823,6 @@ button.rp:hover { filter: brightness(1.15); }
 @container results (max-width: 640px) {
   .vol-row { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 4px; }
   .vol-next { grid-column: 2; grid-row: 2; display: flex; gap: 6px; }
-  .vol-lan { grid-column: 3; grid-row: 1 / span 2; flex-direction: column; }
+  .vol-lan { grid-column: 2 / -1; grid-row: 3; }
   .lan-chip { height: 30px; padding: 0 10px; font-size: 12px; }
 }

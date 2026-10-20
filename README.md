@@ -43,7 +43,8 @@ and nobody's own Planning Center permissions matter here.
   flow (its items, lengths and Audio/Video/Lighting notes) into `pco_*` tables.
 - Who sees a service is set per service in Settings: **Everyone** (volunteers and up),
   **Staff**, or **Off**. A campus's weekly services that have a production team start
-  shared with everyone; everything else starts off. RLS enforces it.
+  shared with everyone; everything else starts off. RLS enforces it. Audio positions
+  are never copied (see People below).
 - App accounts are matched to Planning Center people by email, so the Services tab can
   show "You're on 3 services" and a My schedule view.
 - Scheduling people from the app goes through the same connection (next step), so what
@@ -56,10 +57,17 @@ they have a login. Nobody signs in as these; they're records the staff keep.
 
 - Planning Center fills it: everyone on the shown teams of shared services (read every
   six hours) and anyone who shows up on a roster. Staff can add people by hand too.
-- Lanyards: Production Volunteer or Production Coach, one tap to give, switch or take
-  back. When and by whom it was given is kept. "No lanyard" puts the people serving
-  soonest first, so you know who to hand one to on Sunday.
+- Lanyards: Production Volunteer, Production Coach or Production Staff, one tap to give,
+  switch or take back. When and by whom it was given is kept. "No lanyard" puts the
+  people serving soonest first, so you know who to hand one to on Sunday.
 - Tags and notes on each person. People added by hand can be renamed and removed.
+
+**No audio.** The app covers front of house (CG, lighting) and broadcast, not audio.
+A position whose name is only Audio or Sound ("Audio", "Audio A1") is left out of the
+roster, the open spots and People; a shared one ("Audio / CG") stays. People who can
+only fill audio positions (from Planning Center's position assignments, kept in
+`pco_team_people.positions`) aren't listed. The rule is `hiddenPosition` in
+`js/pco.js` and `supabase/functions/pco/sync.ts`.
 
 ## Lighting numbers
 
