@@ -31,12 +31,15 @@ export type Db = {
   saveItems(planId: string, rows: any[]): Promise<void>;
   updatePlan(id: string, patch: any): Promise<void>;
   profilesToMatch(checkedBefore: string, limit: number): Promise<{ id: string; email: string }[]>;
+  teamPeopleSyncedAt(): Promise<{ id: string; people_synced_at: string | null }[]>;
+  saveTeamPeople(teamId: string, personIds: string[], at: string): Promise<void>;
+  saveVolunteers(rows: { pco_person_id: string; name: string; photo: string | null; last_seen_at: string }[]): Promise<void>;
   setProfileMatch(id: string, personId: string | null, at: string): Promise<void>;
 };
 
 export type SyncResult = {
   types: number; shared: number; teamsFetched: number; plans: number; rosters: number; people: number; items: number;
-  matched: number; skipped: string[]; partial: boolean; peopleNote: string | null; requests: number;
+  matched: number; skipped: string[]; partial: boolean; peopleNote: string | null; requests: number; teamPeople: number;
 };
 
 const key = (s: string) => s.trim().toLowerCase();
@@ -72,7 +75,7 @@ export const isWeekly = (path: string[], name: string) => path.length === 1 && C
 // allRosters: re-read every roster now, not just the next two weeks' (when someone asks).
 export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allRosters = false, now = new Date(), deadline = Infinity }:
   { pco: Pco; db: Db; weeksAhead?: number; fullTeams?: boolean; allRosters?: boolean; now?: Date; deadline?: number }): Promise<SyncResult> {
-  const out: SyncResult = { types: 0, shared: 0, teamsFetched: 0, plans: 0, rosters: 0, people: 0, items: 0, matched: 0, skipped: [], partial: false, peopleNote: null, requests: 0 };
+  const out: SyncResult = { types: 0, shared: 0, teamsFetched: 0, plans: 0, rosters: 0, people: 0, items: 0, matched: 0, skipped: [], partial: false, peopleNote: null, requests: 0, teamPeople: 0 };
   const stamp = now.toISOString();
   const nowMs = now.getTime();
   const late = () => Date.now() > deadline;
@@ -300,7 +303,39 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     out.items += flow.length;
   });
 
-  // 5. Match app accounts to Planning Center people by email, a few at a time.
+  // 5. Everyone on the shown teams of shared services, for the People list
+  //    (volunteers who aren't on a roster right now too). Every six hours a team.
+  if (!late()) {
+    const sharedIds = new Set(shared.map((r) => r.id));
+    const lastPeople = new Map((await db.teamPeopleSyncedAt()).map((t) => [t.id, t.people_synced_at]));
+    const due = teams.filter((t) => t.shown
+      && (t.service_type_ids?.length ? t.service_type_ids : [t.service_type_id]).some((id) => sharedIds.has(id))
+      && (fullTeams || !lastPeople.get(t.id) || nowMs - Date.parse(lastPeople.get(t.id)!) > 6 * HOUR));
+    await pool(due, 4, async (t) => {
+      if (late()) { out.partial = true; return; }
+      let doc;
+      try {
+        doc = await pco.all(`/services/v2/teams/${t.id}/people?per_page=100`);
+      } catch (e) {
+        if (skippable(e)) return;
+        throw e;
+      }
+      const people = doc.data
+        .filter((p) => !p.attributes?.status || p.attributes.status === 'active')
+        .map((p) => ({
+          pco_person_id: String(p.id),
+          name: text(p.attributes?.full_name) || [text(p.attributes?.first_name), text(p.attributes?.last_name)].filter(Boolean).join(' '),
+          photo: p.attributes?.photo_thumbnail_url || null,
+          last_seen_at: stamp,
+        }))
+        .filter((p) => p.name);
+      await db.saveVolunteers(people);
+      await db.saveTeamPeople(t.id, people.map((p) => p.pco_person_id), stamp);
+      out.teamPeople += people.length;
+    });
+  }
+
+  // 6. Match app accounts to Planning Center people by email, a few at a time.
   if (!late()) {
     const todo = await db.profilesToMatch(new Date(nowMs - DAY).toISOString(), 25);
     for (const p of todo) {

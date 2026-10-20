@@ -9,8 +9,10 @@
 import { esc, icon, $, debounce, plural, timeAgo, initials } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js';
+import { peopleView, LANYARDS } from './volunteers.js';
 
 const POLL_MS = 60000;
+const LETTER_NAME = { V: 'Vintage', M: 'Modern', N: 'North Modern', T: 'Traditional', E: 'Español', W: 'Midweek' };
 const FAST_MS = 3000;
 
 export function mount(el, ctx) {
@@ -28,7 +30,10 @@ export function mount(el, ctx) {
     campus: ctx.campus, // shared with Gear and Network; All on every launch
     refreshing: false,
     picked: false,      // a location was chosen on this screen (or by default)
+    vol: null,          // staff: { people, members } from the volunteer list
+    volError: null,
   };
+  if (nav.mode === 'people' && !isStaff) nav.mode = 'services';
   if (s.campus !== ALL && !ctx.campusById.has(s.campus)) s.campus = ALL;
   let timer = null;
 
@@ -38,10 +43,13 @@ export function mount(el, ctx) {
         <div class="seg mode-seg" role="tablist" aria-label="Show" id="s-seg" hidden>
           <button type="button" role="tab" data-smode="services">Services</button>
           <button type="button" role="tab" data-smode="roster">Roster</button>
+          ${isStaff ? '<button type="button" role="tab" data-smode="people">People</button>' : ''}
           <button type="button" role="tab" data-smode="mine">My schedule</button>
         </div>
+        <div class="ros-head" id="s-rhead" hidden>${dropdownHtml('s-rloc', 'Location', 'caps slim')}</div>
         <p class="tally" id="s-tally" aria-live="polite"></p>
       </div>
+      <div class="ros-key" id="s-rkey" hidden></div>
       <p class="head-meta svc-meta" id="s-meta"></p>
     </div>
     <div class="toolbar filter-bar svc-bar" id="s-bar" hidden>
@@ -49,10 +57,10 @@ export function mount(el, ctx) {
     </div>
     <div class="results svc" id="s-body"><div class="loading">${'<div class="sk tall"></div>'.repeat(2)}</div></div>`;
 
-  // Only locations that have shared services are offered.
-  const loc = wireDropdown($('#s-loc', el), {
+  // Only locations that have shared services are offered. (The roster has a slim copy up top.)
+  const locOptions = {
     label: 'Location',
-    unit: ['service', 'services'],
+    unit: () => (nav.mode === 'people' ? ['person', 'people'] : ['service', 'services']),
     get: () => s.campus,
     set: (v) => { pickCampus(v); },
     options: () => {
@@ -61,12 +69,19 @@ export function mount(el, ctx) {
       return [{ value: ALL, label: 'All locations', count: m.plans.length },
         ...m.places.map((c) => ({ value: c.id, label: c.short_name, count: m.plansAt(c.id).length }))];
     },
+  };
+  const loc = wireDropdown($('#s-loc', el), locOptions);
+  const rloc = wireDropdown($('#s-rloc', el), locOptions);
+  const people = peopleView({
+    ctx, s, model: () => model(), kindName: (t, p) => kindName(t, p), openPlan: (id) => openPlan(id), reloadPeople: () => loadPeople(),
   });
 
+  el.addEventListener('input', (e) => { if (nav.mode === 'people') people.input(e); });
   el.addEventListener('click', (e) => {
+    if (nav.mode === 'people' && people.click(e)) return;
     const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp]');
     if (!t) return;
-    if (t.dataset.smode) { nav.mode = t.dataset.smode; draw(); return; }
+    if (t.dataset.smode) { nav.mode = t.dataset.smode; draw(); window.scrollTo({ top: 0 }); return; }
     if (t.dataset.rp) { openPill(t.dataset.rp); return; }
     if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (t.dataset.date) { nav.date = t.dataset.date; nav.plan = null; nav.at = 0; draw(); return; }
@@ -84,8 +99,13 @@ export function mount(el, ctx) {
 
   const onVisible = () => { if (document.visibilityState === 'visible') checkStatus(); };
   document.addEventListener('visibilitychange', onVisible);
-  const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'pco' || table === 'profiles') load(true); }, 300));
+  const unsubscribe = ctx.store.subscribe(debounce((table) => {
+    if (table === 'pco' || table === 'profiles') load(true);
+    else if (table === 'volunteers') loadPeople();
+  }, 300));
   const clockTimer = setInterval(drawHead, 30000); // keeps "updated 3 min ago" honest
+  const onResize = debounce(() => { if (nav.mode === 'roster') fitRoster(); }, 120);
+  window.addEventListener('resize', onResize);
 
   load();
   return {
@@ -93,6 +113,7 @@ export function mount(el, ctx) {
       alive = false;
       clearTimeout(timer); clearInterval(clockTimer);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('resize', onResize);
       unsubscribe();
     },
   };
@@ -132,6 +153,7 @@ export function mount(el, ctx) {
     } catch (e) {
       if (!quiet || !s.data) s.error = e.message;
     }
+    if (isStaff) await loadPeople(false);
     if (!alive) return;
     // First time in: go straight to your home location if it has services.
     if (!s.picked && s.campus === ALL) {
@@ -141,6 +163,17 @@ export function mount(el, ctx) {
     }
     draw();
     schedule();
+  }
+
+  /** Staff: the volunteer list (lanyards, tags, notes) and who's on which team. */
+  async function loadPeople(redraw = true) {
+    try {
+      s.vol = await ctx.store.volunteers();
+      s.volError = null;
+    } catch (e) { s.volError = e.message; }
+    if (redraw && alive && (nav.mode === 'people' || nav.mode === 'roster')) {
+      if (nav.mode === 'people') people.drawList(); else draw();
+    }
   }
 
   function schedule() {
@@ -197,7 +230,7 @@ export function mount(el, ctx) {
     const type = (p) => typeById.get(p.service_type_id);
     const plansAt = (campusId) => plans.filter((p) => type(p).campus_id === campusId);
     const places = ctx.campuses.filter((cp) => plansAt(cp.id).length);
-    return { c, types, teams, plans, people, me, mine, type, plansAt, places };
+    return { c, types, typeById, teams, plans, people, me, mine, type, plansAt, places };
   }
 
   // ---------------------------------------------------------- drawing ---
@@ -224,8 +257,13 @@ export function mount(el, ctx) {
     seg.hidden = !connected || !m?.plans.length;
     seg.querySelector('[data-smode="mine"]').hidden = !m?.me;
     seg.querySelectorAll('[data-smode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.smode === nav.mode)));
-    el.classList.toggle('is-roster', nav.mode === 'roster');
-    $('#s-bar', el).hidden = !connected || !m?.plans.length || nav.mode === 'mine';
+    const rosterMode = nav.mode === 'roster' && connected && !!m?.plans.length;
+    el.classList.toggle('is-roster', rosterMode);
+    el.classList.toggle('is-people', nav.mode === 'people');
+    $('#s-rhead', el).hidden = !rosterMode;
+    $('#s-rkey', el).hidden = !rosterMode;
+    rloc.update();
+    $('#s-bar', el).hidden = !connected || !m?.plans.length || nav.mode === 'mine' || rosterMode;
     drawHead();
     loc.update();
     $('#s-tally', el).innerHTML = '';
@@ -249,7 +287,8 @@ export function mount(el, ctx) {
     }
 
     if (nav.mode === 'mine') { box.innerHTML = mySchedule(m); return; }
-    if (nav.mode === 'roster') { box.innerHTML = roster(m); $('.ros-wrap', box)?.scrollTo?.({ left: 0 }); return; }
+    if (nav.mode === 'roster') { box.innerHTML = roster(m); fitRoster(); return; }
+    if (nav.mode === 'people') { people.draw(box); return; }
     if (s.campus === ALL || !m.plansAt(s.campus).length) { box.innerHTML = (m.me ? youBanner(m) : '') + placePicker(m); return; }
     box.innerHTML = campusView(m);
     $('.svc-dates .is-on', box)?.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -424,11 +463,12 @@ export function mount(el, ctx) {
   }
 
   // ------------------------------------------------------------ roster ---
-  // Rows are positions at each location, columns are dates. A person on the same
-  // position for several services that day (Vintage and Modern, say) is one pill
-  // with a small dot per service. The pill shows the day as a whole: declined if
-  // they declined any of them, requested if any still needs an answer, confirmed
-  // only when every one is confirmed.
+  // Positions at each location down the side, dates across. Someone on the same
+  // position for several services that day (Vintage and Modern, say) is one pill,
+  // with a dot for each service stacked first to last, lettered V, M, N (North)
+  // or T (Traditional). The pill is the day as a whole: declined if they declined
+  // any of them, requested if any still needs an answer, confirmed only when every
+  // one is. The grid is scaled to fit the screen top to bottom; only dates scroll.
 
   function rosterData(m) {
     const scope = s.campus === ALL ? m.plans : m.plansAt(s.campus);
@@ -475,11 +515,12 @@ export function mount(el, ctx) {
         cell.openBy.set(p.id, (cell.openBy.get(p.id) || 0) + Math.max(1, n.quantity || 1));
       }
     }
-    const typeSeq = (p) => m.type(p).sequence ?? 99;
+    const seq = (p) => m.type(p).sequence ?? 99;
     for (const row of rows.values()) {
       for (const cell of row.cells.values()) {
         for (const pill of cell.people.values()) {
-          pill.entries.sort((a, b) => typeSeq(a.plan) - typeSeq(b.plan) || a.plan._start - b.plan._start);
+          // First service on top, last on the bottom.
+          pill.entries.sort((a, b) => a.plan._start - b.plan._start || seq(a.plan) - seq(b.plan));
           pill.status = wholeDay(pill.entries.map((e) => e.status));
         }
         // An open spot on Vintage and Modern is one spot for one person, not two.
@@ -487,43 +528,63 @@ export function mount(el, ctx) {
       }
     }
     const list = [...rows.values()].sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1] || a.at[2] - b.at[2] || a.position.localeCompare(b.position));
+    // Show the team only where a location has the same position on two teams ("Audio").
+    const seen = new Map();
+    for (const r of list) { const k = `${r.campusId}|${teamKey(r.position)}`; seen.set(k, (seen.get(k) || 0) + 1); }
+    for (const r of list) r.showTeam = seen.get(`${r.campusId}|${teamKey(r.position)}`) > 1;
     return { days, rows: list };
+  }
+
+  /** V, M, N (North), T (Traditional): which service a dot is. */
+  function kindLetter(t, p) {
+    const n = `${t.name} ${kindName(t, p)}`.toLowerCase();
+    if (/north/.test(n)) return 'N';
+    if (/tradition/.test(n)) return 'T';
+    if (/vintage/.test(n)) return 'V';
+    if (/modern/.test(n)) return 'M';
+    if (/espa|spanish/.test(n)) return 'E';
+    if (/midweek|wednesday/.test(n)) return 'W';
+    const k = kindName(t, p).replace(/[^A-Za-z]/g, '');
+    return k && k.toLowerCase() !== String(p.title || '').replace(/[^A-Za-z]/g, '').toLowerCase() ? k[0].toUpperCase() : '';
   }
 
   function roster(m) {
     const { days, rows } = rosterData(m);
     pills = new Map();
     const campus = s.campus === ALL ? null : ctx.campusById.get(s.campus);
-    $('#s-tally', el).innerHTML = rows.length ? `<b>${rows.length}</b><span>${rows.length === 1 ? 'position' : 'positions'}</span><small>${campus ? `at ${esc(campus.short_name)}` : `at ${plural(new Set(rows.map((r) => r.campusId)).size, 'location')}`}</small>` : '';
+    const letters = new Set();
     if (!rows.length) {
+      $('#s-rkey', el).innerHTML = '';
       return `<div class="empty"><h3>No one scheduled yet</h3><p>Nobody is on the shared teams${campus ? ` at ${esc(campus.short_name)}` : ''} in the next ${plural(s.status.weeks_ahead || 6, 'week')}.</p></div>`;
     }
     const today = m.c.day(Date.now());
     const totals = days.map(() => ({ C: 0, U: 0, D: 0, open: 0 }));
-    let lastCampus = null;
-    const body = rows.map((row) => {
-      const group = !campus && row.campusId !== lastCampus
-        ? `<tr class="ros-group"><th colspan="${days.length + 1}"><span>${esc(ctx.campusById.get(row.campusId)?.short_name || 'Other')}</span></th></tr>` : '';
-      lastCampus = row.campusId;
+    const groups = [];
+    for (const row of rows) {
+      if (!groups.length || groups[groups.length - 1].campusId !== row.campusId) groups.push({ campusId: row.campusId, rows: [] });
+      groups[groups.length - 1].rows.push(row);
+    }
+    const body = groups.map((g) => g.rows.map((row, ri) => {
       const cells = days.map((d, i) => {
         const cell = row.cells.get(d);
-        if (!cell) return `<td class="ros-none ${d === today ? 'is-today' : ''}"></td>`;
-        // Same order every week: whoever's on the first service (by Planning Center order) comes first.
-        const seq = (pill) => m.type(pill.entries[0].plan).sequence ?? 99;
-        const people = [...cell.people.values()].sort((a, b) => seq(a) - seq(b) || b.entries.length - a.entries.length || String(a.name).localeCompare(String(b.name)));
+        if (!cell) return `<td class="${d === today ? 'is-today' : ''}"></td>`;
+        // Same order every week: whoever's on the first service comes first.
+        const first = (pill) => pill.entries[0].plan._start;
+        const people = [...cell.people.values()].sort((a, b) => first(a) - first(b) || String(a.name).localeCompare(String(b.name)));
         for (const pill of people) totals[i][pill.status]++;
         totals[i].open += cell.open;
-        return `<td class="${d === today ? 'is-today' : ''}"><div class="ros-cell">${people.map((pill) => pillHtml(m, row, d, pill)).join('')}${
+        const many = people.length + cell.open > 1;
+        return `<td class="${d === today ? 'is-today' : ''}"><div class="ros-cell ${many ? 'is-many' : ''}">${people.map((pill) => pillHtml(m, row, d, pill, many, letters)).join('')}${
           Array.from({ length: cell.open }, () => '<span class="rp is-open">Open</span>').join('')}</div></td>`;
       }).join('');
-      return `${group}<tr>
-        <th class="ros-pos" scope="row"><b>${esc(row.position)}</b><small>${esc(row.team)}</small></th>
-        ${cells}
-      </tr>`;
-    }).join('');
+      const label = row.showTeam ? `${row.position} · ${row.team}` : row.position;
+      const loc = !campus && ri === 0
+        ? `<th class="ros-loc" rowspan="${g.rows.length}" scope="rowgroup"><span>${esc(ctx.campusById.get(row.campusId)?.short_name || 'Other')}</span></th>` : '';
+      return `<tr class="${ri === 0 ? 'ros-first' : ''}">${loc}<th class="ros-pos" scope="row" title="${esc(`${row.position} · ${row.team}`)}">${esc(label)}</th>${cells}</tr>`;
+    }).join('')).join('');
     const head = days.map((d) => {
       const p = m.plans.find((x) => x._day === d);
-      return `<th class="ros-day ${d === today ? 'is-today' : ''}" scope="col"><small>${esc(d === today ? 'Today' : m.c.weekday(p.sort_date).slice(0, 3))}</small><b>${esc(m.c.date(p.sort_date))}</b></th>`;
+      return `<th class="ros-day ${d === today ? 'is-today' : ''}" scope="col">${esc(d === today ? 'Today' : m.c.weekday(p.sort_date).slice(0, 3))} <b>${esc(m.c.date(p.sort_date))}</b></th>`;
     }).join('');
     const foot = totals.map((t) => `<td><span class="ros-tot">${[
       t.C ? `<span class="st-C" title="Confirmed">${t.C}</span>` : '',
@@ -531,31 +592,71 @@ export function mount(el, ctx) {
       t.D ? `<span class="st-D" title="Declined">${t.D}</span>` : '',
       t.open ? `<span class="is-open" title="Open">${t.open}</span>` : '',
     ].join('')}</span></td>`).join('');
+
+    // The key, up top beside the location picker.
+    const used = [...letters].filter((l) => LETTER_NAME[l]).sort((a, b) => 'VMNTEW'.indexOf(a) - 'VMNTEW'.indexOf(b));
+    $('#s-rkey', el).innerHTML = `
+      <span class="rk"><i class="st-C"></i>Confirmed</span><span class="rk"><i class="st-U"></i>Requested</span><span class="rk"><i class="st-D"></i>Declined</span>
+      <span class="rk-sep"></span>
+      ${used.map((l) => `<span class="rk-l"><i>${l}</i>${esc(LETTER_NAME[l])}</span>`).join('')}
+      <span class="rk-note">Any decline makes the whole pill red; any open request makes it yellow.</span>`;
+
     return `
-      <div class="ros-legend">
-        <span class="rp st-C"><span class="rp-dots"><i class="st-C"></i></span>Confirmed</span>
-        <span class="rp st-U"><span class="rp-dots"><i class="st-U"></i></span>Requested</span>
-        <span class="rp st-D"><span class="rp-dots"><i class="st-D"></i></span>Declined</span>
-        <p>One dot for each service they’re on that day. The whole pill is red if they declined any of them, yellow if any still needs an answer, and green only when every one is confirmed. Tap a name to see which.</p>
-      </div>
       <div class="ros-wrap">
         <table class="ros ${campus ? 'one-place' : ''}">
-          <thead><tr><th class="ros-corner" scope="col">Position</th>${head}</tr></thead>
+          <thead><tr>${campus ? '' : '<th class="ros-corner ros-loc-h" scope="col">Location</th>'}<th class="ros-corner ros-pos-h" scope="col">Position</th>${head}</tr></thead>
           <tbody>${body}</tbody>
-          <tfoot><tr><th class="ros-pos">Totals</th>${foot}</tr></tfoot>
+          <tfoot><tr><th class="ros-foot-h" ${campus ? '' : 'colspan="2"'}>Totals</th>${foot}</tr></tfoot>
         </table>
       </div>`;
   }
 
-  function pillHtml(m, row, day, pill) {
+  function pillHtml(m, row, day, pill, many, letters) {
     const id = `p${pills.size}`;
     pills.set(id, { row, day, pill });
     const isMe = m.me && pill.person_id === m.me;
     const name = pill.name || (isMe ? ctx.me.full_name || 'You' : 'Someone');
+    // Two people in one box: first name and last initial so both fit.
+    const parts = name.trim().split(/\s+/);
+    const shown = many && parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
+    const dots = pill.entries.map((e) => {
+      const l = kindLetter(m.type(e.plan), e.plan);
+      if (l) letters.add(l);
+      return `<i class="st-${esc(e.status)}">${esc(l)}</i>`;
+    }).join('');
     const label = `${name}: ${STATUS_LABEL[pill.status]}${pill.entries.length > 1 ? ` (${pill.entries.map((e) => `${kindName(m.type(e.plan), e.plan)} ${(STATUS_LABEL[e.status] || STATUS_LABEL.U).toLowerCase()}`).join(', ')})` : ''}`;
     return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
-      <span class="rp-dots">${pill.entries.map((e) => `<i class="st-${esc(e.status)}"></i>`).join('')}</span><b>${esc(name)}</b>
+      <span class="rp-dots">${dots}</span><b>${esc(shown)}</b>
     </button>`;
+  }
+
+  /** Scales the roster so every row fits on the screen; only the dates scroll sideways. */
+  function fitRoster() {
+    const wrap = $('.ros-wrap', el);
+    const table = wrap && $('.ros', wrap);
+    if (!wrap || !table) return;
+    table.style.zoom = '';
+    wrap.style.height = '';
+    const natural = table.offsetHeight;
+    if (!natural) return;
+    const top = wrap.getBoundingClientRect().top + window.scrollY;
+    const tabs = document.querySelector('.nav')?.getBoundingClientRect();
+    const below = tabs && tabs.top > window.innerHeight / 2 ? window.innerHeight - tabs.top + 8 : 0; // the phone tab bar
+    const room = Math.max(220, window.innerHeight - top - below - 14);
+    const clamp = (z) => Math.max(0.55, Math.min(1.25, z)); // past 0.55 it scrolls instead of shrinking
+    let z = clamp((room - 2) / natural);
+    // Borders and text don't shrink exactly in step, so measure and adjust a couple of times.
+    for (let i = 0; i < 4; i++) {
+      table.style.zoom = z.toFixed(3);
+      const bar = wrap.offsetHeight - wrap.clientHeight - 2; // a sideways scrollbar (desktops; not iPad)
+      const space = room - 2 - Math.max(0, bar);
+      const h = table.getBoundingClientRect().height;
+      wrap.style.height = `${Math.min(room, Math.ceil(h) + 2 + Math.max(0, bar))}px`;
+      if (h <= space + 0.5 && h > space - 6) break;
+      const next = clamp(z * (space / h));
+      if (Math.abs(next - z) < 0.002) break;
+      z = next;
+    }
   }
 
   /** One person's day on one position: each service and their answer to it. */
@@ -578,7 +679,9 @@ export function mount(el, ctx) {
       : `Hasn’t answered ${counts.U} of ${n} services yet`;
     const photo = realPhoto(pill.photo);
     const sheet = ctx.openSheet({ label: name, className: 'rp-sheet' });
-    sheet.render(`
+    const render = () => {
+      const vol = isStaff && pill.person_id ? s.vol?.people.find((v) => v.pco_person_id === pill.person_id) : null;
+      sheet.render(`
       <header class="sh-head">
         <div class="sh-top"><span class="eyebrow">${esc([place, `${m.c.weekday(first.sort_date)}, ${m.c.date(first.sort_date)}`].filter(Boolean).join(' · '))}</span>
           <button class="icon-btn" data-close aria-label="Close">${icon('close')}</button></div>
@@ -590,18 +693,28 @@ export function mount(el, ctx) {
       <div class="sh-body">
         <p class="rp-sum st-${pill.status}">${statusMark(pill.status)}<b>${esc(summary)}</b></p>
         <ul class="svc-mine">${pill.entries.map((e) => `<li><button type="button" class="svc-mine-row" data-goto="${e.plan.id}">
+          <span class="rp-dots is-big"><i class="st-${esc(e.status)}">${esc(kindLetter(m.type(e.plan), e.plan))}</i></span>
           <span class="svc-you-when"><b>${esc(firstTime(m, e.plan))}</b><small>${esc(m.c.weekday(e.plan.sort_date).slice(0, 3))} ${esc(m.c.date(e.plan.sort_date))}</small></span>
           <span class="svc-you-what"><b>${esc(kindName(m.type(e.plan), e.plan))}</b><small>${esc(STATUS_LABEL[e.status] || STATUS_LABEL.U)}</small></span>
           ${statusMark(e.status)}
           ${icon('chevron', 'svc-place-go')}
         </button></li>`).join('')}</ul>
+        ${vol ? `<section class="block rp-lan">
+          <h3>Lanyard</h3>
+          <div class="rp-lan-row">${people.lanyardChips(vol)}<span class="fine">${vol.lanyard ? esc(LANYARDS[vol.lanyard]) : 'No lanyard yet'}</span>
+          <button type="button" class="btn small ghost" data-vprofile="${vol.id}">${icon('me')}Profile</button></div>
+        </section>` : ''}
       </div>`);
+    };
     sheet.el.addEventListener('click', (e) => {
-      const t = e.target.closest('[data-goto]');
-      if (!t) return;
-      sheet.close(true);
-      openPlan(t.dataset.goto);
+      const g = e.target.closest('[data-goto]');
+      if (g) { sheet.close(true); openPlan(g.dataset.goto); return; }
+      const l = e.target.closest('[data-lan]');
+      if (l) { people.setLanyard(l.dataset.vid, l.dataset.lan, () => { render(); if (nav.mode === 'roster') draw(); }); return; }
+      const pr = e.target.closest('[data-vprofile]');
+      if (pr) { sheet.close(true); people.openPerson(pr.dataset.vprofile); }
     });
+    render();
   }
 
   function mySchedule(m) {

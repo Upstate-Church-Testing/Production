@@ -208,6 +208,32 @@ export async function createSupabaseStore(url, key) {
       ok(await sb.rpc('pco_set_campus', { p_type: typeId, p_campus: campusId || null }));
     },
 
+    // ---- Volunteers: everyone on the production teams (staff only). Not logins.
+    async volunteers() {
+      const [people, members] = await Promise.all([
+        all(() => sb.from('volunteers').select('*').order('name')),
+        all(() => sb.from('pco_team_people').select('team_id, person_id')),
+      ]);
+      return { people, members };
+    },
+    /** Add someone by hand, or change name, home location, tags or notes. Returns the id. */
+    async saveVolunteer(v) {
+      const row = {};
+      for (const k of ['name', 'home_campus_id', 'notes', 'tags', 'lanyard']) if (k in v) row[k] = v[k];
+      if ('name' in row) row.name = String(row.name || '').trim();
+      if ('notes' in row) row.notes = String(row.notes || '').trim() || null;
+      if ('home_campus_id' in row) row.home_campus_id = row.home_campus_id || null;
+      if ('lanyard' in row) row.lanyard = row.lanyard || null;
+      if (v.id) return ok(await sb.from('volunteers').update(row).eq('id', v.id).select('id').single()).id;
+      return ok(await sb.from('volunteers').insert(row).select('id').single()).id;
+    },
+    async setLanyard(id, lanyard) {
+      return ok(await sb.from('volunteers').update({ lanyard: lanyard || null }).eq('id', id).select('*').single());
+    },
+    async deleteVolunteer(id) {
+      ok(await sb.from('volunteers').delete().eq('id', id));
+    },
+
     async profiles() {
       return all(() => sb.from('profiles').select('*').order('full_name'));
     },
@@ -218,7 +244,7 @@ export async function createSupabaseStore(url, key) {
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
-      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports', 'streams']) {
+      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
       }
       ch.subscribe();
@@ -252,6 +278,7 @@ function friendly(error) {
     [/devices_type_asset_key/i, 'Another one of this model already has that asset number.'],
     [/devices_patch_pair/i, 'A patch needs both a universe and an address, like 1.333.'],
     [/devices_(patch_universe|patch_address|fixture_id|stage_no|asset_no|dmx_channels)_check/i, 'One of the numbers is out of range.'],
+    [/volunteers_name_check/i, 'Give them a name.'],
     [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],
     [/invalid input syntax for type uuid/i, 'That doesn’t look like a Resi player ID.'],
     [/Payload too large|exceeded the maximum allowed size/i, 'That photo is too big. Try a smaller one.'],

@@ -49,6 +49,18 @@ and nobody's own Planning Center permissions matter here.
 - Scheduling people from the app goes through the same connection (next step), so what
   someone may do is decided by their role here, not by their Planning Center login.
 
+## People (production volunteers)
+
+Services › People (staff only) lists everyone on the production teams, whether or not
+they have a login. Nobody signs in as these; they're records the staff keep.
+
+- Planning Center fills it: everyone on the shown teams of shared services (read every
+  six hours) and anyone who shows up on a roster. Staff can add people by hand too.
+- Lanyards: Production Volunteer or Production Coach, one tap to give, switch or take
+  back. When and by whom it was given is kept. "No lanyard" puts the people serving
+  soonest first, so you know who to hand one to on Sunday.
+- Tags and notes on each person. People added by hand can be renamed and removed.
+
 ## Lighting numbers
 
 Every lighting fixture carries the numbers a lighting team works with:
@@ -92,11 +104,13 @@ device_types     the shared catalog entry ("model" in the app): name, brand, mod
 
 departments      audio / video / lighting / network — the section tag on every item
 profiles         one per login: role, teams, home campus, matched Planning Center person
+volunteers       everyone on the production teams (no login): Planning Center link, lanyard (+ when/by whom), tags, notes, home location
 activity         every change: who, when, old → new (passwords never copied)
 
 pco_connection   the one Planning Center connection (token secret in Vault; the app can't read this table)
 pco_service_types ── pco_teams (shown or not; positions)
         │            who sees it: access = everyone | staff | hidden, and which location
+        ├── pco_team_people (who's on each shown team; fills volunteers)
         └── pco_plans (upcoming: dates, times, open spots) ── pco_plan_people (shown teams only)
                                                           └─ pco_plan_items (the flow: songs, hosts, media, lengths, team notes)
 ```
@@ -128,7 +142,8 @@ js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on
 js/views/account.js            Settings: your profile, Planning Center, Resi players, theme, sign out
-js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its flow with run times and cues, times and production-team rosters; Roster (positions × dates, one pill per person per day, colored by their answer to every service that day); My schedule
+js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its flow with run times and cues, times and production-team rosters; Roster (every location's positions × dates on one screen, one pill per person per day with a lettered dot per service, colored by their answer to every service that day); People; My schedule
+js/views/volunteers.js         Services › People: production volunteers, lanyards, tags, notes, add someone by hand
 js/views/pco-settings.js       Settings › Planning Center (connect, who sees which services, which teams show)
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
 js/pco-demo.js                 made-up Planning Center data for the preview

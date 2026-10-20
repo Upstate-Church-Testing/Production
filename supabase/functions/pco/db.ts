@@ -75,5 +75,25 @@ export function dbAdapter(sb: any): Db {
     async setProfileMatch(id, personId, at) {
       ok(await sb.from('profiles').update({ pco_person_id: personId, pco_checked_at: at }).eq('id', id));
     },
+    teamPeopleSyncedAt: () => selectAll('pco_teams', 'id, people_synced_at'),
+    async saveTeamPeople(teamId, personIds, at) {
+      const ids = [...new Set(personIds)];
+      if (ids.length) {
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          ok(await sb.from('pco_team_people').upsert(ids.slice(i, i + CHUNK).map((person_id) => ({ team_id: teamId, person_id, synced_at: at })), { onConflict: 'team_id,person_id' }));
+        }
+      }
+      let q = sb.from('pco_team_people').delete().eq('team_id', teamId);
+      if (ids.length) q = q.not('person_id', 'in', list(ids));
+      ok(await q);
+      ok(await sb.from('pco_teams').update({ people_synced_at: at }).eq('id', teamId));
+    },
+    async saveVolunteers(rows) {
+      // Only the name, photo and when they were last seen: lanyards, tags and notes are the staff's.
+      const unique = [...new Map(rows.map((r) => [r.pco_person_id, r])).values()];
+      for (let i = 0; i < unique.length; i += CHUNK) {
+        ok(await sb.from('volunteers').upsert(unique.slice(i, i + CHUNK), { onConflict: 'pco_person_id' }));
+      }
+    },
   };
 }

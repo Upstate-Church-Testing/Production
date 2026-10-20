@@ -77,7 +77,7 @@ function build(meId) {
           name: mine ? null : who, position: pos, status: mine ? (w === 2 && id === 'st-svl-v' ? 'U' : 'C') : roll === 0 ? 'D' : roll < 3 ? 'U' : 'C', photo: null,
         });
       });
-      const broadcast = !['st-svl-n', 'st-svl-t'].includes(id); // no broadcast in Traditional or the North Auditorium
+      const broadcast = ['st-svl-m', 'st-svl-v'].includes(id); // like the real thing: only Simpsonville's main room has a broadcast
       if (broadcast) fill(tb, BROADCAST, w === 0 ? [5] : w === 1 ? [3, 6] : [2, 4, 5, 6]);
       fill(tf, FOH, w >= 2 ? [1] : []);
     }
@@ -95,6 +95,40 @@ export function createPcoDemo({ wait, clone, me, changed }) {
 
   const isAdmin = () => me.role === 'admin';
   const canSee = (access) => (access === 'everyone' ? me.role !== 'pending' : access === 'staff' ? ['staff', 'admin'].includes(me.role) : isAdmin());
+
+  // The volunteer list: everyone scheduled, a few who aren't right now, lanyards on some.
+  let vols = null;
+  let members = [];
+  function volunteerData() {
+    if (!vols) {
+      const seen = new Map();
+      for (const p of db.people) if (p.person_id && !seen.has(p.person_id)) seen.set(p.person_id, p.person_id === 'pp-me' ? myName() : p.name);
+      const extra = ['Morgan Hale', 'Jesse Brandt', 'Avery Lin', 'Toby Grant', 'Nora Fields'];
+      extra.forEach((n) => seen.set(`pp-${n.replace(/\W/g, '')}`, n));
+      const list = [...seen].sort((a, b) => a[1].localeCompare(b[1]));
+      vols = list.map(([pid, name], i) => ({
+        id: `v-${pid}`, pco_person_id: pid, name, photo: null, home_campus_id: null,
+        lanyard: i % 9 === 4 ? 'coach' : i % 3 === 0 ? 'volunteer' : null,
+        lanyard_at: i % 3 === 0 || i % 9 === 4 ? new Date(Date.now() - (i + 2) * 864e5).toISOString() : null,
+        lanyard_by: i % 3 === 0 || i % 9 === 4 ? 'p-tom' : null,
+        tags: pid === 'pp-me' ? ['Staff'] : i === 2 ? ['Trainer'] : [], notes: i === 1 ? 'Prefers the 9:30. Learning lighting.' : null,
+        last_seen_at: new Date().toISOString(), created_at: new Date(Date.now() - 30 * 864e5).toISOString(), updated_at: new Date().toISOString(), created_by: null, updated_by: null,
+      }));
+      vols.push({ id: 'v-manual-1', pco_person_id: null, name: 'Tommy Johnson', photo: null, home_campus_id: 'c-FF', lanyard: 'volunteer', lanyard_at: new Date(Date.now() - 12 * 864e5).toISOString(), lanyard_by: 'p-bethany',
+        tags: [], notes: 'Not in Planning Center yet.', last_seen_at: null, created_at: new Date(Date.now() - 20 * 864e5).toISOString(), updated_at: new Date().toISOString(), created_by: 'p-bethany', updated_by: 'p-bethany' });
+      // Team members: who's scheduled on each team, plus the unscheduled ones on Simpsonville FOH and Five Forks.
+      const m = new Set();
+      for (const p of db.people) if (p.person_id) m.add(`${p.team_id}|${p.person_id}`);
+      extra.forEach((n, i) => m.add(`${i < 3 ? 'st-svl-m-f' : 'st-ff-m-f'}|pp-${n.replace(/\W/g, '')}`));
+      members = [...m].map((k) => { const [team_id, person_id] = k.split('|'); return { team_id, person_id }; });
+    }
+    return { people: vols, members };
+  }
+  function lanyardFields(row, lanyard) {
+    const v = lanyard === 'volunteer' || lanyard === 'coach' ? lanyard : null;
+    if (row && row.lanyard === v) return {};
+    return { lanyard: v, lanyard_at: v ? new Date().toISOString() : null, lanyard_by: v ? me.id : null };
+  }
 
   function fakeSync(ms = 1600) {
     syncing = true;
@@ -180,6 +214,46 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       changed('pco');
     },
     async pcoSetWeeks() { await wait(120); },
+
+    // Volunteers: everyone on the production teams, plus people added by hand.
+    async volunteers() {
+      await wait(120);
+      if (!['staff', 'admin'].includes(me.role)) return { people: [], members: [] };
+      return clone(volunteerData());
+    },
+    async saveVolunteer(v) {
+      await wait(160);
+      const row = vols.find((x) => x.id === v.id);
+      const name = 'name' in v ? String(v.name || '').trim() : row?.name;
+      if (!name) throw new Error('Give them a name.');
+      const fields = { name };
+      if ('home_campus_id' in v) fields.home_campus_id = v.home_campus_id || null;
+      if ('notes' in v) fields.notes = String(v.notes || '').trim() || null;
+      if ('tags' in v) fields.tags = [...new Set((v.tags || []).map((t) => String(t).trim()).filter(Boolean))].sort();
+      if ('lanyard' in v) Object.assign(fields, lanyardFields(row, v.lanyard));
+      const stamp = { updated_at: new Date().toISOString(), updated_by: me.id };
+      if (row) { Object.assign(row, fields, stamp); changed('volunteers'); return row.id; }
+      const made = { id: 'v-' + Math.random().toString(36).slice(2), pco_person_id: null, photo: null, home_campus_id: null, lanyard: null, lanyard_at: null, lanyard_by: null,
+        tags: [], notes: null, last_seen_at: null, created_at: stamp.updated_at, created_by: me.id, ...fields, ...stamp };
+      vols.push(made);
+      changed('volunteers');
+      return made.id;
+    },
+    async setLanyard(id, lanyard) {
+      await wait(90);
+      const row = vols.find((x) => x.id === id);
+      if (!row) throw new Error('That person was removed by someone else.');
+      Object.assign(row, lanyardFields(row, lanyard), { updated_at: new Date().toISOString(), updated_by: me.id });
+      changed('volunteers');
+      return clone(row);
+    },
+    async deleteVolunteer(id) {
+      await wait(120);
+      const row = vols.find((x) => x.id === id);
+      if (row?.pco_person_id) throw new Error('People from Planning Center can’t be removed here.');
+      vols = vols.filter((x) => x.id !== id);
+      changed('volunteers');
+    },
     async pcoSetCampus(id, campusId) {
       await wait(120);
       Object.assign(db.types.find((t) => t.id === id), { campus_id: campusId, campus_set: true });
