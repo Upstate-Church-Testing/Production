@@ -43,7 +43,7 @@ function build(meId) {
   const daysToSunday = (7 - base.getUTCDay()) % 7 || 7;
 
   SERVICES.forEach(([id, title, path, campus, access, times, call], i) => {
-    types.push({ id, name: title, path, campus_id: campus, campus_set: false, access, access_set: false, sequence: i, teams_synced_at: new Date().toISOString() });
+    types.push({ id, name: title, path, campus_id: campus, campus_set: false, access, access_set: false, on_roster: id !== 'st-svl-t', sequence: i, teams_synced_at: new Date().toISOString() });
     const tb = { id: `${id}-b`, service_type_id: id, name: 'Broadcast', shown: true, sequence: 1, positions: BROADCAST.map((p, k) => ({ id: `${id}-b${k}`, name: p, sequence: k })) };
     const tf = { id: `${id}-f`, service_type_id: id, name: 'FOH', shown: true, sequence: 2, positions: FOH.map((p, k) => ({ id: `${id}-f${k}`, name: p, sequence: k })) };
     const tw = { id: `${id}-w`, service_type_id: id, name: 'Worship Team', shown: false, sequence: 3, positions: [] };
@@ -207,6 +207,12 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       await wait(120);
       if (!isAdmin()) throw new Error('Only an admin can choose who sees services.');
       Object.assign(db.types.find((t) => t.id === id), { access, access_set: true });
+      changed('pco');
+    },
+    async pcoSetRoster(id, on) {
+      await wait(120);
+      if (!isAdmin()) throw new Error('Only an admin can choose what’s on the roster.');
+      db.types.find((t) => t.id === id).on_roster = !!on;
       changed('pco');
     },
     async pcoShowTeam(name, shown) {

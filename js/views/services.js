@@ -70,8 +70,21 @@ export function mount(el, ctx) {
         ...m.places.map((c) => ({ value: c.id, label: c.short_name, count: m.plansAt(c.id).length }))];
     },
   };
+  // The roster offers only locations with a service on the roster (Laurens and Union aren't).
+  const rosterCampus = (m = model()) => (m && s.campus !== ALL && !m.rosterPlaces.some((c) => c.id === s.campus) ? ALL : s.campus);
+  const rosterOptions = {
+    ...locOptions,
+    unit: () => ['service', 'services'],
+    get: () => rosterCampus(),
+    options: () => {
+      const m = model();
+      if (!m) return [{ value: ALL, label: 'All locations' }];
+      return [{ value: ALL, label: 'All locations', count: m.onRoster.length },
+        ...m.rosterPlaces.map((c) => ({ value: c.id, label: c.short_name, count: m.rosterAt(c.id).length }))];
+    },
+  };
   const loc = wireDropdown($('#s-loc', el), locOptions);
-  const rloc = wireDropdown($('#s-rloc', el), locOptions);
+  const rloc = wireDropdown($('#s-rloc', el), rosterOptions);
   const people = peopleView({
     ctx, s, model: () => model(), kindName: (t, p) => kindName(t, p), openPlan: (id) => openPlan(id), reloadPeople: () => loadPeople(),
   });
@@ -230,7 +243,11 @@ export function mount(el, ctx) {
     const type = (p) => typeById.get(p.service_type_id);
     const plansAt = (campusId) => plans.filter((p) => type(p).campus_id === campusId);
     const places = ctx.campuses.filter((cp) => plansAt(cp.id).length);
-    return { c, types, typeById, teams, plans, people, me, mine, type, plansAt, places };
+    // Services › Roster: shared services an admin hasn't taken off it (Settings › Planning Center).
+    const onRoster = plans.filter((p) => type(p).on_roster !== false);
+    const rosterAt = (campusId) => onRoster.filter((p) => type(p).campus_id === campusId);
+    const rosterPlaces = ctx.campuses.filter((cp) => rosterAt(cp.id).length);
+    return { c, types, typeById, teams, plans, people, me, mine, type, plansAt, places, onRoster, rosterAt, rosterPlaces };
   }
 
   // ---------------------------------------------------------- drawing ---
@@ -471,7 +488,8 @@ export function mount(el, ctx) {
   // one is. The grid is scaled to fit the screen top to bottom; only dates scroll.
 
   function rosterData(m) {
-    const scope = s.campus === ALL ? m.plans : m.plansAt(s.campus);
+    const where = rosterCampus(m);
+    const scope = where === ALL ? m.onRoster : m.rosterAt(where);
     const teamOf = new Map(m.teams.map((t) => [t.id, t]));
     const days = [...new Set(scope.map((p) => p._day))].sort();
     const campusAt = (id) => { const i = ctx.campuses.findIndex((c) => c.id === id); return i < 0 ? 999 : i; };
@@ -551,7 +569,8 @@ export function mount(el, ctx) {
   function roster(m) {
     const { days, rows } = rosterData(m);
     pills = new Map();
-    const campus = s.campus === ALL ? null : ctx.campusById.get(s.campus);
+    const where = rosterCampus(m);
+    const campus = where === ALL ? null : ctx.campusById.get(where);
     const letters = new Set();
     if (!rows.length) {
       $('#s-rkey', el).innerHTML = '';

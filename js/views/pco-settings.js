@@ -137,7 +137,7 @@ export function mountPcoSettings(box, ctx) {
         : `<p class="fine">${status.syncing ? 'Teams show up here after the first update.' : 'No teams found yet.'}</p>`}
 
       <h3 class="pc-h">Who sees each service</h3>
-      <p class="fine"><b>Everyone</b> includes volunteers. <b>Staff</b> is staff and admins. <b>Off</b> keeps it out of the app.</p>
+      <p class="fine"><b>Everyone</b> includes volunteers. <b>Staff</b> is staff and admins. <b>Off</b> keeps it out of the app. <b>Roster</b> puts a shared service on Services › Roster; turn it off to keep a service in the list but off the grid.</p>
       <div class="pc-groups">${order.map((g) => {
         const list = groups.get(g).sort((a, b) => (a.path.length - b.path.length) || (a.sequence ?? 99) - (b.sequence ?? 99) || a.name.localeCompare(b.name));
         const on = list.filter((t) => t.access !== 'hidden').length;
@@ -157,10 +157,16 @@ export function mountPcoSettings(box, ctx) {
     const where = [t.campus_id ? ctx.campusById.get(t.campus_id)?.short_name : 'No location', ...(t.path || []).slice(1)].filter(Boolean).join(' · ');
     return `<li class="pc-svc">
       <span class="pc-name"><b>${esc(t.name)}</b><small>${esc(where)}</small></span>
+      ${rosterChip(t)}
       <div class="seg pc-access" role="radiogroup" aria-label="Who sees ${esc(t.name)}">
         ${ACCESS.map(([v, label, hint]) => `<button type="button" role="radio" data-pc="access" data-id="${esc(t.id)}" data-v="${v}" title="${hint}" aria-checked="${t.access === v}" aria-selected="${t.access === v}">${label}</button>`).join('')}
       </div>
     </li>`;
+  }
+
+  function rosterChip(t) {
+    const on = t.on_roster !== false;
+    return `<button type="button" class="chip pc-roster" data-pc="roster" data-id="${esc(t.id)}" aria-pressed="${on}" title="${on ? 'On' : 'Off'} Services › Roster" ${t.access === 'hidden' ? 'hidden' : ''}>${on ? icon('check') : ''}Roster</button>`;
   }
 
   // ----------------------------------------------------------- actions ---
@@ -197,8 +203,22 @@ export function mountPcoSettings(box, ctx) {
       t.access = v;
       $$(`[data-pc="access"][data-id="${CSS.escape(t.id)}"]`, box).forEach((x) => { const on = x.dataset.v === v; x.setAttribute('aria-checked', on); x.setAttribute('aria-selected', on); });
       paintGroupCount(b.closest('.pc-group'));
+      const chip = $(`[data-pc="roster"][data-id="${CSS.escape(t.id)}"]`, box);
+      if (chip) chip.hidden = v === 'hidden';
       try { await ctx.store.pcoSetAccess(t.id, v); requestSync(); }
       catch (err) { t.access = before; ctx.toast(err.message); render(); }
+      return;
+    }
+    if (a === 'roster') {
+      const t = data.types.find((x) => x.id === b.dataset.id);
+      if (!t) return;
+      const before = t.on_roster !== false;
+      t.on_roster = !before;
+      b.outerHTML = rosterChip(t);
+      try {
+        await ctx.store.pcoSetRoster(t.id, t.on_roster);
+        ctx.toast(t.on_roster ? `${t.name} is on the roster` : `${t.name} is off the roster`);
+      } catch (err) { t.on_roster = before; ctx.toast(err.message); render(); }
       return;
     }
     if (a === 'team') {

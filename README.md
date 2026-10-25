@@ -45,6 +45,9 @@ and nobody's own Planning Center permissions matter here.
   **Staff**, or **Off**. A campus's weekly services that have a production team start
   shared with everyone; everything else starts off. RLS enforces it. Audio positions
   are never copied (see People below).
+- **Roster** (beside each shared service in Settings) says whether it's on Services ›
+  Roster (`pco_service_types.on_roster`). Laurens, Union and Simpsonville's Traditional
+  are off it; they stay in the Services list and My schedule.
 - App accounts are matched to Planning Center people by email, so the Services tab can
   show "You're on 3 services" and a My schedule view.
 - Scheduling people from the app goes through the same connection (next step), so what

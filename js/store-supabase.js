@@ -198,6 +198,10 @@ export async function createSupabaseStore(url, key) {
     async pcoSetAccess(typeId, access) {
       ok(await sb.rpc('pco_set_access', { p_type: typeId, p_access: access }));
     },
+    /** Whether a shared service is on Services › Roster. */
+    async pcoSetRoster(typeId, on) {
+      ok(await sb.rpc('pco_set_roster', { p_type: typeId, p_on: !!on }));
+    },
     async pcoShowTeam(name, shown) {
       ok(await sb.rpc('pco_show_team', { p_name: name, p_shown: shown }));
     },

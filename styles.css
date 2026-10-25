@@ -1826,3 +1826,6 @@ button.rp:hover { filter: brightness(1.15); }
   .vol-lan { grid-column: 2 / -1; grid-row: 3; }
   .lan-chip { height: 30px; padding: 0 10px; font-size: 12px; }
 }
+.pc-roster { flex: none; padding: 7px 12px; font-size: 13px; }
+.pc-roster .ico { width: 14px; height: 14px; color: var(--accent-ink); stroke-width: 2.4; }
+.pc-roster[aria-pressed="false"] { color: var(--muted); }
