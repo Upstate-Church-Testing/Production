@@ -6,7 +6,7 @@
 // (Settings › Planning Center); nobody signs in to it here. What each person
 // sees comes from their role in this app and the services an admin shares.
 
-import { esc, icon, $, debounce, plural, timeAgo, initials } from '../util.js';
+import { esc, icon, $, $$, debounce, plural, timeAgo, initials } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, hiddenPosition, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
@@ -654,15 +654,18 @@ export function mount(el, ctx) {
     const wrap = $('.ros-wrap', el);
     const table = wrap && $('.ros', wrap);
     if (!wrap || !table) return;
+    const rows = $$('tbody tr', table);
     table.style.zoom = '';
     wrap.style.height = '';
+    rows.forEach((tr) => { tr.style.height = ''; });
     const natural = table.offsetHeight;
     if (!natural) return;
     const top = wrap.getBoundingClientRect().top + window.scrollY;
     const tabs = document.querySelector('.nav')?.getBoundingClientRect();
     const below = tabs && tabs.top > window.innerHeight / 2 ? window.innerHeight - tabs.top + 8 : 0; // the phone tab bar
     const room = Math.max(220, window.innerHeight - top - below - 14);
-    const clamp = (z) => Math.max(0.55, Math.min(1.25, z)); // past 0.55 it scrolls instead of shrinking
+    const MAX = window.innerWidth < 600 ? 1.25 : 1.5; // on a phone, bigger would leave room for only one week
+    const clamp = (z) => Math.max(0.55, Math.min(MAX, z)); // past 0.55 it scrolls instead of shrinking
     const apply = (z) => {
       table.style.zoom = z.toFixed(3);
       const bar = Math.max(0, wrap.offsetHeight - wrap.clientHeight - 2); // a sideways scrollbar (desktops; not iPad)
@@ -692,6 +695,21 @@ export function mount(el, ctx) {
     }
     // End on a zoom that fits (if none does, even at the smallest, the table scrolls).
     if (fits != null && Number(table.style.zoom) !== Number(fits.toFixed(3))) apply(fits);
+
+    // Room left over even at the biggest size (few rows, or a tall screen):
+    // make the rows taller so the grid still reaches the bottom of the screen.
+    const zz = Number(table.style.zoom) || 1;
+    let { h, space } = apply(zz);
+    if (zz < MAX - 0.001 || h >= space - 4 || !rows.length) return;
+    const natRows = rows.map((tr) => tr.getBoundingClientRect().height / zz);
+    const grow = (extra) => { rows.forEach((tr, k) => { tr.style.height = `${(natRows[k] + extra).toFixed(2)}px`; }); return apply(zz); };
+    let extra = (space - h) / zz / rows.length;
+    for (let i = 0; i < 3; i++) {
+      ({ h, space } = grow(extra));
+      if (h <= space + 0.5 && h > space - 4) break;
+      extra += (space - h) / zz / rows.length;
+    }
+    if (h > space + 0.5) grow(extra - (h - space) / zz / rows.length - 0.5);
   }
 
   /** One person's day on one position: each service and their answer to it. */
