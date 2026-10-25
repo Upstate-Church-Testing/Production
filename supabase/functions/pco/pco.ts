@@ -15,6 +15,10 @@ export class PcoError extends Error {
 
 function pcoMessage(status: number, url: string, detail: string) {
   const where = url.replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+  // Planning Center explains a refused change in errors[].detail; pass that on.
+  let said = '';
+  try { said = (JSON.parse(detail)?.errors || []).map((e: any) => e.detail || e.title).filter(Boolean).join(' '); } catch { /* not JSON */ }
+  if (said && status !== 401 && status !== 404) return `Planning Center said: ${said}`;
   if (status === 401) return 'Planning Center didn’t accept that Application ID and secret. Check them and try again.';
   if (status === 403) return `The Planning Center account that made this token can’t see ${where.includes('/people/') ? 'People' : 'everything in Services'}.`;
   if (status === 404) return `Planning Center couldn’t find ${where}.`;
@@ -87,7 +91,35 @@ export function pcoClient({ appId, secret, base = API, fetchImpl = fetch, perWin
     return { data, included };
   }
 
-  return { get, all, get requests() { return requests; } };
+  /** A change (POST, PATCH, DELETE). Not retried after a dropped connection, so nothing is done twice. */
+  async function send(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<Doc | null> {
+    const url = base + path;
+    for (let attempt = 0; ; attempt++) {
+      await slot();
+      requests++;
+      let res: Response;
+      try {
+        res = await fetchImpl(url, {
+          method,
+          headers: { Authorization: auth, Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Upstate Production (church app)' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      } catch (e) {
+        throw new Error(`Couldn’t reach Planning Center: ${(e as Error).message}`);
+      }
+      if (res.status === 429 && attempt < 5) { // turned away before doing anything: safe to ask again
+        const wait = Number(res.headers.get('Retry-After')) || 5;
+        await res.body?.cancel();
+        await sleep(Math.min(30, wait) * 1000 + 100);
+        continue;
+      }
+      if (!res.ok) throw new PcoError(res.status, url, await res.text().catch(() => ''));
+      if (res.status === 204) { await res.body?.cancel(); return null; }
+      return await res.json().catch(() => null);
+    }
+  }
+
+  return { get, all, send, get requests() { return requests; } };
 }
 
 export type Pco = ReturnType<typeof pcoClient>;

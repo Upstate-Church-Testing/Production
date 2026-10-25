@@ -65,6 +65,38 @@ async function pool<T>(items: T[], size: number, fn: (item: T) => Promise<void>)
   await Promise.all(workers);
 }
 
+/** A plan's people (shown teams, no audio) and open spots, as stored. */
+export function rosterRows(members: any[], needed: any[], planId: string, shownTeams: Set<string>, stamp: string) {
+  const people = members
+    .map((pp) => ({
+      id: String(pp.id), plan_id: planId, team_id: relId(pp, 'team'), person_id: relId(pp, 'person'),
+      name: text(pp.attributes?.name), position: text(pp.attributes?.team_position_name) || null,
+      status: text(pp.attributes?.status).slice(0, 1).toUpperCase() || null,
+      photo: pp.attributes?.photo_thumbnail || null, synced_at: stamp,
+      invite_pending: invitePending(pp.attributes),
+    }))
+    .filter((p) => p.team_id && shownTeams.has(p.team_id) && !hiddenPosition(p.position));
+  const open = needed
+    .map((n) => ({ team_id: relId(n, 'team'), position: text(n.attributes?.team_position_name) || null, quantity: Number(n.attributes?.quantity) || 1 }))
+    .filter((n) => n.team_id && shownTeams.has(n.team_id) && !hiddenPosition(n.position));
+  return { people, open };
+}
+
+/** Reads one plan's roster again right away (after someone is scheduled or removed from the app). */
+export async function refreshRoster({ pco, db, plan, shownTeams, stamp }:
+  { pco: Pco; db: Pick<Db, 'savePeople' | 'updatePlan'>; plan: { id: string; service_type_id: string }; shownTeams: Set<string>; stamp: string }) {
+  const base = `/services/v2/service_types/${plan.service_type_id}/plans/${plan.id}`;
+  const [members, needed, doc] = await Promise.all([
+    pco.all(`${base}/team_members?per_page=100`),
+    pco.all(`${base}/needed_positions?per_page=100`),
+    pco.get(base),
+  ]);
+  const { people, open } = rosterRows(members.data, needed.data, plan.id, shownTeams, stamp);
+  await db.savePeople(plan.id, people);
+  await db.updatePlan(plan.id, { needed: open, synced_at: stamp, pco_updated_at: doc.data?.attributes?.updated_at ?? null });
+  return { people, open };
+}
+
 /** Which of our locations a Planning Center service belongs to, from its folders and name. */
 export function autoCampus(path: string[], name: string, campuses: { id: string; short_name: string; code: string | null }[]) {
   for (const t of [...path, name]) {
@@ -294,18 +326,7 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
       if (skippable(e)) return;
       throw e;
     }
-    const people = members.data
-      .map((pp) => ({
-        id: String(pp.id), plan_id: plan.id, team_id: relId(pp, 'team'), person_id: relId(pp, 'person'),
-        name: text(pp.attributes?.name), position: text(pp.attributes?.team_position_name) || null,
-        status: text(pp.attributes?.status).slice(0, 1).toUpperCase() || null,
-        photo: pp.attributes?.photo_thumbnail || null, synced_at: stamp,
-        invite_pending: invitePending(pp.attributes),
-      }))
-      .filter((p) => p.team_id && shownTeams.has(p.team_id) && !hiddenPosition(p.position));
-    const open = needed.data
-      .map((n) => ({ team_id: relId(n, 'team'), position: text(n.attributes?.team_position_name) || null, quantity: Number(n.attributes?.quantity) || 1 }))
-      .filter((n) => n.team_id && shownTeams.has(n.team_id) && !hiddenPosition(n.position));
+    const { people, open } = rosterRows(members.data, needed.data, plan.id, shownTeams, stamp);
     const notesById = new Map(items.included.filter((x) => x.type === 'ItemNote').map((x) => [x.id, x]));
     const flow = items.data.map((it) => ({
       id: String(it.id), plan_id: plan.id,

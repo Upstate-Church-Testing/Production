@@ -10,6 +10,7 @@ import { esc, icon, $, $$, debounce, plural, timeAgo, initials } from '../util.j
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, hiddenPosition, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
+import { openScheduleSheet, takeOff } from './schedule-sheet.js';
 
 const POLL_MS = 20000; // backup for the live push (a phone that slept, a dropped connection)
 const LETTER_NAME = { V: 'Vintage', M: 'Modern', N: 'North Modern', T: 'Traditional', E: 'Español', W: 'Midweek' };
@@ -22,6 +23,7 @@ export function mount(el, ctx) {
   // Where you were (location, date, service) lasts while the app is open.
   const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null, pane: 'flow', at: 0, mode: 'services' });
   let pills = new Map(); // roster pill id -> its person and services, for the detail sheet
+  let opens = new Map(); // roster open-spot id -> its row, day and services (staff schedule from it)
   const flows = new Map(); // plan id -> its items, loaded when opened
   const s = {
     status: undefined, // undefined while loading, null when Planning Center isn't connected
@@ -92,10 +94,11 @@ export function mount(el, ctx) {
   el.addEventListener('input', (e) => { if (nav.mode === 'people') people.input(e); });
   el.addEventListener('click', (e) => {
     if (nav.mode === 'people' && people.click(e)) return;
-    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp]');
+    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro]');
     if (!t) return;
     if (t.dataset.smode) { nav.mode = t.dataset.smode; draw(); window.scrollTo({ top: 0 }); return; }
     if (t.dataset.rp) { openPill(t.dataset.rp); return; }
+    if (t.dataset.ro) { openOpen(t.dataset.ro); return; }
     if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (t.dataset.date) { nav.date = t.dataset.date; nav.plan = null; nav.at = 0; draw(); return; }
     if (t.dataset.plan) { nav.plan = t.dataset.plan; nav.at = 0; draw(); return; }
@@ -516,7 +519,7 @@ export function mount(el, ctx) {
           at: [campusAt(campusId), teamRank.get(tk) ?? 99, posRank.get(`${tk}|${pk}`) ?? 500] });
       }
       let cell = row.cells.get(p._day);
-      if (!cell) row.cells.set(p._day, cell = { people: new Map(), openBy: new Map() });
+      if (!cell) row.cells.set(p._day, cell = { people: new Map(), openBy: new Map(), openTeam: new Map() });
       return cell;
     };
     for (const p of scope) {
@@ -527,13 +530,14 @@ export function mount(el, ctx) {
         const who = r.person_id || r.name || r.id;
         let pill = cell.people.get(who);
         if (!pill) cell.people.set(who, pill = { person_id: r.person_id, name: r.name, photo: r.photo, entries: [] });
-        pill.entries.push({ plan: p, status: r.status || 'U' });
+        pill.entries.push({ plan: p, status: r.status || 'U', invite: !!r.invite_pending, ppid: r.id });
       }
       for (const n of p.needed || []) {
         const team = teamOf.get(n.team_id);
         if (!team) continue;
         const cell = cellFor(p, team, n.position);
         cell.openBy.set(p.id, (cell.openBy.get(p.id) || 0) + Math.max(1, n.quantity || 1));
+        cell.openTeam.set(p.id, n.team_id);
       }
     }
     const seq = (p) => m.type(p).sequence ?? 99;
@@ -543,6 +547,7 @@ export function mount(el, ctx) {
           // First service on top, last on the bottom.
           pill.entries.sort((a, b) => a.plan._start - b.plan._start || seq(a.plan) - seq(b.plan));
           pill.status = wholeDay(pill.entries.map((e) => e.status));
+          pill.invite = pill.entries.some((e) => e.invite && e.status !== 'D'); // scheduled, invite email not sent yet
         }
         // An open spot on Vintage and Modern is one spot for one person, not two.
         cell.open = Math.max(0, ...cell.openBy.values());
@@ -572,6 +577,7 @@ export function mount(el, ctx) {
   function roster(m) {
     const { days, rows } = rosterData(m);
     pills = new Map();
+    opens = new Map();
     const where = rosterCampus(m);
     const campus = where === ALL ? null : ctx.campusById.get(where);
     const letters = new Set();
@@ -597,7 +603,7 @@ export function mount(el, ctx) {
         totals[i].open += cell.open;
         const many = people.length + cell.open > 1;
         return `<td class="${d === today ? 'is-today' : ''}"><div class="ros-cell ${many ? 'is-many' : ''}">${people.map((pill) => pillHtml(m, row, d, pill, many, letters)).join('')}${
-          Array.from({ length: cell.open }, () => '<span class="rp is-open">Open</span>').join('')}</div></td>`;
+          openPills(row, d, cell)}</div></td>`;
       }).join('');
       const label = row.showTeam ? `${row.position} · ${row.team}` : row.position;
       const loc = !campus && ri === 0
@@ -633,6 +639,27 @@ export function mount(el, ctx) {
       </div>`;
   }
 
+  /** Open spots: staff tap one to schedule someone into it. */
+  function openPills(row, day, cell) {
+    if (!cell.open) return '';
+    if (!isStaff) return '<span class="rp is-open">Open</span>'.repeat(cell.open);
+    const id = `o${opens.size}`;
+    opens.set(id, { row, day, cell });
+    return `<button type="button" class="rp is-open" data-ro="${id}" title="Schedule someone" aria-label="Open: schedule someone for ${esc(row.position)}">Open</button>`.repeat(cell.open);
+  }
+
+  function openOpen(id) {
+    const x = opens.get(id);
+    const m = model();
+    if (!x || !m || !isStaff) return;
+    const spots = [...x.cell.openBy.keys()]
+      .map((pid) => ({ plan: m.plans.find((p) => p.id === pid), team_id: x.cell.openTeam.get(pid) }))
+      .filter((sp) => sp.plan && sp.team_id)
+      .sort((a, b) => a.plan._start - b.plan._start || (m.type(a.plan).sequence ?? 99) - (m.type(b.plan).sequence ?? 99));
+    if (!spots.length) return;
+    openScheduleSheet({ ctx, m, row: x.row, spots, h: { kindName, kindLetter, firstTime, weeks: s.status?.weeks_ahead || 6 } });
+  }
+
   function pillHtml(m, row, day, pill, many, letters) {
     const id = `p${pills.size}`;
     pills.set(id, { row, day, pill });
@@ -648,7 +675,7 @@ export function mount(el, ctx) {
     }).join('');
     const label = `${name}: ${STATUS_LABEL[pill.status]}${pill.entries.length > 1 ? ` (${pill.entries.map((e) => `${kindName(m.type(e.plan), e.plan)} ${(STATUS_LABEL[e.status] || STATUS_LABEL.U).toLowerCase()}`).join(', ')})` : ''}`;
     return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
-      <span class="rp-dots">${dots}</span><b>${esc(shown)}</b>
+      <span class="rp-dots">${dots}</span><b>${esc(shown)}</b>${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
     </button>`;
   }
 
@@ -755,6 +782,7 @@ export function mount(el, ctx) {
           ${statusMark(e.status)}
           ${icon('chevron', 'svc-place-go')}
         </button></li>`).join('')}</ul>
+        ${isStaff && pill.invite ? inviteBlock(pill) : ''}
         ${vol ? `<section class="block rp-lan">
           <h3>Lanyard</h3>
           <div class="rp-lan-row">${people.lanyardChips(vol)}<span class="fine">${vol.lanyard ? esc(LANYARDS[vol.lanyard]) : 'No lanyard yet'}</span>
@@ -768,9 +796,30 @@ export function mount(el, ctx) {
       const l = e.target.closest('[data-lan]');
       if (l) { people.setLanyard(l.dataset.vid, l.dataset.lan, () => { render(); if (nav.mode === 'roster') draw(); }); return; }
       const pr = e.target.closest('[data-vprofile]');
-      if (pr) { sheet.close(true); people.openPerson(pr.dataset.vprofile); }
+      if (pr) { sheet.close(true); people.openPerson(pr.dataset.vprofile); return; }
+      const off = e.target.closest('[data-takeoff]');
+      if (off) {
+        if (off.dataset.sure !== '1') { off.dataset.sure = '1'; off.innerHTML = `${icon('trash')}Tap again to take ${esc(name.split(/\s+/)[0])} off`; return; }
+        off.disabled = true;
+        takeOff(ctx, pill.entries.filter((x) => x.invite && x.ppid).map((x) => x.ppid))
+          .then(() => { ctx.toast(`${name} taken back off`); sheet.close(true); })
+          .catch((err) => { ctx.toast(err.message); off.disabled = false; });
+      }
     });
     render();
+  }
+
+  /** Scheduled, but Planning Center hasn't emailed them yet: send it there (the API can't). */
+  function inviteBlock(pill) {
+    const waiting = pill.entries.filter((e) => e.invite && e.status !== 'D');
+    const m = model();
+    const links = waiting.filter((e) => e.plan.url && e.plan.url !== '#');
+    return `<section class="block sch-send">
+      <h3>${icon('mail')}Invite not sent yet</h3>
+      <p>Planning Center hasn’t emailed them, so it isn’t on their schedule yet. Open the plan, tap the ✉️ by their name, keep <b>Email</b> checked, and hit <b>Send</b>.</p>
+      <div class="sch-links">${links.map((e) => `<a class="btn small" href="${esc(e.plan.url)}" target="_blank" rel="noopener">${icon('open')}${esc(kindName(m.type(e.plan), e.plan))} in Planning Center</a>`).join('')}
+        <button type="button" class="btn small ghost danger-text" data-takeoff>${icon('trash')}Take off</button></div>
+    </section>`;
   }
 
   function mySchedule(m) {

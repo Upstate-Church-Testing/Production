@@ -75,6 +75,7 @@ function build(meId) {
         people.push({
           id: `${pid}-${team.id}-${k}`, plan_id: pid, team_id: team.id, person_id: mine ? 'pp-me' : `pp-${who.replace(/\W/g, '')}`,
           name: mine ? null : who, position: pos, status: mine ? (w === 2 && id === 'st-svl-v' ? 'U' : 'C') : roll === 0 ? 'D' : roll < 3 ? 'U' : 'C', photo: null,
+          invite_pending: !mine && roll === 1 && w > 0, // scheduled, invite not sent yet
         });
       });
       const broadcast = ['st-svl-m', 'st-svl-v'].includes(id); // like the real thing: only Simpsonville's main room has a broadcast
@@ -130,6 +131,61 @@ export function createPcoDemo({ wait, clone, me, changed }) {
     const v = ['volunteer', 'coach', 'staff'].includes(lanyard) ? lanyard : null;
     if (row && row.lanyard === v) return {};
     return { lanyard: v, lanyard_at: v ? new Date().toISOString() : null, lanyard_by: v ? me.id : null };
+  }
+
+  // Scheduling from the roster, like the server: who could fill a spot (with made-up
+  // blockouts and that day's schedules), putting them on with the invite not sent, and
+  // taking them back off.
+  function scheduling(action, { picks = [], position, person_id, plan_person_id } = {}) {
+    const hash = (str) => [...str].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+    const typeName = (planId) => db.types.find((t) => t.id === db.plans.find((p) => p.id === planId)?.service_type_id)?.name;
+    if (action === 'unschedule') {
+      const row = db.people.find((p) => p.id === plan_person_id);
+      if (!row) throw new Error('They’re not on that service anymore.');
+      if (!row.invite_pending) throw new Error('Their invite already went out. Take them off in Planning Center so they’re told.');
+      db.people = db.people.filter((p) => p !== row);
+      db.plans.find((p) => p.id === row.plan_id)?.needed.push({ team_id: row.team_id, position: row.position, quantity: 1 });
+      changed('pco');
+      return { removed: row.id };
+    }
+    const plans = picks.map((x) => db.plans.find((p) => p.id === x.plan_id)).filter(Boolean);
+    if (!plans.length) throw new Error('Pick at least one service.');
+    if (/^\s*(audio|sound)\b/i.test(position || '')) throw new Error('Audio isn’t scheduled from here.');
+    const { people: vlist, members: mem } = volunteerData();
+    if (action === 'schedule') {
+      const name = vlist.find((v) => v.pco_person_id === person_id)?.name || 'Someone';
+      const scheduled = picks.map((x, n) => {
+        const id = `pp-new-${Date.now()}-${n}`;
+        db.people.push({ id, plan_id: x.plan_id, team_id: x.team_id, person_id, name, position, status: 'U', photo: null, invite_pending: true });
+        const plan = db.plans.find((p) => p.id === x.plan_id);
+        const k = plan.needed.findIndex((nd) => nd.team_id === x.team_id && nd.position === position);
+        if (k >= 0) plan.needed.splice(k, 1);
+        return { plan_id: x.plan_id, plan_person_id: id, name };
+      });
+      changed('pco');
+      return { scheduled };
+    }
+    // candidates
+    const day = plans[0].sort_date.slice(0, 10);
+    const teamIds = new Set(picks.map((x) => x.team_id));
+    const ids = new Set(mem.filter((x) => teamIds.has(x.team_id)).map((x) => x.person_id));
+    const sameDay = db.plans.filter((p) => p.sort_date.slice(0, 10) === day).map((p) => p.id);
+    const list = [...ids].map((pid) => {
+      const v = vlist.find((x) => x.pco_person_id === pid);
+      const positions = [...new Set(mem.filter((x) => x.person_id === pid).flatMap((x) => x.positions))].filter((x) => !/^\s*(audio|sound)\b/i.test(x)).sort();
+      const hsh = hash(pid + day);
+      const start = new Date(plans[0].sort_date);
+      const blockouts = hsh % 7 === 0 ? [{ starts_at: new Date(start.getTime() - 12 * 36e5).toISOString(), ends_at: new Date(start.getTime() + 12 * 36e5).toISOString(), reason: hsh % 2 ? 'Out of town' : null, blocks: true }]
+        : hsh % 11 === 0 ? [{ starts_at: new Date(start.getTime() + 8 * 36e5).toISOString(), ends_at: new Date(start.getTime() + 11 * 36e5).toISOString(), reason: 'Dinner', blocks: false }] : [];
+      const schedules = db.people.filter((p) => p.person_id === pid && sameDay.includes(p.plan_id)).map((p) => ({
+        plan_id: p.plan_id, plan_person_id: p.id, service: typeName(p.plan_id), team: db.teams.find((t) => t.id === p.team_id)?.name, position: p.position,
+        status: p.status, decline_reason: p.status === 'D' ? 'Family thing' : null, sort_date: db.plans.find((x) => x.id === p.plan_id)?.sort_date, this_spot: picks.some((x) => x.plan_id === p.plan_id),
+      }));
+      return { person_id: pid, name: v?.name || (pid === 'pp-me' ? myName() : pid), photo: null, lanyard: v?.lanyard || null, positions, qualified: positions.includes(position),
+        preference: hsh % 5 === 0 ? 'Once a month' : 'As often as needed', blockouts, schedules, unchecked: false };
+    }).filter((x) => x.positions.length || !mem.some((y) => y.person_id === x.person_id && y.positions.length));
+    list.sort((a, b) => Number(b.qualified) - Number(a.qualified) || a.name.localeCompare(b.name));
+    return { position, days: [day], people: list };
   }
 
   function fakeSync(ms = 1600) {
@@ -200,6 +256,10 @@ export function createPcoDemo({ wait, clone, me, changed }) {
         if (!connected) throw new Error('Planning Center isn’t connected.');
         if (syncing) return { started: false, already: true };
         fakeSync(); return { started: true };
+      }
+      if (['candidates', 'schedule', 'unschedule'].includes(action)) {
+        if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can do that.');
+        return clone(scheduling(action, payload));
       }
       throw new Error('Unknown action.');
     },

@@ -78,6 +78,34 @@ only fill audio positions (from Planning Center's position assignments, kept in
 `pco_team_people.positions`) aren't listed. The rule is `hiddenPosition` in
 `js/pco.js` and `supabase/functions/pco/sync.ts`.
 
+## Scheduling from the roster (staff)
+
+Tap an **Open** spot on Services › Roster. The sheet asks Planning Center, live, about
+everyone on that team for that day:
+
+- who's set up for that position (and their schedule preference),
+- blockouts that cover the service (red), or later that day (noted),
+- anything they declined that day, and anything else they're already on (amber),
+- how many other days they're on the roster in the coming weeks.
+
+They're grouped Available / Check first / Can't that day / Rest of the team. Pick
+someone and Schedule; anyone flagged takes a second tap ("Schedule anyway"). If the
+spot is open on more than one service that day (Vintage and Modern), they go on each
+one you leave checked.
+
+**The invite isn't sent from the app.** People are added exactly as Planning Center's
+own scheduling adds them: unconfirmed, with the invite email *prepared* (the ✉️ in
+Planning Center), not sent. Planning Center's API has no way to send it (an open
+request, planningcenter/developers #1500), so the sheet links to the plan in Planning
+Center, where you tap the ✉️, keep Email checked and hit Send. Until then the roster
+shows ✉️ on their pill, and the pill's sheet links to the plan and offers **Take off**
+(only while the invite hasn't gone out; after that, remove them in Planning Center so
+they're told).
+
+Changes go through the church-wide token, so Planning Center shows its owner as the
+scheduler; `pco_schedule_log` keeps who in the app did it. The roster re-reads the plan
+right away, and every open app gets the change over realtime.
+
 ## Lighting numbers
 
 Every lighting fixture carries the numbers a lighting team works with:
@@ -128,8 +156,10 @@ pco_connection   the one Planning Center connection (token secret in Vault; the 
 pco_service_types ── pco_teams (shown or not; positions)
         │            who sees it: access = everyone | staff | hidden, and which location
         ├── pco_team_people (who's on each shown team; fills volunteers)
-        └── pco_plans (upcoming: dates, times, open spots) ── pco_plan_people (shown teams only)
+        └── pco_plans (upcoming: dates, times, open spots, Planning Center version) ── pco_plan_people (shown teams only; invite sent or not)
                                                           └─ pco_plan_items (the flow: songs, hosts, media, lengths, team notes)
+pco_live         one row the sync touches when anything changed (apps listen over realtime)
+pco_schedule_log who in the app scheduled or took off whom (staff only)
 ```
 
 Every production table carries `departments text[]`, checked against `departments`,
@@ -161,10 +191,11 @@ js/resi.js                     reads pasted players and asks Resi what's on
 js/views/account.js            Settings: your profile, Planning Center, Resi players, theme, sign out
 js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its flow with run times and cues, times and production-team rosters; Roster (every location's positions × dates on one screen, one pill per person per day with a lettered dot per service, colored by their answer to every service that day); People; My schedule
 js/views/volunteers.js         Services › People: production volunteers, lanyards, tags, notes, add someone by hand
+js/views/schedule-sheet.js     Roster › Open: who could fill the spot (blockouts, declines, other spots that day), schedule, send-invite handoff, undo
 js/views/pco-settings.js       Settings › Planning Center (connect, who sees which services, which teams show)
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
 js/pco-demo.js                 made-up Planning Center data for the preview
-supabase/functions/pco/        edge function: connect/disconnect/sync (index.ts), API client (pco.ts), sync (sync.ts), writes (db.ts)
+supabase/functions/pco/        edge function: connect/disconnect/sync/candidates/schedule/unschedule (index.ts), API client (pco.ts), sync (sync.ts), scheduling (schedule.ts), database (db.ts)
 supabase/migrations/*.sql      database, permissions, history
 supabase/seed.sql              the 10 campuses, matched to Planning Center
 tools/stamp.py                 run before each publish; open copies reload themselves

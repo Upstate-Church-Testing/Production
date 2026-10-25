@@ -1829,3 +1829,57 @@ button.rp:hover { filter: brightness(1.15); }
 .pc-roster { flex: none; padding: 7px 12px; font-size: 13px; }
 .pc-roster .ico { width: 14px; height: 14px; color: var(--accent-ink); stroke-width: 2.4; }
 .pc-roster[aria-pressed="false"] { color: var(--muted); }
+
+/* ------------------------------------------------------------ scheduling -- */
+/* Roster › Open: pick who fills the spot; the invite is sent from Planning Center. */
+
+.rp-mail { display: inline-grid; place-items: center; flex: none; margin-left: auto; color: var(--soft); }
+.rp-mail .ico { width: 13px; height: 13px; stroke-width: 2.2; }
+.ros-cell.is-many .rp-mail { display: none; }
+button.rp.is-open { cursor: pointer; }
+button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink); filter: none; }
+
+.sch-sheet .sh-body { gap: 18px; }
+.sch-svcs { display: grid; gap: 8px; }
+.sch-svcs h3, .sch-group h3 { font: 700 11px/1 var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.sch-group h3 small { color: var(--faint); font-size: 11px; }
+.sch-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sch-chips .chip { gap: 7px; }
+.sch-chips .chip small { color: var(--muted); }
+.sch-chips .chip .ico { width: 14px; height: 14px; color: var(--accent-ink); stroke-width: 2.4; }
+.sch-chips .rp-dots i, .sch-one .rp-dots i { width: 16px; height: 16px; font-size: 9px; }
+.sch-one { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); font-weight: 600; }
+.sch-wait { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--muted); }
+.sch-wait .ico { width: 16px; height: 16px; animation: svc-spin 1s linear infinite; }
+.sch-group { display: grid; gap: 8px; }
+.sch-group > .fine { margin: -2px 0 0; }
+.sch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sch-p {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) 28px; align-items: start; gap: 12px;
+  padding: 10px 12px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--fg); text-align: left; font: inherit; cursor: pointer;
+}
+.sch-p:hover { border-color: var(--line-2); }
+.sch-p .ro-av { width: 38px; height: 38px; font-size: 13px; }
+.sch-p.is-no { background: color-mix(in srgb, var(--bad) 7%, var(--panel-2)); }
+.sch-p.is-picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: color-mix(in srgb, var(--accent) 10%, var(--panel-2)); }
+.sch-who { display: grid; gap: 3px; min-width: 0; padding-top: 1px; }
+.sch-who b { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 7px; }
+.sch-who .lan-dot { width: 8px; height: 8px; }
+.sch-can, .sch-note { font-size: 12.5px; color: var(--muted); display: flex; align-items: flex-start; gap: 5px; line-height: 1.3; }
+.sch-note .ico { width: 13px; height: 13px; flex: none; margin-top: 1px; stroke-width: 2.4; }
+.sch-note.is-no { color: var(--bad); }
+.sch-note.is-check { color: var(--soft); }
+.sch-tick { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--line-2); align-self: center; }
+.sch-p.is-picked .sch-tick { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.sch-tick .ico { width: 15px; height: 15px; stroke-width: 2.6; }
+.sch-sheet .sh-foot .form-msg.bad { display: flex; align-items: center; gap: 6px; color: var(--bad); margin: 0; }
+.sch-sheet .sh-foot .form-msg .ico { width: 15px; height: 15px; flex: none; }
+.sch-what { font-weight: 600; color: var(--muted); font-size: 13.5px; }
+.sch-send { padding: 14px; border-radius: var(--r-lg); border: 1px solid color-mix(in srgb, var(--soft) 45%, transparent); background: color-mix(in srgb, var(--soft) 8%, var(--panel-2)); }
+.sch-send h3 { display: flex; align-items: center; gap: 8px; color: var(--fg); }
+.sch-send h3 .ico { color: var(--soft); }
+.sch-send p { margin: 0; line-height: 1.45; }
+.sch-links { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sch-links .btn .ico { width: 15px; height: 15px; }
+.sch-done .rp-sum { background: color-mix(in srgb, var(--soft) 14%, var(--panel-2)); }

@@ -8,12 +8,16 @@
 // POST { action } with the signed-in person's token, or the cron token:
 //   connect     admin  { app_id, secret }  check it with Planning Center, keep it, start syncing
 //   disconnect  admin                       forget the token and the copied rosters
-//   sync        staff, or the 15-minute schedule
+//   sync        staff, or the 30-second schedule
+//   candidates  staff  { picks, position }             who could fill an open spot, with blockouts and that day's schedules
+//   schedule    staff  { picks, position, person_id }  put them on; invite prepared, not sent
+//   unschedule  staff  { plan_person_id }              take them back off before their invite goes out
 
 import { createClient } from 'npm:@supabase/supabase-js@2.49.8';
 import { pcoClient, PcoError } from './pco.ts';
 import { runSync } from './sync.ts';
-import { dbAdapter } from './db.ts';
+import { dbAdapter, scheduleDb } from './db.ts';
+import { candidates, schedule, unschedule, Refused } from './schedule.ts';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -48,10 +52,21 @@ Deno.serve(async (req) => {
       case 'connect': need(who, 'admin'); return reply(await connect(sb, who, body));
       case 'disconnect': need(who, 'admin'); return reply(await disconnect(sb));
       case 'sync': need(who, 'staff'); return reply(await startSync(sb, who));
+      case 'candidates': case 'schedule': case 'unschedule': {
+        need(who, 'staff');
+        const creds = await credentials(sb);
+        if (!creds?.app_id || !creds?.secret) throw new Problem(400, 'Planning Center isn’t connected.');
+        const pco = pcoClient({ appId: creds.app_id, secret: creds.secret });
+        const db = scheduleDb(sb);
+        const stamp = new Date().toISOString();
+        if (body.action === 'candidates') return reply(await candidates({ pco, db, picks: body.picks, position: body.position, tz: creds.time_zone || 'America/New_York' }));
+        if (body.action === 'schedule') return reply(await schedule({ pco, db, picks: body.picks, position: body.position, person_id: String(body.person_id ?? ''), by: who.id, stamp }));
+        return reply(await unschedule({ pco, db, plan_person_id: String(body.plan_person_id ?? ''), by: who.id, stamp }));
+      }
       default: throw new Problem(400, 'Unknown action.');
     }
   } catch (e) {
-    const status = e instanceof Problem ? e.status : e instanceof PcoError ? 400 : 500;
+    const status = e instanceof Problem ? e.status : e instanceof PcoError || e instanceof Refused ? 400 : 500;
     if (status >= 500) console.error('pco error', e);
     return reply({ error: (e as Error).message || 'Something went wrong.' }, status);
   }

@@ -2,6 +2,7 @@
 // write the Planning Center tables; the app can only read what RLS allows).
 
 import type { Db } from './sync.ts';
+import type { ScheduleDb } from './schedule.ts';
 
 const CHUNK = 500;
 const list = (ids: string[]) => `(${ids.map((id) => `"${String(id).replace(/"/g, '')}"`).join(',')})`;
@@ -96,6 +97,43 @@ export function dbAdapter(sb: any): Db {
       for (let i = 0; i < unique.length; i += CHUNK) {
         ok(await sb.from('volunteers').upsert(unique.slice(i, i + CHUNK), { onConflict: 'pco_person_id' }));
       }
+    },
+  };
+}
+
+/** What scheduling from the app reads and writes. */
+export function scheduleDb(sb: any): ScheduleDb {
+  const ok = ({ data, error }: { data: any; error: any }) => {
+    if (error) throw new Error(`Database: ${error.message}`);
+    return data;
+  };
+  const base = dbAdapter(sb);
+  return {
+    savePeople: base.savePeople,
+    updatePlan: base.updatePlan,
+    pulse: base.pulse,
+    async plans(ids) {
+      const rows = ok(await sb.from('pco_plans').select('id, service_type_id, sort_date, times, url, pco_service_types(access)').in('id', ids));
+      return rows.map((r: any) => ({ ...r, access: r.pco_service_types?.access ?? 'hidden' }));
+    },
+    async teams(ids) {
+      return ok(await sb.from('pco_teams').select('id, service_type_id, name, shown, positions').in('id', ids));
+    },
+    async shownTeamIds() {
+      return ok(await sb.from('pco_teams').select('id').eq('shown', true)).map((r: any) => r.id);
+    },
+    async members(teamIds) {
+      return ok(await sb.from('pco_team_people').select('team_id, person_id, positions').in('team_id', teamIds));
+    },
+    async volunteers(personIds) {
+      if (!personIds.length) return [];
+      return ok(await sb.from('volunteers').select('pco_person_id, name, photo, lanyard').in('pco_person_id', personIds));
+    },
+    async planPerson(id) {
+      return ok(await sb.from('pco_plan_people').select('id, plan_id, team_id, person_id, name, position, invite_pending').eq('id', id).maybeSingle());
+    },
+    async log(row) {
+      ok(await sb.from('pco_schedule_log').insert(row));
     },
   };
 }
