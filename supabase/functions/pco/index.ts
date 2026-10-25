@@ -137,7 +137,7 @@ async function startSync(sb: any, who: Who, force?: { fullTeams: boolean; allRos
   // One sync at a time. A sync that died more than 4 minutes ago doesn't count.
   const stale = new Date(Date.now() - 4 * 60_000).toISOString();
   const { data: got, error } = await sb.from('pco_connection')
-    .update({ sync_started_at: new Date().toISOString() })
+    .update({ sync_started_at: new Date().toISOString(), sync_by_user: who.kind === 'user' })
     .eq('id', true)
     .or(`sync_started_at.is.null,sync_started_at.lt.${stale}`)
     .select('id');
@@ -145,6 +145,7 @@ async function startSync(sb: any, who: Who, force?: { fullTeams: boolean; allRos
   if (!got?.length) return { started: false, already: true };
 
   const dailyDue = !creds.last_full_sync_at || Date.now() - Date.parse(creds.last_full_sync_at) > DAY;
+  // The schedule runs every 30 seconds and reads only what changed; someone tapping Refresh reads every roster.
   const opts = force ?? { fullTeams: dailyDue, allRosters: who.kind === 'user' };
   const job = runAndRecord(sb, creds, opts);
   // Answer now; the sync carries on in the background.
@@ -165,7 +166,7 @@ async function runAndRecord(sb: any, creds: any, opts: { fullTeams: boolean; all
     console.error('pco sync failed', e);
   }
   const now = new Date().toISOString();
-  const patch: Record<string, unknown> = { sync_started_at: null, last_sync_error: error };
+  const patch: Record<string, unknown> = { sync_started_at: null, sync_by_user: false, last_sync_error: error };
   if (!error) {
     patch.last_sync_at = now;
     patch.people_note = result.peopleNote;
@@ -173,5 +174,8 @@ async function runAndRecord(sb: any, creds: any, opts: { fullTeams: boolean; all
   }
   const { error: saveError } = await sb.from('pco_connection').update(patch).eq('id', true);
   if (saveError) console.error('pco sync status not saved', saveError.message);
-  console.log(JSON.stringify({ pco_sync: { ...opts, ms: Date.now() - started, error, ...result } }));
+  // Every 30 seconds is a lot of log; keep the runs that did something.
+  if (error || opts.fullTeams || opts.allRosters || result?.changed || result?.partial) {
+    console.log(JSON.stringify({ pco_sync: { ...opts, ms: Date.now() - started, error, ...result } }));
+  }
 }

@@ -16,6 +16,9 @@ const SPECIAL = /christmas|easter|event|retreat|camp|archive|vbs|conference|gett
 export const hiddenPosition = (name: string | null | undefined) =>
   !!name && String(name).split(/[\/&,+]/).every((part) => /^\s*(audio|sound)\b/i.test(part));
 
+/** Scheduled, but the invite email hasn't been sent yet (Planning Center's ✉️ "prepared" state). */
+export const invitePending = (a: any) => !!a && !a.notification_sent_at && (a.prepare_notification === true || !!a.notification_prepared_at);
+
 const DAY = 864e5;
 const HOUR = 36e5;
 
@@ -23,7 +26,7 @@ export type Db = {
   campuses(): Promise<{ id: string; short_name: string; code: string | null }[]>;
   serviceTypes(): Promise<{ id: string; access: string; access_set: boolean; campus_id: string | null; campus_set: boolean; teams_synced_at: string | null }[]>;
   teams(): Promise<{ id: string; service_type_id: string; service_type_ids?: string[]; name: string; shown: boolean; positions?: { id: string; name: string }[] }[]>;
-  plans(): Promise<{ id: string; service_type_id: string; synced_at: string | null; needed: any }[]>;
+  plans(): Promise<{ id: string; service_type_id: string; synced_at: string | null; needed: any; pco_updated_at?: string | null }[]>;
   saveServiceTypes(rows: any[]): Promise<void>;
   removeServiceTypesExcept(ids: string[]): Promise<void>;
   saveTeams(rows: any[]): Promise<void>;
@@ -39,11 +42,14 @@ export type Db = {
   saveTeamPeople(teamId: string, rows: { person_id: string; positions: string[] }[], at: string): Promise<void>;
   saveVolunteers(rows: { pco_person_id: string; name: string; photo: string | null; last_seen_at: string }[]): Promise<void>;
   setProfileMatch(id: string, personId: string | null, at: string): Promise<void>;
+  /** Tells open apps that rosters or plans changed (they reload right away). */
+  pulse(at: string): Promise<void>;
 };
 
 export type SyncResult = {
   types: number; shared: number; teamsFetched: number; plans: number; rosters: number; people: number; items: number;
   matched: number; skipped: string[]; partial: boolean; peopleNote: string | null; requests: number; teamPeople: number;
+  changed: number;
 };
 
 const key = (s: string) => s.trim().toLowerCase();
@@ -79,7 +85,7 @@ export const isWeekly = (path: string[], name: string) => path.length === 1 && C
 // allRosters: re-read every roster now, not just the next two weeks' (when someone asks).
 export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allRosters = false, now = new Date(), deadline = Infinity }:
   { pco: Pco; db: Db; weeksAhead?: number; fullTeams?: boolean; allRosters?: boolean; now?: Date; deadline?: number }): Promise<SyncResult> {
-  const out: SyncResult = { types: 0, shared: 0, teamsFetched: 0, plans: 0, rosters: 0, people: 0, items: 0, matched: 0, skipped: [], partial: false, peopleNote: null, requests: 0, teamPeople: 0 };
+  const out: SyncResult = { types: 0, shared: 0, teamsFetched: 0, plans: 0, rosters: 0, people: 0, items: 0, matched: 0, skipped: [], partial: false, peopleNote: null, requests: 0, teamPeople: 0, changed: 0 };
   const stamp = now.toISOString();
   const nowMs = now.getTime();
   const late = () => Date.now() > deadline;
@@ -214,12 +220,17 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
   const shared = types.filter((r) => r.access !== 'hidden');
   out.shared = shared.length;
   const hidden = types.filter((r) => r.access === 'hidden').map((r) => r.id);
-  if (hidden.length) await db.removePlansForTypes(hidden);
+  const knownPlans = new Map((await db.plans()).map((p) => [p.id, p]));
+  if (hidden.length) {
+    const hiddenSet = new Set(hidden);
+    if ([...knownPlans.values()].some((k) => hiddenSet.has(k.service_type_id))) out.changed++;
+    await db.removePlansForTypes(hidden);
+  }
 
   const shownTeams = new Set(teams.filter((t) => t.shown).map((t) => t.id));
   const horizon = nowMs + weeksAhead * 7 * DAY;
-  const knownPlans = new Map((await db.plans()).map((p) => [p.id, p]));
-  const rosterJobs: { plan: any; typeId: string; when: number }[] = [];
+  const rosterJobs: { plan: any; typeId: string; when: number; remote: string | null; changed: boolean }[] = [];
+  const sameTime = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && Date.parse(a) === Date.parse(b);
 
   await pool(shared, 4, async (r) => {
     if (late()) { out.partial = true; return; }
@@ -232,6 +243,7 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     }
     const timesById = new Map(doc.included.filter((x) => x.type === 'PlanTime').map((x) => [x.id, x]));
     const rows: any[] = [];
+    const changedRows: any[] = [];
     for (const p of doc.data) {
       const when = Date.parse(p.attributes?.sort_date);
       if (!Number.isFinite(when) || when > horizon) continue;
@@ -245,20 +257,30 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
         dates: text(p.attributes?.dates) || null, sort_date: p.attributes.sort_date, times,
         url: p.attributes?.planning_center_url || p.links?.html || `https://services.planningcenteronline.com/plans/${p.id}`,
         needed: prev?.needed ?? [], synced_at: prev?.synced_at ?? stamp,
+        pco_updated_at: prev?.pco_updated_at ?? null, // moves forward once its roster is read
       };
       rows.push(row);
-      // Rosters inside two weeks change most; further out, every couple of hours is plenty.
-      const fresh = prev?.synced_at && prev.service_type_id === r.id && nowMs - Date.parse(prev.synced_at) < 2 * HOUR;
-      if (allRosters || !prev || when - nowMs < 14 * DAY || !fresh) rosterJobs.push({ plan: row, typeId: r.id, when });
+      // Planning Center bumps a plan's updated_at whenever anyone on it is scheduled,
+      // removed, accepts or declines, so only changed plans are read again. Now and then
+      // every plan is read anyway, in case a change slipped by.
+      const remote: string | null = p.attributes?.updated_at || null;
+      const moved = !prev || prev.service_type_id !== r.id;
+      const changed = moved || !remote || !sameTime(prev?.pco_updated_at, remote);
+      const age = prev?.synced_at ? nowMs - Date.parse(prev.synced_at) : Infinity;
+      const stale = age > (when - nowMs < 14 * DAY ? HOUR : 6 * HOUR);
+      if (changed) changedRows.push(row);
+      if (allRosters || changed || stale) rosterJobs.push({ plan: row, typeId: r.id, when, remote, changed });
     }
-    if (rows.length) await db.savePlans(rows);
+    if (changedRows.length) { await db.savePlans(changedRows); out.changed += changedRows.length; }
+    const keep = new Set(rows.map((x) => x.id));
+    if ([...knownPlans.values()].some((k) => k.service_type_id === r.id && !keep.has(k.id))) out.changed++;
     await db.removePlansExcept(r.id, rows.map((x) => x.id));
     out.plans += rows.length;
   });
 
   // 4. Who's on the shown teams, and the flow of the service, soonest services first.
   rosterJobs.sort((a, b) => a.when - b.when);
-  await pool(rosterJobs, 4, async ({ plan, typeId }) => {
+  await pool(rosterJobs, 4, async ({ plan, typeId, remote, changed }) => {
     if (late()) { out.partial = true; return; }
     const base = `/services/v2/service_types/${typeId}/plans/${plan.id}`;
     let members, needed, items;
@@ -278,6 +300,7 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
         name: text(pp.attributes?.name), position: text(pp.attributes?.team_position_name) || null,
         status: text(pp.attributes?.status).slice(0, 1).toUpperCase() || null,
         photo: pp.attributes?.photo_thumbnail || null, synced_at: stamp,
+        invite_pending: invitePending(pp.attributes),
       }))
       .filter((p) => p.team_id && shownTeams.has(p.team_id) && !hiddenPosition(p.position));
     const open = needed.data
@@ -301,7 +324,9 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     }));
     await db.savePeople(plan.id, people);
     await db.saveItems(plan.id, flow);
-    await db.updatePlan(plan.id, { needed: open, synced_at: stamp });
+    await db.updatePlan(plan.id, { needed: open, synced_at: stamp, pco_updated_at: remote });
+    const spots = (list: any[]) => list.map((n) => `${n.team_id}|${n.position}|${n.quantity}`).sort().join();
+    if (changed || spots(open) !== spots(plan.needed || [])) out.changed++;
     out.rosters++;
     out.people += people.length;
     out.items += flow.length;
@@ -377,6 +402,7 @@ export async function runSync({ pco, db, weeksAhead = 6, fullTeams = false, allR
     }
   }
 
+  if (out.changed) await db.pulse(stamp);
   out.requests = pco.requests;
   return out;
 }

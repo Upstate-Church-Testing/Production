@@ -11,7 +11,7 @@ import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, hiddenPosition, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
 
-const POLL_MS = 60000;
+const POLL_MS = 20000; // backup for the live push (a phone that slept, a dropped connection)
 const LETTER_NAME = { V: 'Vintage', M: 'Modern', N: 'North Modern', T: 'Traditional', E: 'Español', W: 'Midweek' };
 const FAST_MS = 3000;
 
@@ -200,7 +200,10 @@ export function mount(el, ctx) {
     if (!alive || document.visibilityState === 'hidden') return schedule();
     try {
       const st = await ctx.store.pcoStatus();
-      const finished = !!st !== !!s.status || st?.last_sync_at !== s.status?.last_sync_at || (s.status?.syncing && !st?.syncing);
+      // Reload when Planning Center data changed (the sync runs every 30 seconds but
+      // usually finds nothing new), or when a refresh someone asked for has finished.
+      const changedAt = (x) => x?.changed_at ?? x?.last_sync_at;
+      const finished = !!st !== !!s.status || changedAt(st) !== changedAt(s.status) || (s.status?.syncing && !st?.syncing);
       s.status = st;
       if (finished) return load(true);
       drawHead();

@@ -176,7 +176,7 @@ export async function createSupabaseStore(url, key) {
         all(() => sb.from('pco_service_types').select('*').order('sequence', { nullsFirst: false }).order('name')),
         all(() => sb.from('pco_teams').select('*').order('sequence', { nullsFirst: false }).order('name')),
         all(() => sb.from('pco_plans').select('*').order('sort_date')),
-        all(() => sb.from('pco_plan_people').select('id, plan_id, team_id, person_id, name, position, status, photo').order('id')),
+        all(() => sb.from('pco_plan_people').select('id, plan_id, team_id, person_id, name, position, status, photo, invite_pending').order('id')),
       ]);
       return { types, teams, plans, people };
     },
@@ -251,6 +251,8 @@ export async function createSupabaseStore(url, key) {
       for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
       }
+      // Planning Center rosters: the sync touches one row whenever anything changed.
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'pco_live' }, () => cb('pco'));
       ch.subscribe();
       return () => sb.removeChannel(ch);
     },

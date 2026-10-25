@@ -37,7 +37,13 @@ and nobody's own Planning Center permissions matter here.
   Planning Center (make it from a shared production login that can see every
   service type). The `pco` edge function checks it with Planning Center and keeps
   the secret in Supabase Vault. The app can never read it back.
-- Every 15 minutes (pg_cron → the edge function) the server copies service types and
+- **Live.** Every 30 seconds (pg_cron → the edge function) the server lists each shared
+  service's upcoming plans. Planning Center bumps a plan's `updated_at` whenever anyone on
+  it is scheduled, removed, accepts or declines, so only those plans' rosters are read
+  again (each plan is also re-read hourly, just in case). When anything changed the sync
+  touches `pco_live`, and every open app hears it over realtime and reloads within a
+  second or two. A run with no changes is a handful of requests.
+- On each run (pg_cron → the edge function) the server copies service types and
   their folders, teams, upcoming plans (6 weeks by default), and the rosters and open
   spots of the **shown teams** (Broadcast, FOH… an admin picks), and each service's
   flow (its items, lengths and Audio/Video/Lighting notes) into `pco_*` tables.

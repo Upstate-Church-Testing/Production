@@ -29,7 +29,7 @@ export function dbAdapter(sb: any): Db {
     campuses: () => selectAll('campuses', 'id, short_name, code'),
     serviceTypes: () => selectAll('pco_service_types', 'id, access, access_set, campus_id, campus_set, teams_synced_at'),
     teams: () => selectAll('pco_teams', 'id, service_type_id, service_type_ids, name, shown, positions'),
-    plans: () => selectAll('pco_plans', 'id, service_type_id, synced_at, needed'),
+    plans: () => selectAll('pco_plans', 'id, service_type_id, synced_at, needed, pco_updated_at'),
 
     saveServiceTypes: (rows) => upsert('pco_service_types', rows),
     async removeServiceTypesExcept(ids) {
@@ -86,6 +86,9 @@ export function dbAdapter(sb: any): Db {
       if (ids.length) q = q.not('person_id', 'in', list(ids));
       ok(await q);
       ok(await sb.from('pco_teams').update({ people_synced_at: at }).eq('id', teamId));
+    },
+    async pulse(at) {
+      ok(await sb.from('pco_live').upsert({ id: true, changed_at: at }, { onConflict: 'id' }));
     },
     async saveVolunteers(rows) {
       // Only the name, photo and when they were last seen: lanyards, tags and notes are the staff's.
