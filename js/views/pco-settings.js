@@ -65,7 +65,7 @@ export function mountPcoSettings(box, ctx) {
     if (status === undefined) { box.innerHTML = `${head(null)}<div class="sk"></div>`; return; }
     if (!status) { box.innerHTML = isAdmin ? connectForm() : `${head(false)}<p>Not connected yet. An admin connects it once, and everyone sees the services they’re allowed to.</p>`; return; }
     box.innerHTML = `${head(true)}
-      <p class="pc-who">${status.org_name ? `<b>${esc(status.org_name)}</b>` : 'Connected'}${status.connected_as ? ` <i>·</i> token from <b>${esc(status.connected_as)}</b>` : ''} <i>·</i> since ${esc(new Date(status.connected_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</p>
+      <p class="pc-who">${status.org_name ? `<b>${esc(status.org_name)}</b>` : 'Connected'} <i>·</i> since ${esc(new Date(status.connected_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</p>
       <div class="pc-sync" id="pc-sync">${syncLine()}</div>
       ${isAdmin ? adminControls() : ''}`;
   }
@@ -89,7 +89,7 @@ export function mountPcoSettings(box, ctx) {
       <p>Connect once for the whole church. People sign in here with their own account and see the services you share with them. Nobody needs their own Planning Center login or the right permissions there.</p>
       <ol class="pc-steps">
         <li>Sign in to Planning Center with an account that can see every service. A shared production login is best, so this keeps working when people come and go.</li>
-        <li>Open <a href="${PCO_TOKENS_URL}" target="_blank" rel="noopener">api.planningcenteronline.com/oauth/applications</a>. Under <b>Personal Access Tokens</b>, create one and name it “Upstate Production”.</li>
+        <li>Open <a href="${PCO_TOKENS_URL}" target="_blank" rel="noopener">api.planningcenteronline.com/oauth/applications</a>. Under <b>Personal Access Tokens</b>, create one and name it “Tally”.</li>
         <li>Copy its <b>Application ID</b> and <b>Secret</b> into the boxes below.</li>
       </ol>
       <form class="form pc-form" novalidate>

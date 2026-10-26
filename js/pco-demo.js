@@ -115,7 +115,7 @@ export function createPcoDemo({ wait, clone, me, changed }) {
         tags: pid === 'pp-me' ? ['Staff'] : i === 2 ? ['Trainer'] : [], notes: i === 1 ? 'Prefers the 9:30. Learning lighting.' : null,
         last_seen_at: new Date().toISOString(), created_at: new Date(Date.now() - 30 * 864e5).toISOString(), updated_at: new Date().toISOString(), created_by: null, updated_by: null,
       }));
-      vols.push({ id: 'v-manual-1', pco_person_id: null, name: 'Tommy Johnson', photo: null, home_campus_id: 'c-FF', lanyard: 'volunteer', lanyard_at: new Date(Date.now() - 12 * 864e5).toISOString(), lanyard_by: 'p-bethany',
+      vols.push({ id: 'v-manual-1', pco_person_id: null, name: 'Sam Rivera', photo: null, home_campus_id: 'c-FF', lanyard: 'volunteer', lanyard_at: new Date(Date.now() - 12 * 864e5).toISOString(), lanyard_by: 'p-bethany',
         tags: [], notes: 'Not in Planning Center yet.', last_seen_at: null, created_at: new Date(Date.now() - 20 * 864e5).toISOString(), updated_at: new Date().toISOString(), created_by: 'p-bethany', updated_by: 'p-bethany' });
       // Team members and the positions they can fill: who's scheduled on each team, plus the
       // unscheduled ones on Simpsonville FOH and Five Forks (one of them only runs audio).
@@ -199,7 +199,7 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       if (!connected) return null;
       return {
         connected: true, org_name: 'Upstate Church', time_zone: 'America/New_York',
-        connected_as: ['staff', 'admin'].includes(me.role) ? 'Production Office' : null,
+        connected_as: null,
         connected_at: new Date(Date.now() - 3 * 864e5).toISOString(), weeks_ahead: 6,
         last_sync_at: lastSync, last_sync_error: null, people_note: null, syncing,
       };
@@ -249,7 +249,7 @@ export function createPcoDemo({ wait, clone, me, changed }) {
         if (!payload.app_id || !payload.secret) throw new Error('Paste both the Application ID and the Secret.');
         if (payload.secret.length < 8) throw new Error('Planning Center didn’t accept that Application ID and secret. Check them and try again.');
         connected = true; db = build(me.id); fakeSync(2200);
-        return { connected: true, org_name: 'Upstate Church', connected_as: 'Production Office', syncing: true };
+        return { connected: true, org_name: 'Upstate Church', connected_as: null, syncing: true };
       }
       if (action === 'disconnect') { connected = false; changed('pco'); return { connected: false }; }
       if (action === 'sync') {

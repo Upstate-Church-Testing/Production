@@ -27,10 +27,10 @@ const CAMPUSES = [
 
 const PEOPLE = [
   { id: 'p-me', email: 'you@upstatechurch.org', full_name: 'Demo Admin', role: 'admin', departments: ['video'] },
-  { id: 'p-tom', email: 'tom@example.org', full_name: 'Tom', role: 'staff', departments: ['audio', 'video', 'lighting'] },
-  { id: 'p-bethany', email: 'bethany@example.org', full_name: 'Bethany', role: 'staff', departments: ['lighting'] },
-  { id: 'p-chris', email: 'chris@example.org', full_name: 'Chris Orozco', role: 'staff', departments: ['video'] },
-  { id: 'p-will', email: 'will@example.org', full_name: 'Will', role: 'pending', departments: [] },
+  { id: 'p-tom', email: 'audio.lead@example.org', full_name: 'Audio Lead', role: 'staff', departments: ['audio', 'video', 'lighting'] },
+  { id: 'p-bethany', email: 'lighting.lead@example.org', full_name: 'Lighting Lead', role: 'staff', departments: ['lighting'] },
+  { id: 'p-chris', email: 'video.lead@example.org', full_name: 'Video Lead', role: 'staff', departments: ['video'] },
+  { id: 'p-will', email: 'new.signup@example.org', full_name: 'New Sign-up', role: 'pending', departments: [] },
 ].map((p) => ({ ...p, home_campus_id: null, created_at: ago(60 * 24 * 3) }));
 
 // [campus, room, network, name, tags, category, model, location, ip, extra]

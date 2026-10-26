@@ -5,5 +5,5 @@
 export const SUPABASE_URL = 'https://khmqzrxfidwhchmkgdfn.supabase.co';
 export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_QIDhABaOXPaAp8-9gIfImg_ai_uc9xZ';
 
-export const APP_NAME = 'Upstate Production';
+export const APP_NAME = 'Tally';
 export const ORG_NAME = 'Upstate Church';

@@ -1,8 +1,9 @@
-# Upstate Production
+# Tally
 
-The Upstate Church production team's shared system. V1 is the **network / IP sheet**
-for all 10 campuses. It is built so gear, schedules (Planning Center), training and
-service flows can be added as new sections without reworking what's here.
+Tally is the Upstate Church production team's one app: services, rosters and
+scheduling from Planning Center, the volunteer list and lanyards, gear and lighting
+numbers, the network / IP sheet for all 10 campuses, and what every Resi player is
+showing. New sections slot in without reworking what's here.
 
 ## How it's built
 
