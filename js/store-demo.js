@@ -278,6 +278,8 @@ export function createDemoStore() {
   }
 
   const pco = createPcoDemo({ wait, clone, me, changed });
+  let meetings = null;
+  const MEETING_LISTS = { meetings: 'meetings', meeting_notes: 'notes', meeting_questions: 'questions', meeting_answers: 'answers' };
 
   return {
     mode: 'demo',
@@ -559,6 +561,68 @@ export function createDemoStore() {
       changed('profiles');
     },
 
+    // Meetings: one example meeting with notes and questions & answers.
+    async meetings() { await wait(); return clone(meetingData()); },
+    async saveMeetingRow(table, row) {
+      await wait(120);
+      const list = meetingData()[MEETING_LISTS[table]];
+      if (!list) throw new Error('Not a meeting table.');
+      const stamp = { updated_at: now(), updated_by: me.id };
+      if (row.id) { Object.assign(list.find((x) => x.id === row.id), row, stamp); }
+      else {
+        const made = { id: uid(), created_at: now(), created_by: me.id, ...stamp, ...row };
+        if (table === 'meeting_questions') { made.open = row.open ?? true; made.asked_at = row.asked_at || now(); }
+        if (table === 'meeting_answers') { made.answered_at = row.answered_at || now(); const q = meetingData().questions.find((x) => x.id === row.question_id); if (q) q.open = false; }
+        if (table === 'meetings') made.starts_at = row.starts_at || now();
+        list.push(made);
+        row = made;
+      }
+      changed('meetings');
+      return row.id;
+    },
+    async deleteMeetingRow(table, id) {
+      await wait(100);
+      const m = meetingData();
+      if (table === 'meetings') { m.meetings = m.meetings.filter((x) => x.id !== id); const qs = m.questions.filter((q) => q.meeting_id === id).map((q) => q.id); m.notes = m.notes.filter((x) => x.meeting_id !== id); m.questions = m.questions.filter((x) => x.meeting_id !== id); m.answers = m.answers.filter((a) => !qs.includes(a.question_id)); }
+      if (table === 'meeting_notes') m.notes = m.notes.filter((x) => x.id !== id);
+      if (table === 'meeting_questions') { m.questions = m.questions.filter((x) => x.id !== id); m.answers = m.answers.filter((a) => a.question_id !== id); }
+      if (table === 'meeting_answers') m.answers = m.answers.filter((x) => x.id !== id);
+      changed('meetings');
+    },
+
     subscribe(cb) { listeners.add(cb); return () => listeners.delete(cb); },
   };
+
+  function meetingData() {
+    if (meetings) return meetings;
+    const at = (days, h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(h, m, 0, 0); return d.toISOString(); };
+    const ago = (min) => new Date(Date.now() - min * 60e3).toISOString(); // today's meeting is already under way
+    const mt = { id: 'mt-1', title: 'Friendsgiving production meeting', starts_at: ago(75), campus_id: 'c-SVL', created_by: me.id, updated_by: me.id };
+    const past = { id: 'mt-2', title: 'Weekly staff check-in', starts_at: at(-7, 10), campus_id: null, created_by: 'p-tom', updated_by: 'p-tom' };
+    const next = { id: 'mt-3', title: 'Christmas services planning', starts_at: at(3, 13, 30), campus_id: 'c-SVL', created_by: me.id, updated_by: me.id };
+    const q = (id, meeting_id, body, asked_at, waiting_on, open) => ({ id, meeting_id, body, asked_at, waiting_on, open, created_by: me.id, updated_by: me.id });
+    const a = (id, question_id, body, who, answered_at, via) => ({ id, question_id, body, who, answered_at, via, created_by: me.id, updated_by: me.id });
+    const n = (id, meeting_id, body, created_at, by = me.id) => ({ id, meeting_id, body, created_at, updated_at: created_at, created_by: by, updated_by: by });
+    meetings = {
+      meetings: [mt, past, next].map((x) => ({ ...x, created_at: x.starts_at, updated_at: x.starts_at })),
+      questions: [
+        q('q-1', 'mt-1', 'How many people are coming?', ago(71), 'Student pastor', false),
+        q('q-2', 'mt-1', 'Are we doing cameras in the gym?', ago(63), 'Events lead', true),
+        q('q-3', 'mt-1', 'What time do doors open?', at(-2, 15), 'Events lead', true),
+        q('q-4', 'mt-1', 'Is the balcony open?', ago(55), null, false),
+        q('q-5', 'mt-2', 'Who covers lighting on the 15th?', at(-7, 10, 5), null, false),
+      ].map((x) => ({ ...x, created_at: x.asked_at, updated_at: x.asked_at })),
+      answers: [
+        a('a-1', 'q-1', 'About 900 students', 'Student pastor', ago(5), 'Production meeting'),
+        a('a-2', 'q-4', 'No, closed off', 'Events lead', ago(51), 'Production meeting'),
+        a('a-3', 'q-5', 'The Lighting Lead', 'Lighting Lead', at(-7, 10, 9), 'Weekly staff check-in'),
+      ].map((x) => ({ ...x, created_at: x.answered_at, updated_at: x.answered_at })),
+      notes: [
+        n('n-1', 'mt-1', 'Dinner in the gym, worship after in the auditorium.', ago(69)),
+        n('n-2', 'mt-1', 'Students sit on the floor; keep the center aisle clear for the camera.', ago(60), 'p-tom'),
+        n('n-3', 'mt-2', 'Lighting console update this week.', at(-7, 10, 2)),
+      ],
+    };
+    return meetings;
+  }
 }

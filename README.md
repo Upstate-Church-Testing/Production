@@ -79,6 +79,23 @@ only fill audio positions (from Planning Center's position assignments, kept in
 `pco_team_people.positions`) aren't listed. The rule is `hiddenPosition` in
 `js/pco.js` and `supabase/functions/pco/sync.ts`.
 
+## Meetings (staff)
+
+Any meeting (a production meeting, Christmas planning, a walk-through): a name, a day
+and time, and optionally a location. Each one is two columns, built to stay open on an
+iPad during the meeting:
+
+- **Questions & answers.** Type a question (and who has the answer, if you know). It
+  stays open, showing how long it's been waiting (red after 3 days). Answer it with
+  what was said, who said it, when, and where (this meeting, a text, an email); names
+  and places you've used before are one tap. Once answered it folds to one line: the
+  answer in bold, "Student pastor · 10:06 AM · answered in 1h 6m". Tap it for the
+  history, **New answer** when it changes ("changed 1×"), or **Reopen**.
+- **Notes.** Type and press Return; each note keeps its time and who wrote it.
+
+Everything updates live on every open screen. Tables: `meetings`, `meeting_notes`,
+`meeting_questions`, `meeting_answers` (answering closes a question in the database).
+
 ## Scheduling from the roster (staff)
 
 Tap an **Open** spot on Services › Roster. The sheet asks Planning Center, live, about
@@ -193,6 +210,7 @@ js/views/account.js            Settings: your profile, Planning Center, Resi pla
 js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its flow with run times and cues, times and production-team rosters; Roster (every location's positions × dates on one screen, one pill per person per day with a lettered dot per service, colored by their answer to every service that day); People; My schedule
 js/views/volunteers.js         Services › People: production volunteers, lanyards, tags, notes, add someone by hand
 js/views/schedule-sheet.js     Roster › Open: who could fill the spot (blockouts, declines, other spots that day), schedule, send-invite handoff, undo
+js/views/meetings.js            Meetings: any meeting, questions & answers (who, when, where; history), notes
 js/views/pco-settings.js       Settings › Planning Center (connect, who sees which services, which teams show)
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
 js/pco-demo.js                 made-up Planning Center data for the preview

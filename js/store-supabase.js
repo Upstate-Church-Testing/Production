@@ -245,11 +245,36 @@ export async function createSupabaseStore(url, key) {
       ok(await sb.from('profiles').update(patch).eq('id', id));
     },
 
+    // ---- Meetings (staff): notes, and questions & answers.
+    async meetings() {
+      const [meetings, notes, questions, answers] = await Promise.all([
+        all(() => sb.from('meetings').select('*').order('starts_at', { ascending: false })),
+        all(() => sb.from('meeting_notes').select('*').order('created_at')),
+        all(() => sb.from('meeting_questions').select('*').order('asked_at')),
+        all(() => sb.from('meeting_answers').select('*').order('answered_at')),
+      ]);
+      return { meetings, notes, questions, answers };
+    },
+    /** Insert or update one meeting-related row; returns its id. */
+    async saveMeetingRow(table, row) {
+      if (!['meetings', 'meeting_notes', 'meeting_questions', 'meeting_answers'].includes(table)) throw new Error('Not a meeting table.');
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from(table).update(fields).eq('id', id)); return id; }
+      return ok(await sb.from(table).insert(fields).select('id').single()).id;
+    },
+    async deleteMeetingRow(table, id) {
+      if (!['meetings', 'meeting_notes', 'meeting_questions', 'meeting_answers'].includes(table)) throw new Error('Not a meeting table.');
+      ok(await sb.from(table).delete().eq('id', id));
+    },
+
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
       for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
+      }
+      for (const table of ['meetings', 'meeting_notes', 'meeting_questions', 'meeting_answers']) {
+        ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb('meetings'));
       }
       // Planning Center rosters: the sync touches one row whenever anything changed.
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'pco_live' }, () => cb('pco'));

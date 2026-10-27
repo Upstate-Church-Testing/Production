@@ -9,6 +9,7 @@ import * as GearView from './views/gear.js';
 import * as TeamView from './views/team.js';
 import * as ResiView from './views/resi.js';
 import * as ServicesView from './views/services.js';
+import * as MeetingsView from './views/meetings.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
 
@@ -22,6 +23,7 @@ const MODULES = [
   { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
   { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
   { id: 'services', label: 'Services', icon: 'calendar', minRole: 'volunteer', view: ServicesView },
+  { id: 'meetings', label: 'Meetings', icon: 'chat', minRole: 'staff', view: MeetingsView },
   { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
   { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
   { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
