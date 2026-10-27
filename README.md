@@ -10,7 +10,7 @@ showing. New sections slot in without reworking what's here.
 | Piece | What it does |
 | --- | --- |
 | **Supabase** (Postgres) | Data, logins (email + password), live updates, permissions |
-| **GitHub Pages** | Hosts the app. Every push to `main` goes live in about a minute |
+| **Netlify** | Hosts the app at https://tally-upstate.netlify.app (church Netlify account). `netlify.toml` publishes only the app files. The old GitHub Pages address forwards there |
 | Plain HTML/CSS/JS modules | No build step. Works in any browser and installs to a phone home screen |
 
 Both the Supabase URL and its publishable key are public by design. Nothing is
@@ -215,7 +215,7 @@ tools/build_preview.py         one-file preview with example data
 
 1. Create a Supabase project. Run `supabase/migrations/…_foundation.sql`, then `supabase/seed.sql`.
 2. In Supabase › Authentication › Sign In / Providers › Email, turn **Confirm email** off
-   (admins approve people in the app instead). Set **Site URL** to the GitHub Pages address.
+   (admins approve people in the app instead). Set **Site URL** to the Netlify address.
 3. Put the project URL and publishable key in `js/config.js`.
-4. Publish to GitHub Pages from `main`, root folder.
+4. Deploy the repo to Netlify (`netlify.toml` copies the app into `dist/`; no build tools needed).
 5. Open the site and create the first account. That account is the admin.

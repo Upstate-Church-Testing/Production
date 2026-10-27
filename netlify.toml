@@ -1,0 +1,5 @@
+# Tally on Netlify. The app is plain files (no build): copy just the app into
+# dist/ so the database and server source in this repo aren't published.
+[build]
+  command = "rm -rf dist && mkdir dist && cp -r index.html manifest.webmanifest styles.css version.json js icons dist/"
+  publish = "dist"
