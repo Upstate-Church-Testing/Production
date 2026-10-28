@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <script>
-    // Tally moved to Netlify: the old GitHub Pages address forwards there (sign-in links included).
-    if (/\.github\.io$/.test(location.hostname)) location.replace('https://tally-upstate.netlify.app/' + location.search + location.hash);
-  </script>
+  <!-- The forward from GitHub Pages to Netlify is paused while the Netlify account is out of
+       credits; GitHub Pages serves the current version. To turn it back on, put this back:
+       if (/\.github\.io$/.test(location.hostname)) location.replace('https://tally-upstate.netlify.app/' + location.search + location.hash); -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Tally</title>
   <meta name="description" content="Tally: the Upstate Church production team’s app for services, rosters, gear and networks.">
@@ -20,13 +19,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&display=swap">
-  <link rel="stylesheet" href="styles.css?v=20261028192433">
+  <link rel="stylesheet" href="styles.css?v=20261028192751">
   <!-- versions:start (tools/stamp.py rewrites this block on every publish) -->
-  <script type="importmap">{"imports":{"./js/config.js":"./js/config.js?v=20261028192433","./js/lighting.js":"./js/lighting.js?v=20261028192433","./js/pco-demo.js":"./js/pco-demo.js?v=20261028192433","./js/pco.js":"./js/pco.js?v=20261028192433","./js/photo.js":"./js/photo.js?v=20261028192433","./js/picker.js":"./js/picker.js?v=20261028192433","./js/resi.js":"./js/resi.js?v=20261028192433","./js/store-demo.js":"./js/store-demo.js?v=20261028192433","./js/store-supabase.js":"./js/store-supabase.js?v=20261028192433","./js/util.js":"./js/util.js?v=20261028192433","./js/views/account.js":"./js/views/account.js?v=20261028192433","./js/views/cables.js":"./js/views/cables.js?v=20261028192433","./js/views/cameras.js":"./js/views/cameras.js?v=20261028192433","./js/views/devices.js":"./js/views/devices.js?v=20261028192433","./js/views/gear.js":"./js/views/gear.js?v=20261028192433","./js/views/haze.js":"./js/views/haze.js?v=20261028192433","./js/views/meetings.js":"./js/views/meetings.js?v=20261028192433","./js/views/network.js":"./js/views/network.js?v=20261028192433","./js/views/patch.js":"./js/views/patch.js?v=20261028192433","./js/views/pco-settings.js":"./js/views/pco-settings.js?v=20261028192433","./js/views/resi-settings.js":"./js/views/resi-settings.js?v=20261028192433","./js/views/resi.js":"./js/views/resi.js?v=20261028192433","./js/views/schedule-sheet.js":"./js/views/schedule-sheet.js?v=20261028192433","./js/views/services.js":"./js/views/services.js?v=20261028192433","./js/views/stats.js":"./js/views/stats.js?v=20261028192433","./js/views/systems.js":"./js/views/systems.js?v=20261028192433","./js/views/team.js":"./js/views/team.js?v=20261028192433","./js/views/types.js":"./js/views/types.js?v=20261028192433","./js/views/volunteers.js":"./js/views/volunteers.js?v=20261028192433"}}</script>
+  <script type="importmap">{"imports":{"./js/config.js":"./js/config.js?v=20261028192751","./js/lighting.js":"./js/lighting.js?v=20261028192751","./js/pco-demo.js":"./js/pco-demo.js?v=20261028192751","./js/pco.js":"./js/pco.js?v=20261028192751","./js/photo.js":"./js/photo.js?v=20261028192751","./js/picker.js":"./js/picker.js?v=20261028192751","./js/resi.js":"./js/resi.js?v=20261028192751","./js/store-demo.js":"./js/store-demo.js?v=20261028192751","./js/store-supabase.js":"./js/store-supabase.js?v=20261028192751","./js/util.js":"./js/util.js?v=20261028192751","./js/views/account.js":"./js/views/account.js?v=20261028192751","./js/views/cables.js":"./js/views/cables.js?v=20261028192751","./js/views/cameras.js":"./js/views/cameras.js?v=20261028192751","./js/views/devices.js":"./js/views/devices.js?v=20261028192751","./js/views/gear.js":"./js/views/gear.js?v=20261028192751","./js/views/haze.js":"./js/views/haze.js?v=20261028192751","./js/views/meetings.js":"./js/views/meetings.js?v=20261028192751","./js/views/network.js":"./js/views/network.js?v=20261028192751","./js/views/patch.js":"./js/views/patch.js?v=20261028192751","./js/views/pco-settings.js":"./js/views/pco-settings.js?v=20261028192751","./js/views/resi-settings.js":"./js/views/resi-settings.js?v=20261028192751","./js/views/resi.js":"./js/views/resi.js?v=20261028192751","./js/views/schedule-sheet.js":"./js/views/schedule-sheet.js?v=20261028192751","./js/views/services.js":"./js/views/services.js?v=20261028192751","./js/views/stats.js":"./js/views/stats.js?v=20261028192751","./js/views/systems.js":"./js/views/systems.js?v=20261028192751","./js/views/team.js":"./js/views/team.js?v=20261028192751","./js/views/types.js":"./js/views/types.js?v=20261028192751","./js/views/volunteers.js":"./js/views/volunteers.js?v=20261028192751"}}</script>
   <!-- versions:end -->
 </head>
 <body>
   <div id="app"><noscript>Turn on JavaScript to use this app.</noscript></div>
-  <script type="module" src="js/app.js?v=20261028192433"></script>
+  <script type="module" src="js/app.js?v=20261028192751"></script>
 </body>
 </html>
