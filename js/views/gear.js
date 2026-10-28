@@ -1,6 +1,6 @@
 // Gear: models (device types: specs, ports, photo) and every item at every location.
 // In the app a "model" is a device_types row and an "item" is a devices row.
-// Models are grouped by category; Items is one A–Z list of every unit.
+// Models are grouped by category; Serial is one A–Z list of every unit.
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
@@ -51,7 +51,7 @@ export function mount(el, ctx) {
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-gmode="types">Models</button>
-          <button type="button" role="tab" data-gmode="models">Items</button>
+          <button type="button" role="tab" data-gmode="models">Serial</button>
           <button type="button" role="tab" data-gmode="grid">Grid</button>
           <button type="button" role="tab" data-gmode="patch">Patch</button>
         </div>
