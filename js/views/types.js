@@ -14,7 +14,7 @@ export const CONNECTORS = ['RJ45', 'etherCON', 'XLR3', 'XLR5', 'BNC', 'HDMI', 'M
   'TRS ¼"', 'TRS 3.5mm', 'Phoenix', 'powerCON', 'IEC', 'Edison', 'SFP', 'LC fiber', 'opticalCON', 'DB9', 'Other'];
 export const DIRECTIONS = { in: 'In', out: 'Out', io: 'In / Out' };
 
-export const typeLabel = (t) => (t ? [t.manufacturer, t.name].filter(Boolean).join(' ') : 'No model');
+export const typeLabel = (t) => (t ? [t.manufacturer, t.name].filter(Boolean).join(' ') + (t.unknown ? ' (model unknown)' : '') : 'No model');
 export const sortPorts = (ports = []) => [...ports].sort((a, b) => a.sort_order - b.sort_order);
 
 /** Brands group regardless of capitals or stray spaces: "ETC" and "etc " are one brand. */

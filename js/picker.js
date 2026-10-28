@@ -22,7 +22,7 @@ export function dropdownHtml(id, label, cls = '') {
 /**
  * Makes a pill work.
  *   label      what it filters, for the menu heading and screen readers
- *   options()  [{ value, label, count?, dep? }] (the first is usually "All")
+ *   options()  [{ value, label, count?, dep?, dot?, hint? }] (the first is usually "All")
  *   get()      the current value;  set(value) when someone picks one
  *   unit       optional ['model', 'models'] (or a function returning it) to print beside counts
  * Returns { update() } to refresh the pill after the value or options change.
@@ -54,9 +54,9 @@ export function wireDropdown(btn, { label, options, get, set, unit = null }) {
       <div class="dd-menu ${caps ? 'caps' : ''}" role="listbox" aria-label="${esc(label)}">
         <div class="dd-menu-head"><span>${esc(label)}</span>${phone ? `<button type="button" class="icon-btn" data-close aria-label="Close">${icon('close')}</button>` : ''}</div>
         <div class="dd-options">
-          ${list.map((o, i) => `<button type="button" class="dd-opt ${i === 0 ? 'is-first' : ''}" role="option" data-v="${esc(o.value)}" aria-selected="${o.value === value}">
-            ${o.dep ? `<i class="tag" data-dep="${esc(o.dep)}">${esc(o.label[0])}</i>` : ''}
-            <span class="dd-opt-name">${esc(o.label)}</span>
+          ${list.map((o, i) => `<button type="button" class="dd-opt ${i === 0 && o.value === ALL ? 'is-first' : ''}" role="option" data-v="${esc(o.value)}" aria-selected="${o.value === value}">
+            ${o.dep ? `<i class="tag" data-dep="${esc(o.dep)}">${esc(o.label[0])}</i>` : ''}${o.dot ? `<i class="st-dot st-${esc(o.dot)}"></i>` : ''}
+            <span class="dd-opt-name">${esc(o.label)}${o.hint ? `<small>${esc(o.hint)}</small>` : ''}</span>
             ${o.count != null ? `<span class="dd-opt-count">${o.count}${u(o.count)}</span>` : '<span></span>'}
             <span class="dd-check">${o.value === value ? icon('check') : ''}</span>
           </button>`).join('')}

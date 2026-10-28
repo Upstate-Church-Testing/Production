@@ -146,6 +146,38 @@ IDs and repeated stage numbers, and treats two fixtures on exactly the same addr
 doubled on purpose. Gear › Patch is the patch sheet: one room at a time, universe by
 universe (1–100), with a fill-in table, or one universe across every location.
 
+## Gear: where things are, and what's missing (staff)
+
+Gear filters run Location → Room → Section → Category → Brand, so "North Auditorium,
+Lighting, Hazer" or "Simpsonville, Lighting Storage, Fixture" is two taps each. Picking
+a room with all locations showing picks that room everywhere (every "Worship Center").
+With one location picked, every room there is listed, even an empty one.
+
+- **Status** is a colored pill on every item; tap it to change: In use, Ready (works,
+  not in use), Needs update (works, needs an upgrade or software update), Needs a check,
+  Broken, In repair, Retired.
+- **Model unknown.** When you know something is there but not what model it is, pick
+  "Don't know the model yet…" and say what kind of thing it is (Projector, Display…).
+  It goes in on a placeholder model and Gear keeps saying "3 items still need a model"
+  until each one is switched to its real model.
+- **Haze**: every hazer with its tank level (from the last check), when it was filled,
+  its patch and the fluid it takes, plus the bottles of each fluid at each location.
+  Hazers are lighting items in the "Hazer" category: they keep a patch but don't show
+  under "Fixture".
+- **Cameras**: each location's camera positions (Cam 1…N), in service or out of
+  commission, with the gear on each one (any item whose Spot is "Cam 3").
+- **Systems**: gear that works together wherever it sits, like the Clear-Com intercom
+  (main station in Broadcast, packs on every camera), each piece with what it does.
+
+## Cables (staff)
+
+Cables aren't tracked one by one. A **type** is a signal and two ends (DMX · XLR 5-pin
+male → XLR 5-pin female, shown as "DMX 5-pin"); under it, each row is one length and
+label at one place with a count (25 ft · Elite Core blue · ×6 · Simpsonville, Lighting
+Storage). **Types** shows every kind with its lengths and a total; **Cables** lists every
+row with + and −. Search the way you'd say it: "5-pin 25", "3-pin to 5-pin" (order
+matters), "powercon 10", "purple".
+
 ## Data model
 
 ```
@@ -161,7 +193,8 @@ campuses ── rooms
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)
 
-device_types     the shared catalog entry ("model" in the app): name, brand, model number, category, sections, specs, manual, photo, DMX modes
+device_types     the shared catalog entry ("model" in the app): name, brand, model number, category, sections, specs, manual, photo, DMX modes,
+                 unknown (a placeholder until the model is known), haze fluid and tank size (hazers)
                  (photos live in the public gear-photos storage bucket: <path>.jpg plus a <path>-t.jpg thumbnail)
     └── device_type_ports (the port layout every unit of that type shares)
 
@@ -177,6 +210,11 @@ pco_service_types ── pco_teams (shown or not; positions)
         └── pco_plans (upcoming: dates, times, open spots, Planning Center version) ── pco_plan_people (shown teams only; invite sent or not)
                                                           └─ pco_plan_items (the flow: songs, hosts, media, lengths, team notes)
 pco_live         one row the sync touches when anything changed (apps listen over realtime)
+
+camera_builds    a location's camera positions (Cam N), in service or not; their gear is items with Spot "Cam N"
+systems ── system_items   gear that works together (an intercom), each member with its role
+haze_fluids ── haze_stock (bottles per location)     haze_checks (each look at a hazer's tank: level, filled, when)
+cable_types ── cables     a kind of cable (signal + ends) and how many of each length and label at each place
 pco_schedule_log who in the app scheduled or took off whom (staff only)
 ```
 
@@ -194,7 +232,11 @@ js/app.js                      sign-in, roles, navigation, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Models, Items (every unit A–Z), Grid (models × locations or rooms, like the old lighting sheet) and Patch, filtered by location, section, category and brand
+js/views/gear.js               Models, Items (every unit A–Z), Grid (models × locations or rooms, like the old lighting sheet), Patch, Haze, Cameras and Systems, filtered by location, room, section, category and brand
+js/views/haze.js               Gear › Haze: hazers, tank checks, fluid bottles per location
+js/views/cameras.js            Gear › Cameras: camera positions and the gear on each
+js/views/systems.js            Gear › Systems: gear that works together, with roles
+js/views/cables.js             Cables: types by their ends, every length and label with a count
 js/views/patch.js              Gear › Patch: each room's patch by universe, the numbers table with quick fill, one universe across locations
 js/lighting.js                 patch parsing (1.333), footprints, overlap and duplicate checks
 js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)

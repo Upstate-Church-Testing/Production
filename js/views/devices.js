@@ -8,14 +8,22 @@ import {
   esc, icon, $, $$, debounce, storage, store, ipToInt, intToIp, splitInet, prefixToMask, maskToPrefix,
   parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText,
 } from '../util.js';
-import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb } from './types.js';
+import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb, CATEGORIES } from './types.js';
+import { wireDropdown } from '../picker.js';
 import {
   takesPatch, parsePatch, fmtPatch, patchOf, footprint, rigKey, rigProblems, problemText, nextFreeAddress, isProblem, MAX_UNIVERSE,
 } from '../lighting.js';
 
 export const IP_LABELS = ['Management', 'Control', 'Dante Primary', 'Dante Secondary', 'Art-Net / sACN', 'NDI', 'Video', 'House', 'Production'];
 export const MASKS = ['255.255.255.0', '255.255.0.0', '255.0.0.0', '255.255.255.128', '255.255.254.0', '255.255.252.0'];
-export const STATUS = { active: 'In use', spare: 'Spare', repair: 'In repair', retired: 'Retired' };
+// How an item is doing. A colored pill on every item; tap it to change.
+export const STATUS = { active: 'In use', spare: 'Ready', update: 'Needs update', check: 'Needs a check', broken: 'Broken', repair: 'In repair', retired: 'Retired' };
+export const STATUS_HINT = {
+  active: 'On a rig and working', spare: 'Works fine, not in use right now', update: 'Works, but needs an upgrade or a software update', check: 'Something seems off. Look at it soon',
+  broken: 'Doesn’t work', repair: 'Out being fixed', retired: 'Gone for good',
+};
+/** The little colored pill. */
+export const statusPill = (st) => `<span class="st st-${esc(st)}"><i></i>${esc(STATUS[st] || st)}</span>`;
 export const MODES = { static: 'Static', reserved: 'DHCP reservation', dhcp: 'DHCP' };
 export const FIELD = {
   name: 'Name', departments: 'Sections', category: 'Category', manufacturer: 'Brand', model: 'Model',
@@ -97,6 +105,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   let creds = null;       // loaded on demand
   let ports = null;       // this item's port patches, loaded on demand
   let typeApi = null;     // the type editor, while creating a type from here
+  let unknownPick = false; // choosing what kind of thing an item is, model unknown
+  let unknownCat = 'Projector';
   let showPw = new Set();
   let draft = null;
   let dirty = false;
@@ -157,6 +167,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     else if (a === 'tag') { collect(); const tg = t.dataset.tag; draft.departments = draft.departments.includes(tg) ? draft.departments.filter((x) => x !== tg) : [...draft.departments, tg]; dirty = true; renderEdit(); }
     else if (a === 'next-ip') { collect(); fillNextIp(+t.dataset.i); }
     else if (a === 'add-room') addRoom();
+    else if (a === 'use-unknown') useUnknown();
+    else if (a === 'unknown-cancel') { collect(); unknownPick = false; renderEdit(); }
     else if (a === 'qty-' || a === 'qty+') { collect(); draft.qty = clampQty(draft.qty + (a === 'qty+' ? 1 : -1)); renderEdit(); }
     else if (a === 'open-type') { const tid = dev.type_id; host.setOpen(null); sheet.close(true); ctx.openType(tid); }
     else if (a === 'delete') { confirmDelete = true; renderView(); }
@@ -206,7 +218,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const patchable = takesPatch(dev, ty);
     sheet.render(`
       <header class="sh-head">
-        <div class="sh-top">${tagDots(dev.departments)}${dev.status !== 'active' ? `<span class="pill">${STATUS[dev.status]}</span>` : ''}
+        <div class="sh-top">${tagDots(dev.departments)}
+          <button type="button" class="st st-${esc(dev.status)} st-btn" id="d-status" aria-haspopup="listbox"><i></i><span class="dd-value"></span>${icon('down')}</button>
           <button class="icon-btn" data-a="close" aria-label="Close">${icon('close')}</button></div>
         ${ty?.manufacturer ? `<p class="sh-brand">${esc(ty.manufacturer)}</p>` : ''}
         <h2>${esc(dev.name)}</h2>
@@ -214,6 +227,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       </header>
       <div class="sh-body">
         ${ty?.photo_path ? `<div class="photo-hero is-compact"><img src="${esc(ctx.store.photoUrl(ty.photo_path))}" alt="${esc(typeLabel(ty))}"></div>` : ''}
+        ${ty?.unknown ? `<p class="warnline soft unknown-line">${icon('warn')}<span>We don’t know the model yet. Find out what it is, then tap Edit and pick the real model.</span></p>` : ''}
         ${patchable ? numbersStrip(ty) : ''}
         <section class="ip-list">
           ${ips.length ? ips.map((ip) => ipCard(ip)).join('') : `<div class="ipcard empty-ip"><p>No IP recorded yet.</p><button class="btn" data-a="edit">${icon('plus')}Add an IP</button></div>`}
@@ -230,7 +244,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
             ${kv('Model #', ty?.part_number, true)}
             <div><dt>Serial</dt><dd class="${dev.serial_number ? 'mono' : 'muted'}">${dev.serial_number ? esc(dev.serial_number) : `<button class="btn link" data-a="edit" data-f="f-serial_number">Add serial</button>`}</dd></div>
             ${patchable ? '' : kv('Asset #', dev.asset_no)}
-            ${kv('Firmware', dev.firmware, true)}${kv('Status', STATUS[dev.status])}
+            ${kv('Firmware', dev.firmware, true)}
           </dl>
           ${dev.notes ? `<p class="notes">${esc(dev.notes)}</p>` : ''}
         </section>
@@ -269,6 +283,33 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       </footer>`);
     loadHistory();
     if (ty?.ports.length) loadPorts(ty);
+    wireStatus();
+  }
+
+  /** The status pill: pick one and it saves right away. */
+  function wireStatus() {
+    const btn = $('#d-status', sheet.el);
+    if (!btn) return;
+    wireDropdown(btn, {
+      label: 'Status',
+      options: () => Object.keys(STATUS).map((k) => ({ value: k, label: STATUS[k], hint: STATUS_HINT[k], dot: k })),
+      get: () => dev.status,
+      set: async (v) => {
+        const was = dev.status;
+        dev.status = v;
+        btn.className = `st st-${v} st-btn`;
+        try {
+          await ctx.store.setDeviceStatus(dev.id, v);
+          ctx.toast(`${dev.name}: ${STATUS[v]}`);
+          host.load(true);
+        } catch (e) {
+          dev.status = was;
+          btn.className = `st st-${was} st-btn`;
+          $('.dd-value', btn).textContent = STATUS[was];
+          ctx.toast(e.message, 'bad');
+        }
+      },
+    });
   }
 
   /** Fixture ID, patch, stage # and asset #: big tiles a tech can read at a glance. Tap one to edit it. */
@@ -456,8 +497,13 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <option value="" ${draft.type_id ? '' : 'selected'}>Choose a model…</option>
           ${[...typeGroups.keys()].sort().map((k) => `<optgroup label="${esc(k)}">${typeGroups.get(k).map((t) => `<option value="${t.id}" ${t.id === draft.type_id ? 'selected' : ''}>${esc(typeLabel(t))}</option>`).join('')}</optgroup>`).join('')}
           <option value="__new">＋ New model…</option>
+          <option value="__unknown" ${unknownPick ? 'selected' : ''}>＋ Don’t know the model yet…</option>
         </select>
-        ${ty ? `<small class="hint">${esc([ty.category, ty.part_number, ty.ports.length ? plural(ty.ports.length, 'port') : null].filter(Boolean).join(' · ') || 'Specs and ports come from the model.')}</small>` : `<small class="hint">The product this is, like Hoglet 4. Its specs and ports come from the model.</small>`}
+        ${unknownPick ? `<div class="inline-add unknown-add"><select id="f-ucat" aria-label="What kind of thing is it?">${CATEGORIES.filter((c) => c !== 'Cable').map((c) => `<option ${c === unknownCat ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+          <button type="button" class="btn" data-a="use-unknown">Use this</button><button type="button" class="btn ghost" data-a="unknown-cancel">Cancel</button></div>
+          <small class="hint">Say what kind of thing it is. It goes in as “model unknown” so you can find out later.</small>` : ''}
+        ${ty?.unknown && !unknownPick ? '<small class="hint warn-text">Model not known yet. Pick the real model here once you find out.</small>' : ''}
+        ${unknownPick ? '' : ty ? `<small class="hint">${esc([ty.category, ty.part_number, ty.ports.length ? plural(ty.ports.length, 'port') : null].filter(Boolean).join(' · ') || 'Specs and ports come from the model.')}</small>` : `<small class="hint">The product this is, like Hoglet 4. Its specs and ports come from the model.</small>`}
         ${oldPatches ? `<small class="hint warn-text">What was recorded on the old model’s ports will be cleared when you save.</small>` : ''}</label>
         ${!dev ? `<div class="qty-row">
           <div class="field"><span>How many</span>
@@ -744,6 +790,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   function onTypePicked(v, initial = false) {
     if (!initial) collect();
     if (v === '__new') { startNewType(); return; }
+    if (v === '__unknown') { unknownPick = true; renderEdit(); $('#f-ucat', sheet.el)?.focus(); return; }
+    unknownPick = false;
     const prev = s.ix.type.get(draft.type_id);
     const next = s.ix.type.get(v);
     draft.type_id = v;
@@ -773,6 +821,28 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       },
       onCancel: () => { typeApi = null; mode = 'edit'; renderEdit(); },
     });
+  }
+
+  /** "Don't know the model yet": a placeholder model for that kind of thing, made once and shared. */
+  async function useUnknown() {
+    const cat = $('#f-ucat', sheet.el)?.value;
+    if (!cat) return;
+    collect();
+    unknownCat = cat;
+    const have = [...s.ix.type.values()].find((t) => t.unknown && !t.manufacturer && t.category === cat);
+    let id = have?.id;
+    try {
+      if (!id) {
+        const guess = /fixture|hazer|dimmer/i.test(cat) ? ['lighting'] : /microphone|speaker|amplifier|stagebox|wireless/i.test(cat) ? ['audio']
+          : /switch|access point/i.test(cat) ? ['network'] : ['video'];
+        id = await ctx.store.saveType({ type: { name: cat, category: cat, departments: draft.departments.length ? [...draft.departments] : guess, unknown: true, networked: !/fixture|hazer|dimmer|speaker|microphone/i.test(cat) } });
+        await load(true);
+      }
+      unknownPick = false;
+      onTypePicked(id, true);
+      dirty = true;
+      renderEdit();
+    } catch (e) { ctx.toast(e.message, 'bad'); }
   }
 
   async function addRoom() {

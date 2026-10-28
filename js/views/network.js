@@ -6,7 +6,7 @@ import {
   parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText,
 } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
-import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet as openModelSheet, STATUS, kv } from './devices.js';
+import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet as openModelSheet, statusPill, kv } from './devices.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
 
 export function mount(el, ctx) {
@@ -327,7 +327,7 @@ export function mount(el, ctx) {
     return `<li class="row ${conflict ? 'is-conflict' : ''} ${dev.status !== 'active' ? 'is-' + dev.status : ''}">
       <button class="row-hit" data-open="${dev.id}" aria-label="Open ${esc(dev.name)}"></button>
       ${tagDots(dev.departments)}
-      <span class="r-name"><b>${esc(dev.name)}</b>${ip?.label ? `<em>${esc(ip.label)}</em>` : ''}${dev.status !== 'active' ? `<span class="pill">${STATUS[dev.status]}</span>` : ''}</span>
+      <span class="r-name"><b>${esc(dev.name)}</b>${ip?.label ? `<em>${esc(ip.label)}</em>` : ''}${dev.status !== 'active' ? statusPill(dev.status) : ''}</span>
       <span class="r-sub">${ip?.label ? `<span class="r-label">${esc(ip.label)}</span>` : ''}<span class="r-model">${esc(model)}</span><span class="r-where">${esc(where)}</span></span>
       <span class="r-mac mono">${esc(ip?.mac || '')}</span>
       ${ip?._addr

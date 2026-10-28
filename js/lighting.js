@@ -12,7 +12,7 @@ export const MAX_UNIVERSE = 100;
 export const SLOTS = 512;
 
 // Things in the lighting section that aren't patched on a console.
-const NOT_PATCHED = /console|wing|computer|switch|node|gateway|wall station|access point|router|monitor|display|cable/i;
+const NOT_PATCHED = /console|wing|computer|switch|node|gateway|wall station|access point|router|monitor|display|cable|driver|processor/i;
 
 /** True for lighting items that take a DMX patch (fixtures, hazers, dimmers…). */
 export function takesPatch(dev, type) {

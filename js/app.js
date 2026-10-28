@@ -10,6 +10,7 @@ import * as TeamView from './views/team.js';
 import * as ResiView from './views/resi.js';
 import * as ServicesView from './views/services.js';
 import * as MeetingsView from './views/meetings.js';
+import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
 
@@ -21,6 +22,7 @@ export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunte
 // New sections (Gear, Schedule, Training, Service flow…) get added here.
 const MODULES = [
   { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
+  { id: 'cables', label: 'Cables', icon: 'cable', minRole: 'staff', view: CablesView },
   { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
   { id: 'services', label: 'Services', icon: 'calendar', minRole: 'volunteer', view: ServicesView },
   { id: 'meetings', label: 'Meetings', icon: 'chat', minRole: 'staff', view: MeetingsView },

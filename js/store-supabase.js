@@ -87,6 +87,10 @@ export async function createSupabaseStore(url, key) {
       return ok(await sb.rpc('save_device_full', { payload }));
     },
     /** Many items' lighting numbers at once: [{ id, fixture_id?, patch_universe?, patch_address?, … }]. */
+    /** How an item is doing: active, spare, check, broken, repair, retired. */
+    async setDeviceStatus(id, status) {
+      ok(await sb.from('devices').update({ status }).eq('id', id));
+    },
     async setDeviceNumbers(rows) {
       return ok(await sb.rpc('set_device_numbers', { rows }));
     },
@@ -102,6 +106,7 @@ export async function createSupabaseStore(url, key) {
       if ('networked' in payload.type) extra.networked = !!payload.type.networked;
       if ('dmx_modes' in payload.type) extra.dmx_modes = payload.type.dmx_modes || [];
       if ('dmx_footprint' in payload.type) extra.dmx_footprint = payload.type.dmx_footprint || null;
+      if ('unknown' in payload.type) extra.unknown = !!payload.type.unknown;
       if (Object.keys(extra).length) ok(await sb.from('device_types').update(extra).eq('id', id));
       return id;
     },
@@ -267,6 +272,58 @@ export async function createSupabaseStore(url, key) {
       ok(await sb.from(table).delete().eq('id', id));
     },
 
+    // ---- Gear extras (staff): camera builds, and haze fluid, stock and tank checks.
+    async gearExtras() {
+      const [builds, fluids, stock, checks, systems, systemItems] = await Promise.all([
+        all(() => sb.from('camera_builds').select('*').order('number')),
+        all(() => sb.from('haze_fluids').select('*').order('name')),
+        all(() => sb.from('haze_stock').select('*')),
+        all(() => sb.from('haze_checks').select('*').order('checked_at', { ascending: false })),
+        all(() => sb.from('systems').select('*').order('name')),
+        all(() => sb.from('system_items').select('*')),
+      ]);
+      return { builds, fluids, stock, checks, systems, systemItems };
+    },
+    /** Insert or update one row of those; returns its id. */
+    async saveGearRow(table, row) {
+      if (!GEAR_TABLES.includes(table)) throw new Error('Not a gear table.');
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from(table).update(fields).eq('id', id)); return id; }
+      return ok(await sb.from(table).insert(fields).select('id').single()).id;
+    },
+    async deleteGearRow(table, id) {
+      if (!GEAR_TABLES.includes(table)) throw new Error('Not a gear table.');
+      ok(await sb.from(table).delete().eq('id', id));
+    },
+    /** A placeholder model ("Projector", model unknown) becomes a real one, or back. */
+    async setTypeUnknown(typeId, unknown) {
+      ok(await sb.from('device_types').update({ unknown: !!unknown }).eq('id', typeId));
+    },
+    /** A hazer model's fluid and tank size. */
+    async setHazerModel(typeId, { haze_fluid_id = null, tank_liters = null }) {
+      ok(await sb.from('device_types').update({ haze_fluid_id, tank_liters }).eq('id', typeId));
+    },
+
+    // ---- Cables (staff): kinds of cable, and how many of each length and label.
+    async cables() {
+      const [types, cables, rooms] = await Promise.all([
+        all(() => sb.from('cable_types').select('*').order('signal')),
+        all(() => sb.from('cables').select('*').order('length_ft')),
+        all(() => sb.from('rooms').select('*').order('sort_order').order('name')),
+      ]);
+      return { types, cables, rooms };
+    },
+    async saveCableRow(table, row) {
+      if (!CABLE_TABLES.includes(table)) throw new Error('Not a cable table.');
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from(table).update(fields).eq('id', id)); return id; }
+      return ok(await sb.from(table).insert(fields).select('id').single()).id;
+    },
+    async deleteCableRow(table, id) {
+      if (!CABLE_TABLES.includes(table)) throw new Error('Not a cable table.');
+      ok(await sb.from(table).delete().eq('id', id));
+    },
+
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
@@ -275,6 +332,12 @@ export async function createSupabaseStore(url, key) {
       }
       for (const table of ['meetings', 'meeting_notes', 'meeting_questions', 'meeting_answers']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb('meetings'));
+      }
+      for (const table of GEAR_TABLES) {
+        ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
+      }
+      for (const table of CABLE_TABLES) {
+        ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb('cables'));
       }
       // Planning Center rosters: the sync touches one row whenever anything changed.
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'pco_live' }, () => cb('pco'));
@@ -285,6 +348,8 @@ export async function createSupabaseStore(url, key) {
 }
 
 const thumbPath = (p) => p.replace(/\.jpg$/i, '-t.jpg');
+const GEAR_TABLES = ['camera_builds', 'haze_fluids', 'haze_stock', 'haze_checks', 'systems', 'system_items'];
+const CABLE_TABLES = ['cable_types', 'cables'];
 
 // Turns database and auth errors into sentences people can act on.
 function friendly(error) {
@@ -311,6 +376,12 @@ function friendly(error) {
     [/devices_(patch_universe|patch_address|fixture_id|stage_no|asset_no|dmx_channels)_check/i, 'One of the numbers is out of range.'],
     [/volunteers_name_check/i, 'Give them a name.'],
     [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],
+    [/cable_types_signal_end_a_end_b_key/i, 'That kind of cable is already listed.'],
+    [/cables_(length_ft|quantity)_check/i, 'Check the length and the count.'],
+    [/system_items_system_id_device_id_key/i, 'That item is already in this system.'],
+    [/camera_builds_campus_id_number_key/i, 'That camera number is already set up at this location.'],
+    [/haze_stock_campus_id_fluid_id_key/i, 'That fluid is already listed at this location.'],
+    [/haze_(stock|checks|fluids)_\w+_check|camera_builds_\w+_check/i, 'One of the numbers is out of range.'],
     [/invalid input syntax for type uuid/i, 'That doesn’t look like a Resi player ID.'],
     [/Payload too large|exceeded the maximum allowed size/i, 'That photo is too big. Try a smaller one.'],
     [/row-level security|permission denied/i, 'Your account doesn’t have access to change this.'],

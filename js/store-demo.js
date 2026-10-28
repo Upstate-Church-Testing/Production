@@ -133,9 +133,8 @@ function buildExample() {
     fixture_id: 200 + i, patch_universe: 1, patch_address: i === 8 ? 130 : 201 + (i - 1) * 5, serial_number: i === 1 ? 'CSP-2219-0417' : null });
   for (let i = 1; i <= 24; i++) dev('SVL', W, { name: `Jolt Panel FX2 ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'ADJ', model: 'Jolt Panel FX2', location: i <= 12 ? 'Upstage wall' : 'Downstage truss',
     ...(i <= 22 ? { fixture_id: 400 + i, patch_universe: 2, patch_address: 1 + (i - 1) * 20 } : {}), serial_number: i <= 2 ? `JPF2-21${30 + i}` : null });
-  for (let i = 25; i <= 26; i++) dev('SVL', 'Storage', { name: `Jolt Panel FX2 ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'ADJ', model: 'Jolt Panel FX2' });
+  for (let i = 25; i <= 26; i++) dev('SVL', 'Lighting Storage', { name: `Jolt Panel FX2 ${i}`, departments: ['lighting'], category: 'Fixture', manufacturer: 'ADJ', model: 'Jolt Panel FX2' });
   dev('SVL', 'North Auditorium', { name: 'DMX Node', departments: ['lighting'], category: 'Node / Gateway', manufacturer: 'Chauvet', model: 'DMX-AN2', location: 'Stage Right' }, [{ ip: '10.50.10.120/24', gw: '2.0.0.1' }]);
-  dev('SVL', 'North Auditorium', { name: 'EPIX Drive', departments: ['lighting'], category: 'LED Driver', manufacturer: 'Chauvet', model: 'EPIX Drive 2000 IP', location: 'Stage Right' });
 
   // Harrison Bridge
   net('HB', 'lx', { name: 'Lighting', purpose: 'Console, Pathports, wall stations', subnet: '10.50.0.0/16', gateway: '10.50.1.1', departments: ['lighting'], is_isolated: true });
@@ -165,6 +164,36 @@ function buildExample() {
   dev('AND', W, { name: 'Sound Board', departments: ['audio'], category: 'Console', manufacturer: 'Yamaha', location: 'FOH' }, [{ net: 'prod', ip: '10.90.8.250/24' }]);
   dev('AND', W, { name: 'Lighting Console', departments: ['lighting'], category: 'Console', manufacturer: 'High End Systems', model: 'Hoglet 4', location: 'FOH', firmware: '4.2.0' });
 
+  room('SVL', 'Chapel'); // a room with nothing in it yet
+  // Hazers: lighting items in the Hazer category, so they keep a patch.
+  dev('SVL', W, { name: 'ATMe', departments: ['lighting'], category: 'Hazer', manufacturer: 'MDG', model: 'ATMe', networked: false, location: 'Upstage', fixture_id: 901, patch_universe: 2, patch_address: 501 });
+  dev('SVL', 'North Auditorium', { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
+  dev('HB', W, { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
+  dev('GCC', W, { name: 'Amhaze Stadium 2X IP', departments: ['lighting'], category: 'Hazer', manufacturer: 'Chauvet Professional', model: 'Amhaze Stadium 2X IP', networked: false });
+  // Open positions: three projectors we haven't identified yet.
+  ['House left', 'Center', 'House right'].forEach((spot, i) => dev('SVL', 'North Auditorium', { name: `Projector ${i + 1}`, departments: ['video'], category: 'Projector', model: 'Projector', location: spot }));
+  dev('SVL', 'North Auditorium', { name: 'Epix Drive 2000 IP', departments: ['lighting'], category: 'LED Driver', manufacturer: 'Chauvet Professional', model: 'Epix Drive 2000 IP', status: 'broken', notes: 'Bricked.' });
+  // Broadcast camera builds: gear whose Spot is "Cam N".
+  const cam = (name, model, manufacturer, category, location, roomName = W, status = 'active') =>
+    dev('SVL', roomName, { name, departments: ['video'], category, manufacturer, model, networked: false, location, status });
+  cam('URSA Broadcast', 'URSA Broadcast', 'Blackmagic', 'Camera', 'Cam 1');
+  cam('URSA Studio Viewfinder', 'URSA Studio Viewfinder', 'Blackmagic', 'Monitor', 'Cam 1');
+  cam('VB99 Mini 1', 'VB99 Mini', 'SmallRig', 'Battery', 'Cam 1');
+  cam('FX30 1', 'FX30', 'Sony', 'Camera', 'Cam 2');
+  cam('MK18-55mm T2.9 1', 'MK18-55mm T2.9', 'Fujinon', 'Lens', 'Cam 2');
+  cam('FX30 2', 'FX30', 'Sony', 'Camera', 'Cam 3');
+  cam('MK50-135mm T2.9 1', 'MK50-135mm T2.9', 'Fujinon', 'Lens', 'Cam 3');
+  cam('Ninja V 1', 'Ninja V', 'Atomos', 'Monitor', 'Cam 3');
+  cam('VB99 Mini 2', 'VB99 Mini', 'SmallRig', 'Battery', 'Cam 3');
+  cam('SQ75', 'SQ75', 'Sirui', 'Tripod', 'Cam 3');
+  cam('VB99 Mini 5', 'VB99 Mini', 'SmallRig', 'Battery', null, 'Production Storage', 'spare');
+  cam('RS-701 1', 'RS-701', 'Clear-Com', 'Intercom', 'Cam 3');
+  cam('CC-400 1', 'CC-400', 'Clear-Com', 'Intercom', 'Cam 3');
+  cam('RS-601 1', 'RS-601', 'Clear-Com', 'Intercom', 'Cam 1');
+  cam('MS-702', 'MS-702', 'Clear-Com', 'Intercom', 'Main rack', 'Broadcast');
+  cam('RS-701 2', 'RS-701', 'Clear-Com', 'Intercom', 'Director', 'Broadcast');
+  cam('ATEM 2 M/E Production Studio 4K', 'ATEM 2 M/E Production Studio 4K', 'Blackmagic', 'Switcher', 'Main rack', 'Broadcast', 'update');
+
   // A little history so the device screen shows how it works.
   activity.push(
     { id: 1, at: ago(26), actor_id: 'p-bethany', action: 'updated', entity: 'devices', entity_id: cat, device_id: cat, campus_id: 'c-SVL', label: 'Catwalk Gateway', changes: { firmware: ['B1.0 V3.4', 'B1.0 V3.7'] } },
@@ -184,6 +213,10 @@ function buildExample() {
   setType('ColorSource Par Deep Blue', { dmx_modes: [1, 3, 5, 6], dmx_footprint: 5 });
   setType('grandMA3 compact XT', { part_number: '4010505' });
   setType('Hoglet 4', { part_number: '61040064' });
+  setType('Amhaze Stadium 2X IP', { part_number: 'AMHAZESTADIUM2XIP', dmx_modes: [2], tank_liters: 5, haze_fluid_id: 'hf-phf' });
+  setType('HZ-350', { tank_liters: 2.5, haze_fluid_id: 'hf-hzl' });
+  setType('ATMe', { tank_liters: 2.5, haze_fluid_id: 'hf-mdg' });
+  setType('Projector', { unknown: true, notes: 'Placeholder until we know the model.' });
   numberAll(devices, rooms);
   types.forEach((t) => delete t.key);
 
@@ -279,6 +312,10 @@ export function createDemoStore() {
 
   const pco = createPcoDemo({ wait, clone, me, changed });
   let meetings = null;
+  let gear = null;
+  let cablesDb = null;
+  const GEAR_LISTS = { camera_builds: 'builds', haze_fluids: 'fluids', haze_stock: 'stock', haze_checks: 'checks', systems: 'systems', system_items: 'systemItems' };
+  const GEAR_DEFAULTS = { camera_builds: { in_service: true, note: null }, haze_stock: { bottles: 0 }, haze_checks: { filled: false, note: null }, haze_fluids: {}, systems: { notes: null }, system_items: { role: null } };
   const MEETING_LISTS = { meetings: 'meetings', meeting_notes: 'notes', meeting_questions: 'questions', meeting_answers: 'answers' };
 
   return {
@@ -410,7 +447,7 @@ export function createDemoStore() {
       }
       const fields = { name, manufacturer: mfr, part_number: blank(t.part_number), category: blank(t.category), departments: tags, networked: t.networked !== false,
         description: blank(t.description), specs: t.specs || [], manual_url: blank(t.manual_url), notes: blank(t.notes),
-        dmx_modes: t.dmx_modes || [], dmx_footprint: t.dmx_footprint || null };
+        dmx_modes: t.dmx_modes || [], dmx_footprint: t.dmx_footprint || null, ...('unknown' in t ? { unknown: !!t.unknown } : {}) };
       let row = t.id ? db.types.find((x) => x.id === t.id) : null;
       if (row) Object.assign(row, fields, { updated_at: now(), updated_by: me.id });
       else db.types.push((row = { id: uid(), ...fields, created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id }));
@@ -448,6 +485,14 @@ export function createDemoStore() {
       }
       changed('devices');
       return names.length;
+    },
+    async setDeviceStatus(id, status) {
+      await wait(120);
+      const dev = db.devices.find((d) => d.id === id);
+      if (!dev) throw new Error('That item was deleted by someone else.');
+      if (dev.status !== status) log('updated', 'devices', dev, { status: [dev.status, status] });
+      Object.assign(dev, { status, updated_at: now(), updated_by: me.id });
+      changed('devices');
     },
     async setDeviceNumbers(rows) {
       await wait(200);
@@ -590,8 +635,135 @@ export function createDemoStore() {
       changed('meetings');
     },
 
+    // Camera builds and haze.
+    async gearExtras() { await wait(); return clone(gearData()); },
+    async saveGearRow(table, row) {
+      await wait(120);
+      const list = gearData()[GEAR_LISTS[table]];
+      if (!list) throw new Error('Not a gear table.');
+      const stamp = { updated_at: now(), updated_by: me.id };
+      if (row.id) {
+        const r = list.find((x) => x.id === row.id);
+        if (!r) throw new Error('That was deleted by someone else.');
+        Object.assign(r, row, stamp);
+      } else {
+        if (table === 'camera_builds' && list.some((b) => b.campus_id === row.campus_id && b.number === row.number)) throw new Error('That camera number is already set up at this location.');
+        if (table === 'haze_stock' && list.some((b) => b.campus_id === row.campus_id && b.fluid_id === row.fluid_id)) throw new Error('That fluid is already listed at this location.');
+        if (table === 'system_items' && list.some((b) => b.system_id === row.system_id && b.device_id === row.device_id)) throw new Error('That item is already in this system.');
+        const made = { id: uid(), created_at: now(), created_by: me.id, ...stamp, ...GEAR_DEFAULTS[table], ...(table === 'haze_checks' ? { checked_at: now() } : {}), ...row };
+        list.push(made);
+        row = made;
+      }
+      changed(table);
+      return row.id;
+    },
+    async deleteGearRow(table, id) {
+      await wait(100);
+      const g = gearData();
+      const key = GEAR_LISTS[table];
+      if (!key) throw new Error('Not a gear table.');
+      g[key] = g[key].filter((x) => x.id !== id);
+      if (table === 'systems') g.systemItems = g.systemItems.filter((m) => m.system_id !== id);
+      if (table === 'haze_fluids') {
+        g.stock = g.stock.filter((r) => r.fluid_id !== id);
+        db.types.forEach((t) => { if (t.haze_fluid_id === id) t.haze_fluid_id = null; });
+      }
+      changed(table);
+    },
+    async setTypeUnknown(typeId, unknown) {
+      await wait(120);
+      Object.assign(db.types.find((t) => t.id === typeId), { unknown: !!unknown, updated_at: now() });
+      changed('device_types');
+    },
+    async setHazerModel(typeId, { haze_fluid_id = null, tank_liters = null }) {
+      await wait(120);
+      Object.assign(db.types.find((t) => t.id === typeId), { haze_fluid_id, tank_liters, updated_at: now() });
+      changed('device_types');
+    },
+
+    // Cables.
+    async cables() { await wait(); return clone({ ...cableData(), rooms: db.rooms }); },
+    async saveCableRow(table, row) {
+      await wait(110);
+      const c = cableData();
+      const list = table === 'cable_types' ? c.types : table === 'cables' ? c.cables : null;
+      if (!list) throw new Error('Not a cable table.');
+      if (table === 'cable_types') {
+        const dup = c.types.find((t) => t.id !== row.id && t.signal === (row.signal ?? t.signal) && t.end_a === row.end_a && t.end_b === row.end_b);
+        if (dup) throw new Error('That kind of cable is already listed.');
+      }
+      const stamp = { updated_at: now(), updated_by: me.id };
+      if (row.id) {
+        const r = list.find((x) => x.id === row.id);
+        if (!r) throw new Error('That was deleted by someone else.');
+        Object.assign(r, row, stamp);
+        changed('cables');
+        return r.id;
+      }
+      const made = { id: uid(), created_at: now(), created_by: me.id, ...stamp, ...(table === 'cables' ? { room_id: null, labeled: false, label_color: null, quantity: 1, notes: null } : { name: null, notes: null }), ...row };
+      list.push(made);
+      changed('cables');
+      return made.id;
+    },
+    async deleteCableRow(table, id) {
+      await wait(90);
+      const c = cableData();
+      if (table === 'cable_types') { c.types = c.types.filter((t) => t.id !== id); c.cables = c.cables.filter((x) => x.type_id !== id); }
+      else c.cables = c.cables.filter((x) => x.id !== id);
+      changed('cables');
+    },
+
     subscribe(cb) { listeners.add(cb); return () => listeners.delete(cb); },
   };
+
+  function cableData() {
+    if (cablesDb) return cablesDb;
+    const storage = db.rooms.find((r) => r.campus_id === 'c-SVL' && r.name === 'Lighting Storage')?.id || null;
+    const types = [
+      { id: 'ct-dmx3', signal: 'DMX', end_a: 'XLR 3-pin male', end_b: 'XLR 3-pin female', name: null, notes: null },
+      { id: 'ct-dmx5', signal: 'DMX', end_a: 'XLR 5-pin male', end_b: 'XLR 5-pin female', name: null, notes: null },
+      { id: 'ct-edpc', signal: 'Power', end_a: 'Edison male', end_b: 'PowerCon blue (in)', name: null, notes: null },
+      { id: 'ct-pcl', signal: 'Power', end_a: 'PowerCon white (out)', end_b: 'PowerCon blue (in)', name: 'PowerCon link', notes: null },
+    ];
+    const line = (type_id, length_ft, color = null) => ({ id: uid(), type_id, campus_id: 'c-SVL', room_id: storage, length_ft, labeled: !!color, label_color: color, quantity: 1, notes: null });
+    const cables = [];
+    for (const n of [3, 5, 10, 15, 20, 25]) {
+      cables.push(line('ct-dmx3', n, 'Purple'), line('ct-dmx5', n, 'Blue'), line('ct-edpc', n, n === 25 ? 'Green' : n === 10 ? 'Orange' : null), line('ct-pcl', n));
+    }
+    cablesDb = { types, cables };
+    return cablesDb;
+  }
+
+  function gearData() {
+    if (gear) return gear;
+    const at = (days) => new Date(Date.now() - days * 864e5).toISOString();
+    const find = (code, name) => db.devices.find((d) => d.campus_id === 'c-' + code && d.name === name)?.id;
+    const check = (code, name, level, days, filled = false) => ({ id: uid(), device_id: find(code, name), level, filled, checked_at: at(days), note: null, created_by: 'p-bethany' });
+    gear = {
+      builds: [1, 2, 3, 4, 5, 6].map((n) => ({ id: 'cb-' + n, campus_id: 'c-SVL', number: n, in_service: n !== 2 && n !== 6, note: n === 2 ? 'Waiting on a part' : null })),
+      fluids: [
+        { id: 'hf-phf', manufacturer: 'Chauvet Professional', name: 'Premium Haze Fluid', part_number: 'PHF5L', bottle_liters: 5, base: 'Water-based', notes: null },
+        { id: 'hf-hzl', manufacturer: 'Antari', name: 'HZL haze fluid', part_number: 'HZL-1', bottle_liters: 1, base: 'Oil-based', notes: null },
+        { id: 'hf-mdg', manufacturer: 'MDG', name: 'Neutral Fog Fluid', part_number: null, bottle_liters: null, base: null, notes: null },
+      ],
+      stock: [
+        { id: 'hs-1', campus_id: 'c-GCC', fluid_id: 'hf-phf', bottles: 3 },
+        { id: 'hs-2', campus_id: 'c-SVL', fluid_id: 'hf-hzl', bottles: 5 },
+        { id: 'hs-3', campus_id: 'c-SVL', fluid_id: 'hf-mdg', bottles: 3 },
+      ],
+      checks: [
+        check('SVL', 'ATMe', 100, 37, true),
+        check('SVL', 'HZ-350', 90, 20),
+        check('HB', 'HZ-350', 100, 20, true),
+        check('GCC', 'Amhaze Stadium 2X IP', 100, 88),
+        check('SVL', 'HZ-350', 20, 2),
+      ].filter((c) => c.device_id),
+      systems: [{ id: 'sys-1', campus_id: 'c-SVL', name: 'Clear-Com intercom', notes: 'Two-channel, all wired. The MS-702 main station in Broadcast runs to the director spot and every camera.' }],
+      systemItems: db.devices.filter((d) => d.campus_id === 'c-SVL' && /^(MS-702|RS-|CC-)/.test(d.name))
+        .map((d) => ({ id: uid(), system_id: 'sys-1', device_id: d.id, role: d.name === 'MS-702' ? 'Main station' : d.name.startsWith('RS-') ? 'Belt pack' : 'Headset' })),
+    };
+    return gear;
+  }
 
   function meetingData() {
     if (meetings) return meetings;

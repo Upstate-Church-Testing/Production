@@ -1,16 +1,24 @@
 // Gear: models (device types: specs, ports, photo) and every item at every location.
 // In the app a "model" is a device_types row and an "item" is a devices row.
-// Models are grouped by category; Serial is one A–Z list of every unit.
+// Models are grouped by category; Items is one A–Z list of every unit.
+// Haze and Cameras are views over the same items: hazers with their fluid,
+// and camera builds (items whose Spot is "Cam 3").
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
-import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, STATUS, kv } from './devices.js';
+import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv } from './devices.js';
 import { patchView } from './patch.js';
 import { takesPatch, patchOf, footprint, patchPoint, covers } from '../lighting.js';
 import { preparePhoto } from '../photo.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
+import { hazeView } from './haze.js';
+import { camerasView, camNumber } from './cameras.js';
+import { systemsView } from './systems.js';
 
 const NO_BRAND = '__none';
+const NO_ROOM = '__none';
+const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
+const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
 
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
@@ -19,6 +27,7 @@ export function mount(el, ctx) {
     dep: ctx.gearFilters.dep,     // Section: audio, video, lighting, network
     cat: ctx.gearFilters.cat,
     brand: ctx.gearFilters.brand,
+    room: ctx.gearFilters.room || ALL, // a room name, so "Storage" works across locations too
     mode: storage('ucp.gearmode', 'types'),
     gridRooms: storage('ucp.gridrooms', false), // grid: one column per room instead of per location
     campus: ctx.campus,           // shared with Network and Statistics; All on every launch
@@ -41,7 +50,7 @@ export function mount(el, ctx) {
     store('ucp.gearmode', 'patch');
     ctx.pending = null;
   }
-  const remember = () => { ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand }; };
+  const remember = () => { ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand, room: s.room }; };
   remember();
   let openType = null; // { id, refresh } of the type panel on screen
   let openDev = null;  // { id, refresh } of the model panel on screen
@@ -51,9 +60,12 @@ export function mount(el, ctx) {
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-gmode="types">Models</button>
-          <button type="button" role="tab" data-gmode="models">Serial</button>
+          <button type="button" role="tab" data-gmode="models">Items</button>
           <button type="button" role="tab" data-gmode="grid">Grid</button>
           <button type="button" role="tab" data-gmode="patch">Patch</button>
+          <button type="button" role="tab" data-gmode="haze">Haze</button>
+          <button type="button" role="tab" data-gmode="cameras">Cameras</button>
+          <button type="button" role="tab" data-gmode="systems">Systems</button>
         </div>
         <p class="tally" id="g-tally" aria-live="polite"></p>
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
@@ -63,6 +75,7 @@ export function mount(el, ctx) {
       <div class="search">${icon('search')}<input id="g-q" type="search" autocomplete="off" enterkeyhint="search" aria-label="Search gear"></div>
       <div class="filters">
         ${dropdownHtml('g-loc', 'Location', 'caps')}
+        ${dropdownHtml('g-room', 'Room')}
         ${dropdownHtml('g-dep', 'Section')}
         ${dropdownHtml('g-cat', 'Category')}
         ${dropdownHtml('g-brand', 'Brand')}
@@ -73,13 +86,18 @@ export function mount(el, ctx) {
 
   // Filters, in order: location, section, category, brand. Each narrows the next.
   const itemMode = () => s.mode === 'models' || s.mode === 'patch'; // filters choose from items, not models
-  const unit = () => (s.mode === 'patch' ? ['fixture', 'fixtures'] : s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
+  const unit = () => (s.mode === 'patch' ? ['fixture', 'fixtures'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
+    : s.mode === 'systems' ? ['system', 'systems']
+    : s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
   const loc = locationDropdown(ctx, $('#g-loc', el), {
     unit,
     get: () => s.campus,
     set: (v) => { s.campus = ctx.campus = v; patch.cancel(); draw(); },
     counts: () => {
       if (!s.data) return {};
+      if (s.mode === 'haze') return haze.counts();
+      if (s.mode === 'cameras') return cams.counts();
+      if (s.mode === 'systems') return syss.counts();
       const models = itemMode();
       const pool = s.mode === 'patch' ? s.data.devices.filter((d) => takesPatch(d, typeOf(d))) : s.data.devices;
       const counts = { [ALL]: models ? pool.length : s.data.types.length };
@@ -89,6 +107,13 @@ export function mount(el, ctx) {
       }
       return counts;
     },
+  });
+  const roomDd = wireDropdown($('#g-room', el), {
+    label: 'Room',
+    unit,
+    get: () => s.room,
+    set: (v) => { s.room = v; remember(); draw(); },
+    options: () => roomOptions(),
   });
   const depDd = wireDropdown($('#g-dep', el), {
     label: 'Section',
@@ -135,8 +160,22 @@ export function mount(el, ctx) {
     setCampus: (id) => { s.campus = ctx.campus = id; loc.update(); draw(); window.scrollTo({ top: 0 }); },
     campusName: (id) => campusName(id),
   });
+  const views = {
+    s, ctx, typeOf: (d) => typeOf(d), load: (quiet) => load(quiet), campusName: (id) => campusName(id),
+    roomName: (id) => s.ix.room.get(id)?.name || null,
+    setTally: (html) => { $('#g-tally', el).innerHTML = html; },
+    redraw: () => drawResults(),
+  };
+  const haze = hazeView(views);
+  const cams = camerasView(views);
+  const syss = systemsView(views);
   const results = $('#g-results', el);
-  results.addEventListener('click', (e) => { if (s.mode === 'patch') patch.click(e); });
+  results.addEventListener('click', (e) => {
+    if (s.mode === 'patch') patch.click(e);
+    else if (s.mode === 'haze') haze.click(e);
+    else if (s.mode === 'cameras') cams.click(e);
+    else if (s.mode === 'systems') syss.click(e);
+  });
   results.addEventListener('input', (e) => { if (s.mode === 'patch') patch.input(e); });
   results.addEventListener('keydown', (e) => { if (s.mode === 'patch') patch.keydown(e); });
   el.addEventListener('click', (e) => {
@@ -147,9 +186,10 @@ export function mount(el, ctx) {
     else if (t.dataset.gmode) { s.mode = t.dataset.gmode; store('ucp.gearmode', s.mode); patch.cancel(); draw(); }
     else if (t.dataset.type) openTypeSheet(t.dataset.type);
     else if (t.dataset.act === 'add') itemMode() ? openModel(null, true) : newType();
-    else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; loc.update(); draw(); }
+    else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; s.room = ALL; remember(); loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
     else if (t.dataset.act === 'retry') load();
+    else if (t.dataset.act === 'todo') { s.todo = !s.todo; draw(); }
     else if (t.dataset.act === 'grid-rooms') { s.gridRooms = !s.gridRooms; store('ucp.gridrooms', s.gridRooms); drawResults(); }
   });
   el.addEventListener('keydown', (e) => {
@@ -170,8 +210,11 @@ export function mount(el, ctx) {
     if (!alive) return;
     if (!quiet) $('#g-results', el).innerHTML = `<div class="loading">${'<div class="sk"></div>'.repeat(5)}</div>`;
     try {
-      s.data = await ctx.store.networkData();
+      // Camera builds and haze live beside the gear; if they can't load, the rest still works.
+      const [data, extra] = await Promise.all([ctx.store.networkData(), ctx.store.gearExtras().catch((e) => ({ error: e.message }))]);
       if (!alive) return;
+      s.data = data;
+      s.extra = { builds: [], fluids: [], stock: [], checks: [], systems: [], systemItems: [], ...extra };
       s.data.types.forEach((t) => { t.ports = sortPorts(t.ports); });
       s.ix = buildIndex(s.data);
       s.error = null;
@@ -184,7 +227,8 @@ export function mount(el, ctx) {
   }
 
   function clearFilters() {
-    s.q = ''; q.value = ''; s.dep = ALL; s.cat = ALL; s.brand = ALL;
+    s.todo = false;
+    s.q = ''; q.value = ''; s.dep = ALL; s.cat = ALL; s.brand = ALL; s.room = ALL;
     remember();
     draw();
   }
@@ -194,27 +238,72 @@ export function mount(el, ctx) {
   }
 
   function inCampus(d) { return s.campus === 'all' || d.campus_id === s.campus; }
+  /** Rooms go by name, so "Storage" picks every storage room when all locations are showing. */
+  function roomKey(d) { const r = d.room_id && s.ix.room.get(d.room_id); return r ? r.name.trim().toLowerCase() : NO_ROOM; }
+  function inRoom(d) { return s.room === ALL || roomKey(d) === s.room; }
+  /** At the picked location and room. */
+  function inPlace(d) { return inCampus(d) && inRoom(d); }
+  function roomLabel() {
+    if (s.room === ALL) return '';
+    if (s.room === NO_ROOM) return 'no room';
+    const r = s.data.rooms.find((x) => x.name.trim().toLowerCase() === s.room);
+    return r ? r.name.trim() : s.room;
+  }
+  /** "Simpsonville", "Simpsonville · Storage" or "every Storage". */
+  function placeName() {
+    const room = roomLabel();
+    if (s.campus === ALL) return room ? (s.room === NO_ROOM ? 'items with no room' : `every ${room}`) : 'any location';
+    return room ? `${campusName(s.campus)} · ${s.room === NO_ROOM ? 'No room' : room}` : campusName(s.campus);
+  }
+  /** Room pill: the rooms at the picked location (by name across all of them), with counts. */
+  function roomOptions() {
+    if (!s.data) return [{ value: ALL, label: 'All rooms' }];
+    const items = itemMode();
+    const here = s.data.devices.filter((d) => inCampus(d) && (s.mode !== 'patch' || takesPatch(d, typeOf(d))));
+    const by = new Map();
+    for (const d of here) {
+      const k = roomKey(d);
+      let o = by.get(k);
+      if (!o) {
+        const r = s.ix.room.get(d.room_id);
+        by.set(k, (o = { value: k, label: k === NO_ROOM ? 'No room' : r.name.trim(), sort: r?.sort_order ?? 999, n: 0, types: new Set() }));
+      }
+      o.n += 1;
+      o.types.add(d.type_id);
+    }
+    // With one location picked, every room there shows up, even one with nothing in it yet (like a new Chapel).
+    if (s.campus !== ALL && s.mode !== 'patch') {
+      for (const r of s.data.rooms.filter((x) => x.campus_id === s.campus)) {
+        const k = r.name.trim().toLowerCase();
+        if (!by.has(k)) by.set(k, { value: k, label: r.name.trim(), sort: r.sort_order ?? 999, n: 0, types: new Set() });
+      }
+    }
+    const all = items ? here.length : s.campus === ALL ? s.data.types.length : new Set(here.map((d) => d.type_id)).size;
+    const list = [...by.values()].sort((a, b) => (a.value === NO_ROOM) - (b.value === NO_ROOM)
+      || (s.campus === ALL ? b.n - a.n : a.sort - b.sort) || a.label.localeCompare(b.label));
+    return [{ value: ALL, label: 'All rooms', count: all }, ...list.map((o) => ({ value: o.value, label: o.label, count: items ? o.n : o.types.size }))];
+  }
   function campusName(id) { return ctx.campusById.get(id)?.short_name || 'Unknown campus'; }
   function campusWords(id) { const c = ctx.campusById.get(id); return c ? [c.short_name, c.name, c.code] : []; }
   function unitsOf(typeId) { return s.data.devices.filter((d) => d.type_id === typeId); }
-  function unitsHere(typeId) { return s.data.devices.filter((d) => d.type_id === typeId && inCampus(d)); }
+  function unitsHere(typeId) { return s.data.devices.filter((d) => d.type_id === typeId && inPlace(d)); }
   function catOf(t) { return t?.category || 'Uncategorized'; }
   function brandOf(t) { return brandKey(t?.manufacturer) || NO_BRAND; }
   function tagDots(tags = []) { return tagDotsHtml(ctx, tags); }
   function inDep(tags) { return s.mode === 'patch' || s.dep === ALL || tags.includes(s.dep); }
   function inCat(t) { return s.cat === ALL || catOf(t) === s.cat; }
-  function inBrand(t) { return s.brand === ALL || brandOf(t) === s.brand; }
+  function inBrand(t) { return (s.brand === ALL || brandOf(t) === s.brand) && (!s.todo || !!t?.unknown); }
   function typeOf(d) { return s.ix.type.get(d.type_id); }
   /** What the filters choose from: models or types at this location. */
   function poolHere() {
     if (s.mode === 'patch') return s.data.devices.filter((d) => inCampus(d) && takesPatch(d, typeOf(d)));
-    return s.mode === 'models' ? s.data.devices.filter(inCampus) : typesHere();
+    return s.mode === 'models' ? s.data.devices.filter(inPlace) : typesHere();
   }
   function typeFor(x) { return itemMode() ? typeOf(x) || {} : x; }
 
-  /** Types in play: with a campus picked, only types that have models there. */
+  /** Types in play: with a location or room picked, only types that have items there. */
   function typesHere() {
-    return s.campus === 'all' ? s.data.types : s.data.types.filter((t) => unitsHere(t.id).length);
+    return s.campus === 'all' && s.room === ALL ? s.data.types : s.data.types.filter((t) => unitsHere(t.id).length);
   }
 
   /** How each brand is written most often ("ETC", not "etc"). */
@@ -238,20 +327,20 @@ export function mount(el, ctx) {
   function typeMatches(t) {
     if (!inDep(t.departments) || !inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
-    return words([t.name, t.manufacturer, t.category, t.part_number, t.description, ...t.departments.map((x) => ctx.dep[x]?.name || x),
+    return words([t.name, t.manufacturer, t.category, t.part_number, t.description, t.unknown ? 'unknown model' : null, ...t.departments.map((x) => ctx.dep[x]?.name || x),
       ...(t.ports || []).map((p) => `${p.name} ${p.signal || ''}`),
       ...new Set(unitsHere(t.id).flatMap((u) => campusWords(u.campus_id)))]); // "net-x simpsonville" finds it
   }
 
   function modelMatches(d) {
-    if (!inCampus(d)) return false;
+    if (!inPlace(d)) return false;
     const t = typeOf(d);
     if (!inDep(d.departments) || !inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
     if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
     return words([d.name, d.location, d.serial_number, d.firmware, d.notes, s.ix.room.get(d.room_id)?.name, ...campusWords(d.campus_id),
-      t?.name, t?.manufacturer, t?.category, t?.part_number, ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
+      t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
   }
 
   /** Fixture ID, patch, stage and asset numbers as searchable words: "401", "fid401", "2.041", "u2", "asset 17". */
@@ -277,13 +366,21 @@ export function mount(el, ctx) {
   function draw() {
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
     const addLabel = itemMode() ? 'Add items' : 'Add model';
+    const own = OWN_VIEWS.includes(s.mode); // Haze and Cameras have their own add buttons
     $('.add-desktop span', el).textContent = addLabel;
+    $('.add-desktop', el).hidden = own;
+    $('.fab', el).hidden = own;
     $('.fab', el).setAttribute('aria-label', addLabel);
     q.placeholder = s.mode === 'patch' ? 'Search fixture, fixture ID or patch (2.041)'
       : s.mode === 'models' ? 'Search name, model, fixture ID, patch, IP' : 'Search model, brand, port, location';
     el.classList.toggle('is-grid', s.mode === 'grid');
     el.classList.toggle('is-patch', s.mode === 'patch');
-    $('#g-dep', el).hidden = s.mode === 'patch'; // the patch sheet is lighting only
+    el.classList.toggle('is-own', own);
+    $('#g-dep', el).hidden = s.mode === 'patch' || own; // the patch sheet is lighting only
+    $('#g-room', el).hidden = s.mode === 'patch' || own; // the patch sheet has its own room tabs
+    $('#g-cat', el).hidden = own;
+    $('#g-brand', el).hidden = own;
+    $('.search', el).hidden = own;
     if (s.error) {
       drawTally(null);
       $('#g-results', el).innerHTML = `<div class="empty"><h3>Couldn’t load gear</h3><p>${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
@@ -304,19 +401,22 @@ export function mount(el, ctx) {
   /** Keeps each filter's choice valid for the ones before it, then refreshes the pills. */
   function drawFilters() {
     const valid = (dd, v) => dd === null || v === ALL || (s.data && optionValues(dd).includes(v));
+    if (OWN_VIEWS.includes(s.mode)) { loc.update(); return; } // keep the other choices for when they come back
+    if (s.mode !== 'patch' && !valid(roomDd, s.room)) s.room = ALL;
     if (s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
     if (!valid(catDd, s.cat)) s.cat = ALL;
     if (!valid(brandDd, s.brand)) s.brand = ALL;
-    loc.update(); depDd.update(); catDd.update(); brandDd.update();
+    loc.update(); roomDd.update(); depDd.update(); catDd.update(); brandDd.update();
   }
   function optionValues(dd) {
+    if (dd === roomDd) return roomOptions().map((o) => o.value);
     if (dd === depDd) return ctx.departments.map((d) => d.slug);
     const pool = poolHere().filter((x) => s.mode === 'patch' || inDep(x.departments));
     if (dd === catDd) return pool.map((x) => catOf(typeFor(x)));
     return pool.filter((x) => inCat(typeFor(x))).map((x) => brandOf(typeFor(x)));
   }
 
-  function filtering() { return !!(s.q || s.dep !== ALL || s.cat !== ALL || s.brand !== ALL); }
+  function filtering() { return !!(s.todo || s.q || s.dep !== ALL || s.cat !== ALL || s.brand !== ALL || (s.room !== ALL && s.mode !== 'patch')); }
 
   function drawResults() {
     const box = $('#g-results', el);
@@ -324,6 +424,9 @@ export function mount(el, ctx) {
     if (s.mode === 'models') return drawModels(box);
     if (s.mode === 'grid') return drawGrid(box);
     if (s.mode === 'patch') return patch.draw(box);
+    if (s.mode === 'haze') return haze.draw(box);
+    if (s.mode === 'cameras') return cams.draw(box);
+    if (s.mode === 'systems') return syss.draw(box);
 
     const types = s.data.types;
     if (!types.length) {
@@ -339,9 +442,9 @@ export function mount(el, ctx) {
     const shown = here.filter(typeMatches);
     drawTally(shown.length, here.length);
     const hidden = types.length - here.length;
-    const elsewhere = hidden ? `<p class="result-note">${plural(hidden, 'more model isn’t', 'more models aren’t')} at ${esc(campusName(s.campus))}. <button class="btn link" data-act="all-campuses">Show all locations</button></p>` : '';
+    const elsewhere = hidden ? `<p class="result-note">${plural(hidden, 'more model isn’t', 'more models aren’t')} at ${esc(placeName())}. <button class="btn link" data-act="all-campuses">Show all locations</button></p>` : '';
     if (!shown.length) {
-      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No model matches “${esc(s.q)}”` : 'No model matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>${elsewhere}`;
+      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No model matches “${esc(s.q)}”` : 'No model matches these filters'}${s.campus !== 'all' || s.room !== ALL ? ` at ${esc(placeName())}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>${elsewhere}`;
       return;
     }
     const groups = new Map();
@@ -352,7 +455,7 @@ export function mount(el, ctx) {
     }
     const keys = [...groups.keys()].sort((a, b) => (a === 'Uncategorized') - (b === 'Uncategorized') || a.localeCompare(b));
     const byBrandThenName = (a, b) => (a.manufacturer || '￿').localeCompare(b.manufacturer || '￿') || a.name.localeCompare(b.name, undefined, { numeric: true });
-    box.innerHTML = keys.map((k) => `<section class="net">
+    box.innerHTML = todoNote() + keys.map((k) => `<section class="net">
       <header class="net-head"><div class="net-title"><h3>${esc(k)}</h3><span class="count">${groups.get(k).length}</span></div></header>
       <ul class="gear-list">${groups.get(k).sort(byBrandThenName).map(typeRow).join('')}</ul>
     </section>`).join('') + elsewhere;
@@ -360,13 +463,14 @@ export function mount(el, ctx) {
 
   function typeRow(t) {
     const units = unitsHere(t.id);
-    const sub = [t.category, t.ports?.length ? plural(t.ports.length, 'port') : null, t.networked === false ? 'No IP' : null].filter(Boolean).join(' · ');
+    const sub = t.unknown ? `${t.category || 'Model'} · placeholder until you know the model`
+      : [t.category, t.ports?.length ? plural(t.ports.length, 'port') : null, t.networked === false ? 'No IP' : null].filter(Boolean).join(' · ');
     return `<li class="gear-row">
       <button class="row-hit" data-type="${t.id}" aria-label="Open ${esc(typeLabel(t))}"></button>
       ${typeThumb(ctx, t)}
       <span class="g-text">
         <span class="g-brand"><span>${t.manufacturer ? esc(t.manufacturer) : '<i>No brand</i>'}</span>${tagDots(t.departments)}</span>
-        <b class="g-name">${esc(t.name)}</b>
+        <b class="g-name">${esc(t.name)}${t.unknown ? ` ${UNKNOWN_PILL}` : ''}</b>
         ${sub ? `<span class="g-sub">${esc(sub)}</span>` : ''}
       </span>
       <span class="g-count"><b>${units.length}</b><small>${units.length === 1 ? 'item' : 'items'}</small></span>
@@ -378,7 +482,7 @@ export function mount(el, ctx) {
   function drawGrid(box) {
     const types = typesHere().filter(typeMatches);
     const typeIds = new Set(types.map((t) => t.id));
-    const items = s.data.devices.filter((d) => inCampus(d) && typeIds.has(d.type_id));
+    const items = s.data.devices.filter((d) => inPlace(d) && typeIds.has(d.type_id));
     const roomName = (id) => s.ix.room.get(id)?.name || 'No room';
     const byRoom = s.campus !== ALL || s.gridRooms;
 
@@ -469,9 +573,9 @@ export function mount(el, ctx) {
 
   // Items: every unit, A–Z, one after another.
   function drawModels(box) {
-    const all = s.data.devices.filter(inCampus);
+    const all = s.data.devices.filter(inPlace);
     if (!all.length) {
-      box.innerHTML = `<div class="empty"><h3>No items ${s.campus === 'all' ? 'yet' : `at ${esc(campusName(s.campus))} yet`}</h3>
+      box.innerHTML = `<div class="empty"><h3>No items ${s.campus === 'all' && s.room === ALL ? 'yet' : `at ${esc(placeName())} yet`}</h3>
         <p>Pick a model and how many you have. Ten R3 Beams go in as one batch, and you fill in serials and IPs on each one later.</p>
         <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add items</button></div></div>`;
       drawTally(0, 0);
@@ -480,32 +584,49 @@ export function mount(el, ctx) {
     const models = all.filter(modelMatches);
     drawTally(models.length, all.length);
     if (!models.length) {
-      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No item matches “${esc(s.q)}”` : 'No item matches these filters'}${s.campus !== 'all' ? ` at ${esc(campusName(s.campus))}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
+      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No item matches “${esc(s.q)}”` : 'No item matches these filters'}${s.campus !== 'all' || s.room !== ALL ? ` at ${esc(placeName())}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
       return;
     }
     const order = ctx.campuses.map((c) => c.id);
     models.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
       || order.indexOf(a.campus_id) - order.indexOf(b.campus_id));
-    box.innerHTML = `<section class="net"><ul class="gear-list">${models.map(modelRow).join('')}</ul></section>`;
+    box.innerHTML = `${todoNote()}<section class="net"><ul class="gear-list">${models.map(modelRow).join('')}</ul></section>`;
   }
 
   function modelRow(d) {
     const t = typeOf(d);
     const ip = (s.ix.ipsByDev.get(d.id) || []).find((i) => i._addr);
-    const where = [s.campus === 'all' ? campusName(d.campus_id) : null, s.ix.room.get(d.room_id)?.name, d.location].filter(Boolean).join(' · ');
+    const where = [s.campus === 'all' ? campusName(d.campus_id) : null, s.ix.room.get(d.room_id)?.name, spotText(d)].filter(Boolean).join(' · ');
     const sub = [t?.name, where].filter(Boolean).join(' · ');
     return `<li class="gear-row model-row ${d.status !== 'active' ? `is-${d.status}` : ''}">
       <button class="row-hit" data-model="${d.id}" aria-label="Open ${esc(d.name)}"></button>
       ${typeThumb(ctx, t)}
       <span class="g-text">
         <span class="g-brand"><span>${t?.manufacturer ? esc(t.manufacturer) : '<i>No brand</i>'}</span>${tagDots(d.departments)}</span>
-        <b class="g-name">${esc(d.name)}${d.status !== 'active' ? ` <span class="pill">${STATUS[d.status]}</span>` : ''}</b>
+        <b class="g-name">${esc(d.name)}${t?.unknown ? ` ${UNKNOWN_PILL}` : ''}${d.status !== 'active' ? ` ${statusPill(d.status)}` : ''}</b>
         ${sub ? `<span class="g-sub">${esc(sub)}</span>` : ''}
       </span>
       ${ip ? `<button class="r-ip mono" data-copy="${esc(ip._addr)}" aria-label="Copy ${esc(ip._addr)}">${ipHtml(ip._addr)}</button>`
         : d.patch_universe != null || d.fixture_id != null ? `<span class="r-num mono">${d.fixture_id != null ? `<b>${d.fixture_id}</b>` : ''}${d.patch_universe != null ? `<span>${esc(patchOf(d))}</span>` : ''}</span>`
         : '<span></span>'}
     </li>`;
+  }
+
+  /** Open positions: items that went in before anyone knew the model. */
+  function todoNote() {
+    const n = s.data.devices.filter((d) => inPlace(d) && typeOf(d)?.unknown).length;
+    if (!n && !s.todo) return '';
+    return `<button type="button" class="todo-note ${s.todo ? 'is-on' : ''}" data-act="todo">${icon('warn')}<span>${s.todo
+      ? `Showing ${n === 1 ? 'the item that still needs' : `the ${n} items that still need`} a model`
+      : `${plural(n, 'item')} ${n === 1 ? 'still needs' : 'still need'} a model${s.campus !== ALL || s.room !== ALL ? ` at ${esc(placeName())}` : ''}`}</span><b>${s.todo ? 'Show everything' : 'Show them'}</b></button>`;
+  }
+
+  /** The Spot, saying so when it's a camera that's out of commission. */
+  function spotText(d) {
+    const n = camNumber(d.location);
+    if (n == null) return d.location;
+    const b = s.extra?.builds.find((x) => x.campus_id === d.campus_id && x.number === n);
+    return b && !b.in_service ? `${d.location} (out of commission)` : d.location;
   }
 
   // ------------------------------------------------------- type sheet ----
@@ -581,6 +702,8 @@ export function mount(el, ctx) {
           <p class="sh-sub">${esc([t.category, t.part_number].filter(Boolean).join(' · ') || 'No category yet')}</p>
         </header>
         <div class="sh-body">
+          ${t.unknown ? `<section class="unknown-box"><p>${icon('warn')}<span><b>Model not known yet.</b> This holds the spot for ${units.length === 1 ? 'one item' : `${units.length} items`} until you find out what ${units.length === 1 ? 'it is' : 'they are'}. Open each item and pick its real model, or rename this one with Edit model if they’re all the same.</span></p>
+            <button class="btn small" data-g="known">${icon('check')}We know the model now</button></section>` : ''}
           ${photoBlock()}
           <input type="file" accept="image/*" id="t-photo-in" class="vh" tabindex="-1">
           ${t.description ? `<p class="lede">${esc(t.description)}</p>` : ''}
@@ -653,6 +776,10 @@ export function mount(el, ctx) {
           onCancel: () => { editing = null; render(); },
         });
       } else if (a === 'add-unit') { sheet.close(true); openType = null; openModel(null, true, { type_id: t.id }); }
+      else if (a === 'known') {
+        try { await ctx.store.setTypeUnknown(t.id, false); ctx.toast(`${t.name} is a known model now`); await load(true); }
+        catch (err) { ctx.toast(err.message, 'bad'); }
+      }
       else if (a === 'del') { confirmDelete = true; render(); }
       else if (a === 'del-no') { confirmDelete = false; render(); }
       else if (a === 'del-yes') {
