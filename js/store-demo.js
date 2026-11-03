@@ -175,7 +175,7 @@ function buildExample() {
   dev('HB', W, { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
   dev('GCC', W, { name: 'Amhaze Stadium 2X IP', departments: ['lighting'], category: 'Hazer', manufacturer: 'Chauvet Professional', model: 'Amhaze Stadium 2X IP', networked: false });
   // Open positions: three projectors we haven't identified yet.
-  ['House left', 'Center', 'House right'].forEach((spot, i) => dev('SVL', 'North Auditorium', { name: `Projector ${i + 1}`, departments: ['video'], category: 'Projector', model: 'Projector', location: spot }));
+  ['House left', 'Center', 'House right'].forEach((spot, i) => dev('SVL', 'North Auditorium', { name: `Projector ${i + 1}`, departments: ['video'], category: 'Projector', model: 'Projector', location: spot, projection: spot === 'Center' ? 'front' : 'rear' }));
   dev('SVL', 'North Auditorium', { name: 'Epix Drive 2000 IP', departments: ['lighting'], category: 'LED Driver', manufacturer: 'Chauvet Professional', model: 'Epix Drive 2000 IP', status: 'broken', notes: 'Bricked.' });
   // Broadcast camera builds: gear whose Spot is "Cam N".
   const cam = (name, model, manufacturer, category, location, roomName = W, status = 'active') =>
@@ -349,7 +349,8 @@ export function createDemoStore() {
       let tags = depOrder((d.departments || []).map((x) => x.toLowerCase()));
       if (!tags.length) tags = [...type.departments];
       const fields = { type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(d.name) || type.name, departments: tags,
-        serial_number: blank(d.serial_number), firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes) };
+        serial_number: blank(d.serial_number), firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes),
+        ...('projection' in d ? { projection: blank(d.projection) } : {}) };
       let dev = d.id ? db.devices.find((x) => x.id === d.id) : null;
       if (d.id && !dev) throw new Error('That item was deleted by someone else.');
       if (dev && dev.type_id !== type.id) {
@@ -475,7 +476,7 @@ export function createDemoStore() {
       for (const n of names) {
         const dev = { id: uid(), type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(n) || type.name,
           departments: tags.length ? tags : [...type.departments], serial_number: null, firmware: null, location: blank(d.location),
-          status: d.status || 'active', notes: blank(d.notes), ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
+          status: d.status || 'active', notes: blank(d.notes), projection: blank(d.projection), ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
           created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
         number(dev, null);
         db.devices.push(dev);

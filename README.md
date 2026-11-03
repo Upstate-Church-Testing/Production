@@ -188,7 +188,7 @@ campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Win
     ├── networks (subnet, VLAN, gateway, tags)
     │
     └── devices — one physical unit ("item" in the app): name, sections, serial, firmware, room, location, status,
-            │         asset #, stage #, fixture ID, patch (universe + address), DMX channels
+            │         asset #, stage #, fixture ID, patch (universe + address), DMX channels, projection (front or rear, projectors only)
             ├── device_ips (IP + mask, gateway, MAC, network, label, static/DHCP)
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)

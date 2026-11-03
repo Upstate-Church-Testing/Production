@@ -6,7 +6,7 @@
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
-import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT } from './devices.js';
+import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION } from './devices.js';
 import { patchView } from './patch.js';
 import { takesPatch, patchOf, footprint, patchPoint, covers, assetTag, assetWords } from '../lighting.js';
 import { preparePhoto } from '../photo.js';
@@ -341,7 +341,7 @@ export function mount(el, ctx) {
     if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
     return words([d.name, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id),
-      t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
+      t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, PROJECTION[d.projection], ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
   }
 
   /** Fixture ID, patch, stage and asset numbers as searchable words: "401", "fid401", "2.041", "u2", "asset 17". */
@@ -601,7 +601,7 @@ export function mount(el, ctx) {
   function modelRow(d) {
     const t = typeOf(d);
     const ip = (s.ix.ipsByDev.get(d.id) || []).find((i) => i._addr);
-    const where = [s.campus === 'all' ? campusName(d.campus_id) : null, s.ix.room.get(d.room_id)?.name, spotText(d)].filter(Boolean).join(' · ');
+    const where = [s.campus === 'all' ? campusName(d.campus_id) : null, s.ix.room.get(d.room_id)?.name, spotText(d), PROJECTION[d.projection]].filter(Boolean).join(' · ');
     const sub = [t?.name, where].filter(Boolean).join(' · ');
     return `<li class="gear-row model-row ${d.status !== 'active' ? `is-${d.status}` : ''}">
       <button class="row-hit" data-model="${d.id}" aria-label="Open ${esc(d.name)}"></button>

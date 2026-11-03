@@ -27,6 +27,9 @@ export const STATUS_HINT = {
 /** The little colored pill. */
 export const statusPill = (st) => `<span class="st st-${esc(st)}"><i></i>${esc(STATUS[st] || st)}</span>`;
 export const MODES = { static: 'Static', reserved: 'DHCP reservation', dhcp: 'DHCP' };
+/** Projectors: which side of the screen they're on. A fact about the install, so it's on the item. */
+export const PROJECTION = { front: 'Front projection', rear: 'Rear projection' };
+export const isProjectorType = (t) => /projector/i.test(String(t?.category || ''));
 export const FIELD = {
   name: 'Name', departments: 'Sections', category: 'Category', manufacturer: 'Brand', model: 'Model',
   serial_number: 'Serial', firmware: 'Firmware', location: 'Spot', room_id: 'Room', campus_id: 'Location',
@@ -34,7 +37,7 @@ export const FIELD = {
   mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Model',
   connected_to: 'Connected to', assignment: 'Assignment',
   asset_no: 'Asset #', stage_no: 'Stage #', fixture_id: 'Fixture ID', patch_universe: 'Universe', patch_address: 'Address',
-  dmx_channels: 'DMX channels', patch: 'Patch ID',
+  dmx_channels: 'DMX channels', patch: 'Patch ID', projection: 'Projection',
 };
 const NUMBER_FIELDS = ['fixture_id', 'asset_no', 'dmx_channels'];
 
@@ -166,6 +169,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     else if (a === 'rm-ip') { collect(); draft.ips.splice(+t.dataset.i, 1); dirty = true; renderEdit(); }
     else if (a === 'add-cred') { collect(); draft.creds.push({ label: '', username: '', password: '' }); renderEdit(); focusLast('.cred-card input'); }
     else if (a === 'rm-cred') { collect(); draft.creds.splice(+t.dataset.i, 1); dirty = true; renderEdit(); }
+    else if (a === 'proj') { collect(); draft.projection = draft.projection === t.dataset.v ? null : t.dataset.v; dirty = true; renderEdit(); }
     else if (a === 'tag') { collect(); const tg = t.dataset.tag; draft.departments = draft.departments.includes(tg) ? draft.departments.filter((x) => x !== tg) : [...draft.departments, tg]; dirty = true; renderEdit(); }
     else if (a === 'next-ip') { collect(); fillNextIp(+t.dataset.i); }
     else if (a === 'add-room') addRoom();
@@ -238,6 +242,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <h3>Where</h3>
           <dl class="kv">
             ${kv('Location', campusName(dev.campus_id))}${kv('Room', room)}${kv('Spot', dev.location)}
+            ${isProjectorType(ty) ? kv('Projection', PROJECTION[dev.projection] || 'Not set yet') : ''}
           </dl>
         </section>
         <section class="block">
@@ -408,6 +413,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   function fmtVal(k, v) {
     if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '<em>empty</em>';
     if (k === 'room_id') v = s.ix.room.get(v)?.name || 'a removed room';
+    if (k === 'projection') v = PROJECTION[v] || v;
     else if (k === 'campus_id') v = campusName(v);
     else if (k === 'network_id') v = s.ix.net.get(v)?.name || 'a removed network';
     else if (k === 'type_id') v = s.ix.type.has(v) ? typeLabel(s.ix.type.get(v)) : 'a removed model';
@@ -444,7 +450,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           ports: Object.fromEntries(ports.map((p) => [p.type_port_id, { connected_to: p.connected_to || '', assignment: p.assignment || '', notes: p.notes || '' }])),
           ...numbersDraft(dev) }
       : { id: '', type_id: '', campus_id: defaultCampus, room_id: '', name: '', departments: [], serial_number: '', firmware: '',
-          location: '', status: 'active', notes: '', ips: [blankIp()], creds: [], ports: {}, qty: clampQty(preset.qty || 1), numbering: true, start: '',
+          location: '', status: 'active', notes: '', projection: null, ips: [blankIp()], creds: [], ports: {}, qty: clampQty(preset.qty || 1), numbering: true, start: '',
           ...numbersDraft(null) };
     if (!dev && preset.type_id) onTypePicked(preset.type_id, true);
     renderEdit();
@@ -540,6 +546,9 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
             <button type="button" class="btn" data-a="add-room">Add room</button></div>
             <small class="hint">Part of: a room inside a bigger area, like an office in E-Wing Offices. Most rooms aren’t part of anything.</small>` : ''}
           <label class="field"><span>Spot in the room</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Stage rack, Catwalk…"></label>
+          ${isProjectorType(ty) ? `<div class="field"><span>Projection</span>
+            <div class="tag-picker">${Object.entries(PROJECTION).map(([v, label]) => `<button type="button" class="chip big" data-a="proj" data-v="${v}" aria-pressed="${draft.projection === v}">${esc(label)}</button>`).join('')}</div>
+            <small class="hint">Front: the projector is on the audience’s side of the screen. Rear: it’s behind the screen. Tap again to clear.</small></div>` : ''}
         </fieldset>
 
         ${bulk || !takesPatch({ departments: draft.departments }, ty) ? '' : numbersFieldset(ty)}
@@ -934,6 +943,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         name: isFixtureType(s.ix.type.get(draft.type_id)) ? s.ix.type.get(draft.type_id).name : draft.name, // a fixture is its model
         departments: draft.departments, serial_number: draft.serial_number, firmware: draft.firmware, location: draft.location,
         status: draft.status, notes: draft.notes,
+        projection: isProjectorType(s.ix.type.get(draft.type_id)) ? draft.projection || '' : '', // only projectors have one
       },
       ips,
       credentials,
@@ -963,7 +973,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     try {
       const n = await ctx.store.addDevices({
         device: { type_id: draft.type_id, campus_id: draft.campus_id, room_id: draft.room_id || '', location: draft.location,
-          departments: draft.departments, status: 'active', notes: '' },
+          departments: draft.departments, status: 'active', notes: '', projection: isProjectorType(ty) ? draft.projection || '' : '' },
         names,
       });
       busy = false; dirty = false;
