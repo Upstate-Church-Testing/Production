@@ -373,7 +373,7 @@ function friendly(error) {
     [/is at a different campus/i, (m) => m.replace('campus', 'location')],
     [/devices_asset_no_key|devices_type_asset_key/i, 'Another item already has that asset number. Every item has its own.'],
     [/devices_patch_pair/i, 'A patch needs both a universe and an address, like 1.333.'],
-    [/devices_asset_no_check/i, 'Asset numbers go from UCP-000001 to UCP-999999.'],
+    [/devices_asset_no_(check|max)/i, 'Asset numbers go from UCP-000001 to UCP-999999.'],
     [/devices_(patch_universe|patch_address|fixture_id|dmx_channels)_check/i, 'One of the numbers is out of range.'],
     [/volunteers_name_check/i, 'Give them a name.'],
     [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],

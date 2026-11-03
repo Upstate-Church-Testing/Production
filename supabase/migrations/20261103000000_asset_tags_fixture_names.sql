@@ -9,21 +9,18 @@
 --   Fixtures    A light has no name of its own: it goes by its model's name
 --               ("Colorado Solo Batten"), and the asset # tells them apart. The
 --               name follows the model when the model is picked or renamed.
---   Stage #     Gone.
+--   Stage #     No longer handed out or shown. The stage_no column, the
+--               per-model asset key and asset_counters are left in place for a
+--               later cleanup (dropping them needs a confirmation).
 -- =============================================================================
-
--- ---------------------------------------------------------------------------
--- Asset #: renumber everything once, then one shared counter.
--- Order: location, room (Worship Center first, Storage last), section, brand,
--- model, fixture ID, then the old number, so a room's lights run in a row.
--- ---------------------------------------------------------------------------
-alter table public.devices drop constraint devices_type_asset_key;
-alter table public.devices drop constraint devices_asset_no_check;
 
 alter table public.devices disable trigger devices_activity;
 alter table public.devices disable trigger devices_stamp;
 alter table public.devices disable trigger devices_numbers;
 
+-- Order: location, room (Worship Center first, Storage last), section, brand,
+-- model, fixture ID, then the old number, so a room's gear runs in a row.
+-- (Shifted up first so the per-model key never sees a clash mid-update.)
 with ordered as (
   select d.id,
          row_number() over (
@@ -39,9 +36,10 @@ with ordered as (
     join public.device_types t on t.id = d.type_id
     left join public.rooms r on r.id = d.room_id
 )
-update public.devices d set asset_no = o.n
+update public.devices d set asset_no = o.n + 100000
   from ordered o
  where o.id = d.id;
+update public.devices set asset_no = asset_no - 100000 where asset_no > 100000;
 
 -- Fixtures go by their model's name.
 update public.devices d set name = t.name
@@ -56,13 +54,11 @@ alter table public.devices enable trigger devices_numbers;
 
 alter table public.devices
   alter column asset_no set not null,
-  add constraint devices_asset_no_check check (asset_no between 1 and 999999),
+  add constraint devices_asset_no_max check (asset_no <= 999999),
   add constraint devices_asset_no_key unique (asset_no) deferrable initially immediate;
 
 create sequence public.devices_asset_seq minvalue 1 maxvalue 999999 no cycle;
 select setval('public.devices_asset_seq', (select max(asset_no) from public.devices));
-
-drop table public.asset_counters;
 
 
 -- ---------------------------------------------------------------------------
@@ -132,7 +128,7 @@ begin
   if not public.has_role('staff') then
     raise exception 'Only staff can edit gear.' using errcode = '42501';
   end if;
-  set constraints public.devices_asset_no_key deferred;
+  set constraints public.devices_asset_no_key, public.devices_type_asset_key deferred;
   for r in select * from jsonb_array_elements(coalesce(rows, '[]')) loop
     update public.devices d set
       asset_no       = case when r ? 'asset_no' and nullif(r ->> 'asset_no', '') is not null then (r ->> 'asset_no')::int else d.asset_no end,
@@ -143,13 +139,10 @@ begin
     where d.id = (r ->> 'id')::uuid;
     if found then n := n + 1; end if;
   end loop;
-  set constraints public.devices_asset_no_key immediate;   -- duplicates fail here, with the save
+  set constraints public.devices_asset_no_key, public.devices_type_asset_key immediate;   -- duplicates fail here, with the save
   return n;
 end
 $$;
-
-alter table public.devices drop column stage_no;
-
 
 -- ---------------------------------------------------------------------------
 -- Fixture names follow the model.
