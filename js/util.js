@@ -161,7 +161,14 @@ const paths = {
   chat: '<path d="M4.5 5.5h11A1.5 1.5 0 0 1 17 7v6.5a1.5 1.5 0 0 1-1.5 1.5H9.5L6 18v-3H4.5A1.5 1.5 0 0 1 3 13.5V7a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M17 9h2.5A1.5 1.5 0 0 1 21 10.5V17a1.5 1.5 0 0 1-1.5 1.5H19v2.5l-3-2.5h-3.5a1.5 1.5 0 0 1-1.5-1.5V15"/>',
   cable: '<path d="M7 3.5v4M11 3.5v4"/><rect x="5.5" y="7.5" width="7" height="5" rx="1.5"/><path d="M9 12.5v2.5a4 4 0 0 0 4 4h1.5a3.5 3.5 0 0 0 3.5-3.5V9"/><rect x="15.5" y="5" width="5" height="4" rx="1"/>',
   mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4.5 7.5 7.5 5.5 7.5-5.5"/>',
+  bulb: '<path d="M9.5 17.5h5M10.5 20.5h3"/><path d="M12 3.5a5.8 5.8 0 0 0-3.4 10.5c.6.5.9 1.2.9 2v1.5h5V16c0-.8.3-1.5.9-2A5.8 5.8 0 0 0 12 3.5z"/>',
+  video: '<rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="m15.5 10.5 5.5-3.2v9.4l-5.5-3.2z"/>',
+  clipboard: '<path d="M9 4.5H6.5A1.5 1.5 0 0 0 5 6v13.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H15"/><rect x="9" y="3" width="6" height="3.2" rx="1"/><path d="M8.5 11h7M8.5 15h5"/>',
 };
+
+/** The name of the page at the top of a section: "Lighting · Fixtures". */
+export const pageTitle = (page) => (page?.title
+  ? `<div class="page-title">${page.parent ? `<span>${esc(page.parent)}</span>` : ''}<h1>${esc(page.title)}</h1></div>` : '');
 
 export const icon = (name, cls = '') =>
   `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;

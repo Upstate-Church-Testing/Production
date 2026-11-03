@@ -1,5 +1,5 @@
-// App shell: picks the data source, handles accounts, and hosts each module
-// (Gear, Network, Services, Resi, Statistics, Team and Settings; training and more later).
+// App shell: picks the data source, handles accounts, draws the sidebar and
+// hosts each page (All gear, Audio, Video, Lighting, Network, Logistics, Settings).
 
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, APP_NAME, ORG_NAME } from './config.js';
 import { esc, icon, $, $$, storage, store as save } from './util.js';
@@ -18,19 +18,46 @@ const ROLE_ORDER = ['pending', 'volunteer', 'contractor', 'staff', 'admin'];
 export const roleAtLeast = (role, min) => ROLE_ORDER.indexOf(role) >= ROLE_ORDER.indexOf(min);
 export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunteer', contractor: 'Contractor', staff: 'Staff', admin: 'Admin' };
 
-// Modules appear in the nav for anyone at or above `minRole`.
-// New sections (Gear, Schedule, Training, Service flow…) get added here.
-const MODULES = [
-  { id: 'gear', label: 'Gear', icon: 'box', minRole: 'staff', view: GearView },
-  { id: 'cables', label: 'Cables', icon: 'cable', minRole: 'staff', view: CablesView },
-  { id: 'network', label: 'Network', icon: 'network', minRole: 'staff', view: NetworkView },
-  { id: 'services', label: 'Services', icon: 'calendar', minRole: 'volunteer', view: ServicesView },
-  { id: 'meetings', label: 'Meetings', icon: 'chat', minRole: 'staff', view: MeetingsView },
-  { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
-  { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
-  { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
-  { id: 'account', label: 'Settings', icon: 'settings', minRole: 'volunteer', view: AccountView },
+// The sidebar. Each group is a page of its own (All gear, Audio…) with pages
+// under it in a dropdown, or just a folder of pages (Logistics). The id is the
+// address (#fixtures). Gear pages are the Gear view opened on one section,
+// category or tab: `scope` says which, and the Section/Category filters it
+// locks are hidden there. Pages show for anyone at or above `minRole`.
+const GEAR_TABS = ['types', 'models', 'grid'];
+const NAV = [
+  { id: 'gear', label: 'All gear', short: 'Gear', icon: 'box', minRole: 'staff', view: GearView, title: 'All gear',
+    scope: null, // the whole Gear view, filters and all
+    children: [
+      { id: 'cables', label: 'Cables', minRole: 'staff', view: CablesView },
+    ] },
+  { id: 'audio', label: 'Audio', menuLabel: 'All audio', icon: 'sound', minRole: 'staff', view: GearView,
+    scope: { dep: 'audio', modes: GEAR_TABS } },
+  { id: 'video', label: 'Video', menuLabel: 'All video', icon: 'video', minRole: 'staff', view: GearView,
+    scope: { dep: 'video', modes: GEAR_TABS },
+    children: [
+      { id: 'cameras', label: 'Cameras', minRole: 'staff', view: GearView, scope: { modes: ['cameras'] } },
+    ] },
+  { id: 'lighting', label: 'Lighting', menuLabel: 'All lighting', icon: 'bulb', minRole: 'staff', view: GearView,
+    scope: { dep: 'lighting', modes: [...GEAR_TABS, 'patch'] },
+    children: [
+      { id: 'fixtures', label: 'Fixtures', minRole: 'staff', view: GearView, scope: { dep: 'lighting', cat: 'Fixture', modes: [...GEAR_TABS, 'patch'] } },
+      { id: 'hazers', label: 'Hazers', minRole: 'staff', view: GearView, scope: { modes: ['haze'] } },
+    ] },
+  { id: 'network-gear', label: 'Network', menuLabel: 'All network', icon: 'network', minRole: 'staff', view: GearView,
+    scope: { dep: 'network', modes: GEAR_TABS },
+    children: [
+      { id: 'network', label: 'IP sheet', minRole: 'staff', view: NetworkView },
+    ] },
+  { id: 'logistics', label: 'Logistics', icon: 'clipboard', folder: true,
+    children: [
+      { id: 'services', label: 'Services', icon: 'calendar', minRole: 'volunteer', view: ServicesView },
+      { id: 'meetings', label: 'Meetings', icon: 'chat', minRole: 'staff', view: MeetingsView },
+      { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
+      { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
+      { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
+    ] },
 ];
+const SETTINGS = { id: 'account', label: 'Settings', icon: 'settings', minRole: 'volunteer', view: AccountView };
 
 const ctx = {
   appName: APP_NAME,
@@ -56,7 +83,7 @@ const ctx = {
   openSettings: (section) => goWith('account', { section }),
   openNetworkFlag: (flag) => goWith('network', { flag }),
   openGear: (filters) => goWith('gear', { filters }),
-  openPatch: (universe) => goWith('gear', { patch: { universe } }),
+  openPatch: (universe) => goWith('lighting', { patch: { universe } }),
   // Filters last only while the app is open: every launch starts at All, all locations.
   campus: 'all',
   gearFilters: { dep: 'all', cat: 'all', brand: 'all' },
@@ -177,7 +204,31 @@ function teardown() {
 
 // ----------------------------------------------------------------- shell --
 
-const visibleModules = () => MODULES.filter((m) => roleAtLeast(ctx.me.role, m.minRole));
+const canSee = (p) => roleAtLeast(ctx.me.role, p.minRole);
+
+/** The sidebar for this person: the groups they can see, each with the pages under it they can see.
+ *  Someone who can only see one folder (a volunteer: Services and Resi) gets its pages on their own. */
+function visibleNav() {
+  let groups = NAV.map((g) => {
+    const children = (g.children || []).filter(canSee);
+    const self = !g.folder && canSee(g);
+    if (!self && !children.length) return null;
+    return { ...g, folder: g.folder || !self, children };
+  }).filter(Boolean);
+  if (groups.length === 1 && groups[0].folder) groups = groups[0].children.map((c) => ({ ...c, children: [] }));
+  return groups;
+}
+
+/** Every page this person can open, with the group it sits in (for the title and the sidebar). */
+function visiblePages() {
+  const out = [];
+  for (const g of visibleNav()) {
+    if (!g.folder) out.push({ ...g, group: g.id, parent: null });
+    for (const c of g.children) out.push({ ...c, group: g.id, parent: g.short || g.label });
+  }
+  if (canSee(SETTINGS)) out.push({ ...SETTINGS, group: SETTINGS.id, parent: null });
+  return out;
+}
 
 function renderShell() {
   appEl().innerHTML = `
@@ -194,24 +245,172 @@ function renderShell() {
   renderNav();
 }
 
+// The sidebar's open dropdown: one at a time, so the list stays short. It's the
+// group you're in unless you open another, and goes back to it when the rail closes.
+const openGroups = new Set();
+
 function renderNav() {
   const nav = $('.nav');
   if (!nav) return;
-  const mods = visibleModules();
+  const groups = visibleNav();
   nav.innerHTML = `
-    <div class="nav-brand">${brandMark()}<div><div class="brand-name">${esc(APP_NAME)}</div><div class="brand-org">${esc(ORG_NAME)}</div></div></div>
+    <div class="nav-brand">${brandMark()}<div class="nav-label"><div class="brand-name">${esc(APP_NAME)}</div><div class="brand-org">${esc(ORG_NAME)}</div></div></div>
     <div class="nav-items">
-      ${mods.map((m) => `<a class="nav-item" href="#${m.id}" data-mod="${m.id}">${icon(m.icon)}<span>${esc(m.label)}</span></a>`).join('')}
+      ${groups.map(groupHtml).join('')}
+      ${canSee(SETTINGS) ? groupHtml({ ...SETTINGS, children: [], settings: true }) : ''}
     </div>
-    <a class="nav-user" href="#account">
+    ${canSee(SETTINGS) ? `<div class="nav-foot">${groupHtml({ ...SETTINGS, children: [], settings: true })}</div>` : ''}
+    <a class="nav-user" href="#account" tabindex="-1">
       <span class="avatar">${esc((ctx.me.full_name || ctx.me.email)[0]?.toUpperCase() || '?')}</span>
-      <span class="nav-user-text"><b>${esc(ctx.me.full_name || ctx.me.email)}</b><small>${esc(ROLE_LABEL[ctx.me.role])}</small></span>
+      <span class="nav-user-text nav-label"><b>${esc(ctx.me.full_name || ctx.me.email)}</b><small>${esc(ROLE_LABEL[ctx.me.role])}</small></span>
     </a>`;
+  wireNav(nav);
   markNav();
 }
 
+function groupHtml(g) {
+  const kids = g.children || [];
+  const open = openGroups.has(g.id);
+  const labels = `${icon(g.icon)}<span class="nav-label">${esc(g.label)}</span><span class="nav-short">${esc(g.short || g.label)}</span>`;
+  const head = g.folder
+    ? `<button type="button" class="nav-item nav-folder" data-toggle="${g.id}" aria-expanded="${open}" aria-controls="sub-${g.id}">${labels}${icon('down', 'nav-caret')}</button>`
+    : `<a class="nav-item" href="#${g.id}" data-mod="${g.id}">${labels}</a>${kids.length
+      ? `<button type="button" class="nav-toggle" data-toggle="${g.id}" aria-expanded="${open}" aria-controls="sub-${g.id}" aria-label="${esc(g.label)} pages">${icon('down', 'nav-caret')}</button>` : ''}`;
+  return `<div class="nav-group ${g.settings ? 'is-settings' : ''} ${kids.length ? 'has-kids' : ''}" data-group="${g.id}" data-open="${open}">
+    <div class="nav-head">${head}</div>
+    ${kids.length ? `<div class="nav-sub" id="sub-${g.id}">${kids.map((k) => `<a class="nav-sub-item" href="#${k.id}" data-mod="${k.id}">${esc(k.label)}</a>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+function setGroupOpen(id, open) {
+  if (open) openGroups.clear();
+  if (open) openGroups.add(id); else openGroups.delete(id);
+  $$('.nav-group').forEach((g) => {
+    const on = openGroups.has(g.dataset.group);
+    g.dataset.open = String(on);
+    $$('[data-toggle]', g).forEach((b) => b.setAttribute('aria-expanded', String(on)));
+  });
+}
+/** Back to just the group you're in. */
+function resetGroups() {
+  const page = current && visiblePages().find((p) => p.id === current.id);
+  if (page && $(`.nav-group[data-group="${CSS.escape(page.group)}"].has-kids`)) setGroupOpen(page.group, true);
+  else { openGroups.clear(); setGroupOpen('', false); }
+}
+
 function markNav() {
-  $$('.nav-item').forEach((a) => a.classList.toggle('on', a.dataset.mod === current?.id));
+  const page = current && visiblePages().find((p) => p.id === current.id);
+  $$('.nav [data-mod]').forEach((a) => {
+    const on = a.dataset.mod === current?.id;
+    a.classList.toggle('on', on);
+    if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  $$('.nav-group').forEach((g) => g.classList.toggle('is-current', g.dataset.group === page?.group));
+  resetGroups();
+}
+
+// ------------------------------------------------- sidebar: rail and menus --
+// From 860px wide the sidebar is a rail of icons. With a mouse it opens while
+// the pointer is over it and closes when it leaves; on a touchscreen (iPad) the
+// first tap opens it, picking a page closes it. On phones it's the tab bar, and a
+// group with pages under it opens a small menu above the bar.
+
+const railMQ = matchMedia('(min-width: 860px)');
+let railTimer = null;
+let lastPointer = 'mouse';
+
+function setRail(open) {
+  clearTimeout(railTimer);
+  const nav = $('.nav');
+  if (!nav || nav.classList.contains('is-open') === open) return;
+  nav.classList.toggle('is-open', open);
+  document.documentElement.classList.toggle('rail-open', open && lastPointer !== 'mouse');
+  if (!open) { $('.nav-items', nav)?.scrollTo({ top: 0 }); resetGroups(); }
+}
+
+function wireNav(nav) {
+  if (nav.dataset.wired) return; // renderNav redraws the inside; the listeners stay
+  nav.dataset.wired = '1';
+  nav.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; }, true);
+  nav.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'mouse' || !railMQ.matches) return;
+    clearTimeout(railTimer);
+    railTimer = setTimeout(() => setRail(true), 60);
+  });
+  nav.addEventListener('pointerleave', (e) => {
+    if (e.pointerType !== 'mouse' || !railMQ.matches) return;
+    clearTimeout(railTimer);
+    railTimer = setTimeout(() => setRail(false), 220);
+  });
+  // Tabbing into the sidebar opens it too.
+  nav.addEventListener('focusin', () => { if (railMQ.matches && lastPointer === 'mouse') setRail(true); });
+  nav.addEventListener('focusout', (e) => { if (railMQ.matches && !nav.contains(e.relatedTarget) && !nav.matches(':hover')) setRail(false); });
+
+  nav.addEventListener('click', (e) => {
+    const t = e.target.closest('a, button');
+    if (!t) return;
+    const group = t.closest('.nav-group');
+    if (railMQ.matches) {
+      // A tap on the closed rail just opens it, with that group's pages showing.
+      if (!nav.classList.contains('is-open') && lastPointer !== 'mouse') {
+        e.preventDefault();
+        setRail(true);
+        if (group?.classList.contains('has-kids')) setGroupOpen(group.dataset.group, true);
+        return;
+      }
+      if (t.dataset.toggle) {
+        e.preventDefault();
+        setGroupOpen(t.dataset.toggle, !openGroups.has(t.dataset.toggle));
+        return;
+      }
+      if (t.matches('a') && lastPointer !== 'mouse') setTimeout(() => setRail(false), 0);
+      return;
+    }
+    // Phone tab bar: a group with pages under it opens its menu.
+    if (group?.classList.contains('has-kids') && t.closest('.nav-head')) {
+      e.preventDefault();
+      toggleNavMenu(group);
+    }
+  });
+  if (!wireNav.once) {
+    wireNav.once = true; // these are on the page, so only once ever
+    // Tapping the page beside an opened rail closes it.
+    document.addEventListener('pointerdown', (e) => {
+      const n = $('.nav');
+      if (n?.classList.contains('is-open') && !n.contains(e.target)) setRail(false);
+      if (!e.target.closest('.nav-pop, .nav')) closeNavMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeNavMenu(); setRail(false); } });
+    railMQ.addEventListener?.('change', () => { closeNavMenu(); setRail(false); });
+    window.addEventListener('resize', closeNavMenu);
+  }
+}
+
+function closeNavMenu() {
+  $('.nav-pop')?.remove();
+  $$('.nav-group.menu-open').forEach((g) => g.classList.remove('menu-open'));
+}
+
+function toggleNavMenu(groupEl) {
+  const was = groupEl.classList.contains('menu-open');
+  closeNavMenu();
+  if (was) return;
+  const g = visibleNav().find((x) => x.id === groupEl.dataset.group);
+  if (!g) return;
+  const items = [...(g.folder ? [] : [{ id: g.id, label: g.menuLabel || g.label }]), ...g.children];
+  const pop = document.createElement('div');
+  pop.className = 'nav-pop';
+  pop.setAttribute('role', 'menu');
+  pop.setAttribute('aria-label', g.label);
+  pop.innerHTML = `<p class="nav-pop-h">${esc(g.label)}</p>${items.map((x) => `<a role="menuitem" href="#${x.id}" class="${x.id === current?.id ? 'on' : ''}">${esc(x.label)}${x.id === current?.id ? icon('check') : ''}</a>`).join('')}`;
+  pop.addEventListener('click', (e) => { if (e.target.closest('a')) closeNavMenu(); });
+  document.body.appendChild(pop);
+  groupEl.classList.add('menu-open');
+  // Sit above the tab, kept on screen.
+  const tab = groupEl.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  pop.style.left = `${Math.round(Math.min(window.innerWidth - w - 12, Math.max(12, tab.left + tab.width / 2 - w / 2)))}px`;
+  requestAnimationFrame(() => pop.classList.add('in'));
 }
 
 function goWith(mod, pending) {
@@ -223,10 +422,11 @@ function goWith(mod, pending) {
 function onHash() {
   if (!ctx.me || !$('#view')) return;
   if (/access_token|type=/.test(location.hash)) return;
-  const mods = visibleModules();
+  closeNavMenu();
+  const pages = visiblePages();
   const want = location.hash.replace('#', '');
-  const mod = mods.find((m) => m.id === want) || mods[0];
-  if (current?.id === mod.id && current.el?.isConnected) return;
+  const page = pages.find((m) => m.id === want) || pages[0];
+  if (current?.id === page.id && current.el?.isConnected) return;
   openSheetApi?.close(true); // leaving a section closes whatever was open on it
   current?.instance?.unmount?.();
   // A fresh container per section, so the last section's listeners go with it.
@@ -234,9 +434,12 @@ function onHash() {
   view.id = 'view';
   view.tabIndex = -1;
   $('#view').replaceWith(view);
-  view.className = `view view-${mod.id}`;
-  current = { id: mod.id, el: view, instance: mod.view.mount(view, ctx) };
-  document.title = `${mod.label} · ${APP_NAME}`;
+  // Gear pages (Audio, Fixtures…) share the Gear view's look; each knows which page it is.
+  const viewId = page.view === GearView ? 'gear' : page.view === NetworkView ? 'network' : page.id;
+  view.className = `view view-${viewId} page-${page.id}`;
+  ctx.page = { id: page.id, title: page.title || page.label, parent: page.parent, scope: page.scope || null };
+  current = { id: page.id, el: view, instance: page.view.mount(view, ctx) };
+  document.title = `${page.title || page.label} · ${APP_NAME}`;
   markNav();
   window.scrollTo(0, 0);
 }

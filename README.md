@@ -228,7 +228,7 @@ lighting the same way.
 index.html                     app shell, home-screen metadata
 styles.css                     the whole look, light and dark
 js/config.js                   Supabase URL + publishable key (empty = preview mode)
-js/app.js                      sign-in, roles, navigation, sheets, toasts
+js/app.js                      sign-in, roles, the sidebar (NAV) and pages, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
@@ -268,8 +268,17 @@ tools/build_preview.py         one-file preview with example data
 1. Add tables in a new migration with `departments text[]`, the `stamp` and
    `log_activity` triggers, and policies using `public.has_role('staff')` (or lower).
 2. Add the methods to both stores.
-3. Add `js/views/<name>.js` exporting `mount(el, ctx)` and register it in `MODULES`
-   in `js/app.js` with the lowest role that should see it.
+3. Add `js/views/<name>.js` exporting `mount(el, ctx)` and add it to `NAV` in
+   `js/app.js` (as a group, or under one) with the lowest role that should see it.
+
+## Sidebar
+
+`NAV` in `js/app.js`: All gear (Cables), Audio, Video (Cameras), Lighting (Fixtures,
+Hazers), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Team),
+with Settings at the bottom. On a computer it's a rail of icons that opens while the
+mouse is over it; on an iPad the first tap opens it; on a phone it's the tab bar, and
+a group opens a menu of its pages. Audio, Video, Lighting, Fixtures and the rest are the
+Gear view opened with a `scope`: the section (and category) it's locked to and its tabs.
 
 ## Setting it up
 

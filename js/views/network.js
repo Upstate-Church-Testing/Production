@@ -3,7 +3,7 @@
 
 import {
   esc, icon, $, $$, debounce, storage, store, ipToInt, intToIp, splitInet, prefixToMask, maskToPrefix,
-  parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText,
+  parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText, pageTitle,
 } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet as openModelSheet, statusPill, kv } from './devices.js';
@@ -26,6 +26,7 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
+      ${pageTitle(ctx.page)}
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-mode="devices">Items</button>

@@ -4,7 +4,7 @@
 // Haze and Cameras are views over the same items: hazers with their fluid,
 // and camera builds (items whose Spot is "Cam 3").
 
-import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText } from '../util.js';
+import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv } from './devices.js';
 import { patchView } from './patch.js';
@@ -19,54 +19,60 @@ const NO_BRAND = '__none';
 const NO_ROOM = '__none';
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
+const MODE_LABEL = { types: 'Models', models: 'Items', grid: 'Grid', patch: 'Patch', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
+const ALL_GEAR_TABS = ['types', 'models', 'grid', 'systems'];
 
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
+  // Which Gear page this is. All gear has every filter; Audio, Lighting, Fixtures…
+  // lock the section (and category) and hide those filters; Hazers and Cameras are one tab.
+  const page = ctx.page || { id: 'gear', title: 'All gear' };
+  const scope = page.scope || {};
+  const lock = { dep: scope.dep || null, cat: scope.cat || null };
+  const base = { dep: lock.dep || ALL, cat: lock.cat || ALL }; // what "Clear" goes back to
+  const tabs = scope.modes || ALL_GEAR_TABS;
+  const shared = !page.scope; // only All gear keeps its filters while the app is open
+  const modeKey = shared ? 'ucp.gearmode' : `ucp.gearmode.${page.id}`;
   const s = {
     q: '',
-    dep: ctx.gearFilters.dep,     // Section: audio, video, lighting, network
-    cat: ctx.gearFilters.cat,
-    brand: ctx.gearFilters.brand,
-    room: ctx.gearFilters.room || ALL, // a room name, so "Storage" works across locations too
-    mode: storage('ucp.gearmode', 'types'),
+    dep: lock.dep || (shared ? ctx.gearFilters.dep : ALL), // Section: audio, video, lighting, network
+    cat: lock.cat || (shared ? ctx.gearFilters.cat : ALL),
+    brand: shared ? ctx.gearFilters.brand : ALL,
+    room: (shared && ctx.gearFilters.room) || ALL, // a room name, so "Storage" works across locations too
+    mode: storage(modeKey, tabs[0]),
     gridRooms: storage('ucp.gridrooms', false), // grid: one column per room instead of per location
     campus: ctx.campus,           // shared with Network and Statistics; All on every launch
     data: null,
     ix: null,
     error: null,
   };
+  if (!tabs.includes(s.mode)) s.mode = tabs[0];
   if (s.campus !== 'all' && !ctx.campusById.has(s.campus)) s.campus = 'all';
+  const setMode = (m) => { s.mode = m; store(modeKey, m); };
   // Statistics can open Gear on one section, category or brand.
-  if (ctx.pending?.filters) {
+  if (ctx.pending?.filters && tabs.includes('models')) {
     Object.assign(s, ctx.pending.filters);
-    s.mode = 'models';
-    store('ucp.gearmode', 'models');
+    setMode('models');
     ctx.pending = null;
   }
   // Statistics can open the patch sheet on one universe.
-  if (ctx.pending?.patch) {
-    s.mode = 'patch';
+  if (ctx.pending?.patch && tabs.includes('patch')) {
+    setMode('patch');
     s.puni = ctx.pending.patch.universe ?? 'all';
-    store('ucp.gearmode', 'patch');
     ctx.pending = null;
   }
-  const remember = () => { ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand, room: s.room }; };
+  const remember = () => { if (shared) ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand, room: s.room }; };
   remember();
   let openType = null; // { id, refresh } of the type panel on screen
   let openDev = null;  // { id, refresh } of the model panel on screen
 
   el.innerHTML = `
     <div class="page-head">
+      ${pageTitle(page)}
       <div class="mode-row">
-        <div class="seg mode-seg" role="tablist" aria-label="Show">
-          <button type="button" role="tab" data-gmode="types">Models</button>
-          <button type="button" role="tab" data-gmode="models">Items</button>
-          <button type="button" role="tab" data-gmode="grid">Grid</button>
-          <button type="button" role="tab" data-gmode="patch">Patch</button>
-          <button type="button" role="tab" data-gmode="haze">Haze</button>
-          <button type="button" role="tab" data-gmode="cameras">Cameras</button>
-          <button type="button" role="tab" data-gmode="systems">Systems</button>
-        </div>
+        ${tabs.length > 1 ? `<div class="seg mode-seg" role="tablist" aria-label="Show">
+          ${tabs.map((m) => `<button type="button" role="tab" data-gmode="${m}">${MODE_LABEL[m]}</button>`).join('')}
+        </div>` : ''}
         <p class="tally" id="g-tally" aria-live="polite"></p>
         <button class="btn primary add-desktop" data-act="add">${icon('plus')}<span>Add model</span></button>
       </div>
@@ -99,8 +105,8 @@ export function mount(el, ctx) {
       if (s.mode === 'cameras') return cams.counts();
       if (s.mode === 'systems') return syss.counts();
       const models = itemMode();
-      const pool = s.mode === 'patch' ? s.data.devices.filter((d) => takesPatch(d, typeOf(d))) : s.data.devices;
-      const counts = { [ALL]: models ? pool.length : s.data.types.length };
+      const pool = (s.mode === 'patch' ? s.data.devices.filter((d) => takesPatch(d, typeOf(d))) : s.data.devices).filter(itemInScope);
+      const counts = { [ALL]: models ? pool.length : scopeTypes().length };
       for (const c of ctx.campuses) {
         const here = pool.filter((d) => d.campus_id === c.id);
         counts[c.id] = models ? here.length : new Set(here.map((d) => d.type_id)).size;
@@ -183,7 +189,7 @@ export function mount(el, ctx) {
     if (!t) return;
     if (t.dataset.copy) { copyText(t.dataset.copy, t).then((ok) => ctx.toast(ok ? `Copied ${t.dataset.copy}` : 'Selected. Copy it from the menu.')); }
     else if (t.dataset.model) openModel(t.dataset.model);
-    else if (t.dataset.gmode) { s.mode = t.dataset.gmode; store('ucp.gearmode', s.mode); patch.cancel(); draw(); }
+    else if (t.dataset.gmode) { setMode(t.dataset.gmode); patch.cancel(); draw(); }
     else if (t.dataset.type) openTypeSheet(t.dataset.type);
     else if (t.dataset.act === 'add') itemMode() ? openModel(null, true) : newType();
     else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; s.room = ALL; remember(); loc.update(); draw(); }
@@ -228,7 +234,7 @@ export function mount(el, ctx) {
 
   function clearFilters() {
     s.todo = false;
-    s.q = ''; q.value = ''; s.dep = ALL; s.cat = ALL; s.brand = ALL; s.room = ALL;
+    s.q = ''; q.value = ''; s.dep = base.dep; s.cat = base.cat; s.brand = ALL; s.room = ALL;
     remember();
     draw();
   }
@@ -259,7 +265,7 @@ export function mount(el, ctx) {
   function roomOptions() {
     if (!s.data) return [{ value: ALL, label: 'All rooms' }];
     const items = itemMode();
-    const here = s.data.devices.filter((d) => inCampus(d) && (s.mode !== 'patch' || takesPatch(d, typeOf(d))));
+    const here = s.data.devices.filter((d) => inCampus(d) && itemInScope(d) && (s.mode !== 'patch' || takesPatch(d, typeOf(d))));
     const by = new Map();
     for (const d of here) {
       const k = roomKey(d);
@@ -278,7 +284,7 @@ export function mount(el, ctx) {
         if (!by.has(k)) by.set(k, { value: k, label: r.name.trim(), sort: r.sort_order ?? 999, n: 0, types: new Set() });
       }
     }
-    const all = items ? here.length : s.campus === ALL ? s.data.types.length : new Set(here.map((d) => d.type_id)).size;
+    const all = items ? here.length : s.campus === ALL ? scopeTypes().length : new Set(here.map((d) => d.type_id)).size;
     const list = [...by.values()].sort((a, b) => (a.value === NO_ROOM) - (b.value === NO_ROOM)
       || (s.campus === ALL ? b.n - a.n : a.sort - b.sort) || a.label.localeCompare(b.label));
     return [{ value: ALL, label: 'All rooms', count: all }, ...list.map((o) => ({ value: o.value, label: o.label, count: items ? o.n : o.types.size }))];
@@ -296,14 +302,21 @@ export function mount(el, ctx) {
   function typeOf(d) { return s.ix.type.get(d.type_id); }
   /** What the filters choose from: models or types at this location. */
   function poolHere() {
-    if (s.mode === 'patch') return s.data.devices.filter((d) => inCampus(d) && takesPatch(d, typeOf(d)));
-    return s.mode === 'models' ? s.data.devices.filter(inPlace) : typesHere();
+    if (s.mode === 'patch') return s.data.devices.filter((d) => inCampus(d) && takesPatch(d, typeOf(d)) && itemInScope(d));
+    return s.mode === 'models' ? s.data.devices.filter((d) => inPlace(d) && itemInScope(d)) : typesHere();
   }
   function typeFor(x) { return itemMode() ? typeOf(x) || {} : x; }
 
+  /** On a section page (Audio, Fixtures…), whether a model or item belongs on the page at all. */
+  function typeInScope(t) { return (!lock.dep || (t?.departments || []).includes(lock.dep)) && (!lock.cat || catOf(t) === lock.cat); }
+  function itemInScope(d) {
+    return (s.mode === 'patch' || !lock.dep || d.departments.includes(lock.dep)) && (!lock.cat || catOf(typeOf(d)) === lock.cat);
+  }
+  function scopeTypes() { return lock.dep || lock.cat ? s.data.types.filter(typeInScope) : s.data.types; }
+
   /** Types in play: with a location or room picked, only types that have items there. */
   function typesHere() {
-    return s.campus === 'all' && s.room === ALL ? s.data.types : s.data.types.filter((t) => unitsHere(t.id).length);
+    return s.campus === 'all' && s.room === ALL ? scopeTypes() : scopeTypes().filter((t) => unitsHere(t.id).length);
   }
 
   /** How each brand is written most often ("ETC", not "etc"). */
@@ -376,9 +389,9 @@ export function mount(el, ctx) {
     el.classList.toggle('is-grid', s.mode === 'grid');
     el.classList.toggle('is-patch', s.mode === 'patch');
     el.classList.toggle('is-own', own);
-    $('#g-dep', el).hidden = s.mode === 'patch' || own; // the patch sheet is lighting only
+    $('#g-dep', el).hidden = s.mode === 'patch' || own || !!lock.dep; // the patch sheet is lighting only
     $('#g-room', el).hidden = s.mode === 'patch' || own; // the patch sheet has its own room tabs
-    $('#g-cat', el).hidden = own;
+    $('#g-cat', el).hidden = own || !!lock.cat;
     $('#g-brand', el).hidden = own;
     $('.search', el).hidden = own;
     if (s.error) {
@@ -403,8 +416,8 @@ export function mount(el, ctx) {
     const valid = (dd, v) => dd === null || v === ALL || (s.data && optionValues(dd).includes(v));
     if (OWN_VIEWS.includes(s.mode)) { loc.update(); return; } // keep the other choices for when they come back
     if (s.mode !== 'patch' && !valid(roomDd, s.room)) s.room = ALL;
-    if (s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
-    if (!valid(catDd, s.cat)) s.cat = ALL;
+    if (!lock.dep && s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
+    if (!lock.cat && !valid(catDd, s.cat)) s.cat = ALL;
     if (!valid(brandDd, s.brand)) s.brand = ALL;
     loc.update(); roomDd.update(); depDd.update(); catDd.update(); brandDd.update();
   }
@@ -416,7 +429,7 @@ export function mount(el, ctx) {
     return pool.filter((x) => inCat(typeFor(x))).map((x) => brandOf(typeFor(x)));
   }
 
-  function filtering() { return !!(s.todo || s.q || s.dep !== ALL || s.cat !== ALL || s.brand !== ALL || (s.room !== ALL && s.mode !== 'patch')); }
+  function filtering() { return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || (s.room !== ALL && s.mode !== 'patch')); }
 
   function drawResults() {
     const box = $('#g-results', el);
@@ -428,10 +441,10 @@ export function mount(el, ctx) {
     if (s.mode === 'cameras') return cams.draw(box);
     if (s.mode === 'systems') return syss.draw(box);
 
-    const types = s.data.types;
+    const types = scopeTypes();
     if (!types.length) {
       box.innerHTML = `<div class="empty">
-        <h3>No models yet</h3>
+        <h3>No models ${lock.dep || lock.cat ? 'here ' : ''}yet</h3>
         <p>A model is one product, like a Hoglet 4 or an HDMI-to-SDI converter. Add its photo, specs and ports once, then add the items you have at each location.</p>
         <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add the first model</button></div>
       </div>`;
@@ -573,7 +586,7 @@ export function mount(el, ctx) {
 
   // Items: every unit, A–Z, one after another.
   function drawModels(box) {
-    const all = s.data.devices.filter(inPlace);
+    const all = s.data.devices.filter((d) => inPlace(d) && itemInScope(d));
     if (!all.length) {
       box.innerHTML = `<div class="empty"><h3>No items ${s.campus === 'all' && s.room === ALL ? 'yet' : `at ${esc(placeName())} yet`}</h3>
         <p>Pick a model and how many you have. Ten R3 Beams go in as one batch, and you fill in serials and IPs on each one later.</p>
@@ -614,7 +627,7 @@ export function mount(el, ctx) {
 
   /** Open positions: items that went in before anyone knew the model. */
   function todoNote() {
-    const n = s.data.devices.filter((d) => inPlace(d) && typeOf(d)?.unknown).length;
+    const n = s.data.devices.filter((d) => inPlace(d) && itemInScope(d) && typeOf(d)?.unknown).length;
     if (!n && !s.todo) return '';
     return `<button type="button" class="todo-note ${s.todo ? 'is-on' : ''}" data-act="todo">${icon('warn')}<span>${s.todo
       ? `Showing ${n === 1 ? 'the item that still needs' : `the ${n} items that still need`} a model`
@@ -634,7 +647,7 @@ export function mount(el, ctx) {
   function newType() {
     const sheet = ctx.openSheet({ label: 'New model', beforeClose: () => { api.cancel(); return false; } });
     const api = typeEditor({
-      ctx, sheet, types: s.data?.types || [], defaults: { departments: s.dep !== ALL ? [s.dep] : [] },
+      ctx, sheet, types: s.data?.types || [], defaults: { departments: s.dep !== ALL ? [s.dep] : [], ...(s.cat !== ALL ? { category: s.cat } : {}) },
       onDone: async (id) => { sheet.close(true); await load(true); openTypeSheet(id); },
       onCancel: () => sheet.close(true),
     });

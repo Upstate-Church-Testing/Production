@@ -8,7 +8,7 @@
 //   Cables  every length and label, with + and − for the count
 // Search like you'd say it: "5-pin 25", "3-pin to 5-pin", "powercon 10".
 
-import { esc, icon, $, $$, debounce, storage, store, plural } from '../util.js';
+import { esc, icon, $, $$, debounce, storage, store, plural, pageTitle } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
 
 export const SIGNALS = ['DMX', 'Audio', 'SDI', 'HDMI', 'Ethernet', 'Power', 'Other'];
@@ -55,6 +55,7 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
+      ${pageTitle(ctx.page)}
       <div class="mode-row">
         <div class="seg mode-seg" role="tablist" aria-label="Show">
           <button type="button" role="tab" data-cmode="types">Types</button>

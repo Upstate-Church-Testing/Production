@@ -955,7 +955,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         names,
       });
       busy = false; dirty = false;
-      ctx.toast(ty?.networked === false && !location.hash.startsWith('#gear') ? `Added ${n} ${ty.name}. They're listed under Gear.` : `Added ${n} ${ty?.name || 'items'}`);
+      ctx.toast(ty?.networked === false && ctx.page?.id === 'network' ? `Added ${n} ${ty.name}. They're listed under All gear.` : `Added ${n} ${ty?.name || 'items'}`);
       host.setOpen(null);
       sheet.close(true);
       load(true);

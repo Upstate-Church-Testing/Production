@@ -235,7 +235,7 @@ code { font-size: 0.9em; background: var(--panel-3); border-radius: 6px; padding
 .main { min-width: 0; }
 #view { outline: none; padding-bottom: calc(var(--tabbar) + 110px); }
 
-/* phone: a floating pill tab bar */
+/* phone: a floating pill tab bar. Groups with pages under them open a menu above it. */
 .nav {
   position: fixed; z-index: 30;
   left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
@@ -245,15 +245,36 @@ code { font-size: 0.9em; background: var(--panel-3); border-radius: 6px; padding
   backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
   box-shadow: 0 18px 50px rgb(0 0 0 / 0.45);
 }
-.nav-brand, .nav-user { display: none; }
-.nav-items { display: flex; flex: 1; gap: 4px; }
+.nav-brand, .nav-user, .nav-foot, .nav-sub, .nav-toggle, .nav-label, .nav-caret { display: none; }
+.nav-items { display: flex; flex: 1; gap: 2px; min-width: 0; }
+.nav-group { flex: 1 1 0; display: flex; min-width: 0; }
+.nav-head { flex: 1; display: flex; min-width: 0; }
 .nav-item {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  border-radius: 20px; text-decoration: none; color: var(--faint); font-size: 11px; font-weight: 600;
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0;
+  padding: 0; border: 0; background: none; border-radius: 20px; text-decoration: none;
+  color: var(--faint); font: 600 11px/1.1 var(--f-body); white-space: nowrap;
 }
-.nav-item .ico { width: 22px; height: 22px; }
-.nav-item.on { color: var(--fg); background: var(--panel-3); }
-.nav-item.on .ico { color: var(--accent-ink); }
+.nav-short { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.nav-item .ico { width: 22px; height: 22px; flex: none; }
+.nav-item.on, .nav-group.is-current .nav-item, .nav-group.menu-open .nav-item { color: var(--fg); background: var(--panel-3); }
+.nav-item.on .ico, .nav-group.is-current .nav-item .ico { color: var(--accent-ink); }
+@media (max-width: 420px) { .nav-item { font-size: 10px; letter-spacing: -0.01em; } }
+
+.nav-pop {
+  position: fixed; z-index: 45; bottom: calc(var(--tabbar) + 18px + env(safe-area-inset-bottom, 0px));
+  display: grid; gap: 2px; min-width: 200px; padding: 6px;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 20px; box-shadow: var(--shadow);
+  opacity: 0; transform: translateY(6px); transition: opacity 0.14s ease, transform 0.14s ease;
+}
+.nav-pop.in { opacity: 1; transform: none; }
+.nav-pop-h { margin: 6px 12px 4px; font: 700 10.5px/1 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
+.nav-pop a {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 46px; padding: 0 14px; border-radius: 14px; text-decoration: none; font-weight: 600; font-size: 15px;
+}
+.nav-pop a:hover { background: var(--panel-3); }
+.nav-pop a.on { background: color-mix(in srgb, var(--accent) 14%, var(--panel-3)); }
+.nav-pop a .ico { width: 18px; height: 18px; color: var(--accent-ink); }
 
 .avatar {
   display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 50%;
@@ -261,30 +282,102 @@ code { font-size: 0.9em; background: var(--panel-3); border-radius: 6px; padding
   color: var(--fg); font: 600 13px/1 var(--f-body);
 }
 
-/* desktop: a sidebar card */
+/* from 860px: a rail of icons that opens over the page while the mouse is on it
+   (or after a tap on a touchscreen), with each group's pages in a dropdown */
 @media (min-width: 860px) {
+  :root { --rail-mini: 72px; }
   .topbar { display: none; }
-  .main { margin-left: calc(var(--rail) + 16px); }
+  .main { margin-left: calc(var(--rail-mini) + 16px); }
   #view { padding-bottom: 64px; }
   .nav {
-    top: 16px; left: max(16px, env(safe-area-inset-left, 0px)); bottom: 16px; right: auto; width: var(--rail); height: auto;
-    flex-direction: column; gap: 26px; padding: 22px 14px 14px;
+    z-index: 40; top: 16px; left: max(16px, env(safe-area-inset-left, 0px)); bottom: 16px; right: auto;
+    width: var(--rail-mini); height: auto; overflow: hidden;
+    flex-direction: column; gap: 18px; padding: 18px 12px 12px;
     background: var(--panel); border-color: var(--line); border-radius: var(--r-xl); box-shadow: none;
     backdrop-filter: none; -webkit-backdrop-filter: none;
+    transition: width 0.18s cubic-bezier(0.3, 0.7, 0.2, 1), box-shadow 0.18s ease, border-color 0.18s ease;
   }
+  .nav.is-open { width: var(--rail); border-color: var(--line-2); box-shadow: 0 24px 70px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(0 0 0 / 0.2); }
   .demo-bar ~ .shell .nav { top: 52px; }
-  .nav-brand { display: flex; align-items: center; gap: 11px; padding: 0 6px; }
-  .nav-items { flex-direction: column; flex: 1; gap: 4px; }
-  .nav-item { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; height: 44px; padding: 0 14px; border-radius: 14px; font-size: 14.5px; color: var(--muted); }
+  .rail-open body::after { content: ""; position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / 0.35); }
+
+  .nav-label, .nav-caret { display: block; }
+  .nav-short { display: none; }
+  .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0; transition: opacity 0.12s ease; }
+  .nav.is-open .nav-label { opacity: 1; transition-delay: 0.04s; }
+
+  .nav-brand { display: flex; align-items: center; gap: 11px; padding: 0 5px; min-width: 0; }
+  .nav-items { flex-direction: column; flex: 1; gap: 2px; overflow: hidden auto; scrollbar-width: none; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
+  .nav-items::-webkit-scrollbar { display: none; }
+  .nav-group { flex: none; display: block; }
+  /* Settings sits below the list (it scrolls on short screens), right above you */
+  .nav-items > .is-settings { display: none; }
+  .nav-foot { display: block; margin-top: -8px; }
+  .nav-head { position: relative; display: flex; }
+  .nav-item {
+    flex: 1; flex-direction: row; justify-content: flex-start; gap: 12px; height: 44px; padding: 0 14px; border-radius: 14px;
+    font: 600 14.5px/1 var(--f-body); color: var(--muted); text-align: left; letter-spacing: 0;
+  }
   .nav-item .ico { width: 20px; height: 20px; }
   .nav-item:hover { background: var(--panel-2); color: var(--fg); }
   .nav-item.on { background: color-mix(in srgb, var(--accent) 13%, var(--panel-2)); color: var(--fg); }
-  .nav-user { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 18px; background: var(--panel-2); border: 1px solid var(--line); text-decoration: none; min-width: 0; }
-  .nav-user:hover { border-color: var(--line-2); }
+  /* the group you're in: lit icon; a tinted tile while the rail is closed */
+  .nav-group.is-current .nav-item { background: none; color: var(--fg); }
+  .nav-group.is-current .nav-item.on, .nav:not(.is-open) .nav-group.is-current .nav-item { background: color-mix(in srgb, var(--accent) 13%, var(--panel-2)); }
+  .nav-group.is-current .nav-item:hover { background: var(--panel-2); }
+  .nav-group.is-current .nav-item.on:hover { background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+  .has-kids .nav-head > a.nav-item { padding-right: 46px; }
+  .nav-folder .nav-caret { margin-left: auto; }
+  .nav-caret { width: 16px; height: 16px; flex: none; color: var(--faint); transition: transform 0.16s ease; }
+  .nav-group[data-open="true"] .nav-caret { transform: rotate(180deg); }
+  .nav-toggle {
+    position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 36px; height: 36px;
+    border: 0; border-radius: 11px; background: none; color: var(--faint);
+    opacity: 0; visibility: hidden; transition: opacity 0.12s ease;
+  }
+  .nav.is-open .nav-toggle { opacity: 1; visibility: visible; }
+  .nav-toggle:hover { background: var(--panel-3); color: var(--fg); }
+  .nav-toggle:hover .nav-caret { color: var(--fg); }
+
+  .nav-sub { position: relative; display: none; gap: 1px; padding: 2px 0 6px 46px; }
+  .nav.is-open .nav-group[data-open="true"] .nav-sub { display: grid; }
+  .nav-sub::before { content: ""; position: absolute; left: 23px; top: 2px; bottom: 8px; width: 1px; background: var(--line-2); }
+  .nav-sub-item {
+    display: flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 11px; position: relative;
+    text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 14px; font-weight: 600; color: var(--muted);
+  }
+  .nav-sub-item:hover { background: var(--panel-2); color: var(--fg); }
+  .nav-sub-item.on { background: color-mix(in srgb, var(--accent) 13%, var(--panel-2)); color: var(--fg); }
+  .nav-sub-item.on::before { content: ""; position: absolute; left: -24px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+  .nav-user {
+    display: flex; align-items: center; gap: 10px; padding: 5px; border-radius: 18px; min-width: 0;
+    background: transparent; border: 1px solid transparent; text-decoration: none;
+    transition: background-color 0.18s ease, border-color 0.18s ease;
+  }
+  .nav.is-open .nav-user { background: var(--panel-2); border-color: var(--line); }
+  .nav.is-open .nav-user:hover { border-color: var(--line-2); }
   .nav-user-text { display: grid; min-width: 0; }
   .nav-user-text b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .nav-user-text small { color: var(--muted); font-size: 12px; }
 }
+@media (min-width: 860px) and (max-height: 760px) {
+  .nav { gap: 12px; padding-top: 14px; }
+  .nav-item { height: 40px; }
+  .nav-toggle { top: 2px; }
+  .nav-sub-item { height: 33px; }
+}
+@media (min-width: 860px) and (prefers-reduced-motion: reduce) {
+  .nav, .nav-label, .nav-caret { transition: none; }
+}
+
+/* the page's name at the top of a section: "Lighting / Fixtures" */
+.page-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+.page-title h1 { font: 400 28px/1.1 var(--f-display); letter-spacing: -0.01em; }
+.page-title span { font: 600 13px/1 var(--f-body); color: var(--muted); display: inline-flex; align-items: center; gap: 10px; }
+.page-title span::after { content: "/"; color: var(--faint); font-weight: 400; }
+@media (min-width: 860px) { .page-title h1 { font-size: 32px; } }
 
 /* ----------------------------------------------------------- page head -- */
 
@@ -1967,7 +2060,6 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 .mt-when-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .mt-was { margin: 0; }
 .mt-sheet .form-msg.bad { color: var(--bad); }
-@media (max-width: 420px) { .nav-item { font-size: 10px; letter-spacing: -0.01em; } }
 
 /* ------------------------------------------------------- item status -- */
 /* A colored pill on every item: In use, Ready, Needs a check, Broken… */
