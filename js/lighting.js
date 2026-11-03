@@ -1,10 +1,10 @@
 // Lighting numbers, shared by the item panel, the patch sheet and Statistics.
 //
 //   Fixture ID  the console's number for a fixture (grandMA3 Fixture ID, Eos channel)
-//   Patch       "1.333" = universe 1, address 333. Stored as two numbers so a
+//   Patch ID    "1.333" = universe 1, address 333. Stored as two numbers so a
 //               universe can be searched and counted across locations.
-//   Stage #     1…N per model in one room
-//   Asset #     1…N per model across every location, permanent
+//   Asset #     one per item across Upstate Church Production, UCP-000001 up,
+//               permanent and never shared
 //
 // A patch belongs to the console in its room, so a "rig" is one location + room.
 
@@ -68,7 +68,6 @@ export function parseModes(text) {
  *   overlap  two patches cross over each other's addresses
  *   shared   two fixtures on exactly the same addresses (often on purpose, so they move together)
  *   fid      two fixtures have the same fixture ID
- *   stage    two of the same model have the same stage #
  * Returns Map(itemId → [{ kind, other }]).
  */
 export function rigProblems(items, typeOf) {
@@ -104,7 +103,6 @@ export function rigProblems(items, typeOf) {
     for (const list of seen.values()) if (list.length > 1) for (const a of list) for (const b of list) if (a !== b) add(a, kind, b);
   };
   dupes((d) => d.fixture_id ?? null, 'fid');
-  dupes((d) => (d.stage_no == null ? null : `${d.type_id}|${d.stage_no}`), 'stage');
   return out;
 }
 
@@ -141,9 +139,27 @@ export function problemText(list, nameOf) {
   const o = by('overlap'); if (o.length) lines.push(`Patch overlaps ${o.join(', ')}`);
   const sh = by('shared'); if (sh.length) lines.push(`On the same addresses as ${sh.join(', ')}, so they move together`);
   const f = by('fid'); if (f.length) lines.push(`Same fixture ID as ${f.join(', ')}`);
-  const s = by('stage'); if (s.length) lines.push(`Same stage # as ${s.join(', ')}`);
   return lines;
 }
+
+/** Asset #: one per item across Upstate Church Production, 1 → "UCP-000001". */
+export const ASSET_MAX = 999999;
+export const assetTag = (n) => (n == null || n === '' ? '' : `UCP-${String(n).padStart(6, '0')}`);
+/** "UCP-000123", "ucp 123", "123" → 123; blank → null; anything else → NaN. */
+export function parseAsset(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return null;
+  const m = /^(?:ucp\s*-?\s*)?0*(\d{1,6})$/i.exec(t);
+  const n = m ? Number(m[1]) : NaN;
+  return n >= 1 && n <= ASSET_MAX ? n : NaN;
+}
+/** Words a search can match an asset # by: "ucp-000123", "ucp123", "asset 123". */
+export const assetWords = (n) => (n == null ? [] : [assetTag(n), `ucp${n}`, `asset ${n}`]);
+/** An item with its asset #, for saying which one: "Colorado Solo Batten UCP-000123". Fixtures all share their model's name. */
+export const itemLabel = (d) => (d?.asset_no != null ? `${d.name} ${assetTag(d.asset_no)}` : d?.name || 'Item');
+
+/** A fixture: a light that goes by its model's name (not a hazer, console or dimmer). */
+export const isFixtureType = (t) => /^fixtures?$/i.test(String(t?.category || '').trim());
 
 /** Number at the end of a name, for ordering "Jolt 2" before "Jolt 10". */
 export const nameNumber = (name) => { const m = /(\d+)\s*$/.exec(name || ''); return m ? Number(m[1]) : Infinity; };

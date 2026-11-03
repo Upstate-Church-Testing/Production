@@ -12,6 +12,7 @@ import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb, CATEGORIES } fro
 import { wireDropdown } from '../picker.js';
 import {
   takesPatch, parsePatch, fmtPatch, patchOf, footprint, rigKey, rigProblems, problemText, nextFreeAddress, isProblem, MAX_UNIVERSE,
+  assetTag, parseAsset, itemLabel, isFixtureType, ASSET_MAX,
 } from '../lighting.js';
 
 export const IP_LABELS = ['Management', 'Control', 'Dante Primary', 'Dante Secondary', 'Art-Net / sACN', 'NDI', 'Video', 'House', 'Production'];
@@ -32,9 +33,9 @@ export const FIELD = {
   mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Model',
   connected_to: 'Connected to', assignment: 'Assignment',
   asset_no: 'Asset #', stage_no: 'Stage #', fixture_id: 'Fixture ID', patch_universe: 'Universe', patch_address: 'Address',
-  dmx_channels: 'DMX channels', patch: 'Patch',
+  dmx_channels: 'DMX channels', patch: 'Patch ID',
 };
-const NUMBER_FIELDS = ['fixture_id', 'stage_no', 'asset_no', 'dmx_channels'];
+const NUMBER_FIELDS = ['fixture_id', 'asset_no', 'dmx_channels'];
 
 export function buildIndex(d) {
   const ix = {
@@ -222,8 +223,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <button type="button" class="st st-${esc(dev.status)} st-btn" id="d-status" aria-haspopup="listbox"><i></i><span class="dd-value"></span>${icon('down')}</button>
           <button class="icon-btn" data-a="close" aria-label="Close">${icon('close')}</button></div>
         ${ty?.manufacturer ? `<p class="sh-brand">${esc(ty.manufacturer)}</p>` : ''}
-        <h2>${esc(dev.name)}</h2>
-        <p class="sh-sub">${esc([ty?.name, ty?.category].filter(Boolean).join(' · '))}</p>
+        <h2>${esc(isFixtureType(ty) ? ty.name : dev.name)}</h2>
+        <p class="sh-sub">${esc((isFixtureType(ty) ? [ty.category, assetTag(dev.asset_no)] : [ty?.name, ty?.category]).filter(Boolean).join(' · '))}</p>
       </header>
       <div class="sh-body">
         ${ty?.photo_path ? `<div class="photo-hero is-compact"><img src="${esc(ctx.store.photoUrl(ty.photo_path))}" alt="${esc(typeLabel(ty))}"></div>` : ''}
@@ -243,7 +244,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <dl class="kv">
             ${kv('Model #', ty?.part_number, true)}
             <div><dt>Serial</dt><dd class="${dev.serial_number ? 'mono' : 'muted'}">${dev.serial_number ? esc(dev.serial_number) : `<button class="btn link" data-a="edit" data-f="f-serial_number">Add serial</button>`}</dd></div>
-            ${patchable ? '' : kv('Asset #', dev.asset_no)}
+            ${patchable ? '' : kv('Asset #', assetTag(dev.asset_no), true)}
             ${kv('Firmware', dev.firmware, true)}
           </dl>
           ${dev.notes ? `<p class="notes">${esc(dev.notes)}</p>` : ''}
@@ -312,24 +313,21 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     });
   }
 
-  /** Fixture ID, patch, stage # and asset #: big tiles a tech can read at a glance. Tap one to edit it. */
+  /** Fixture ID, patch ID and asset #: big tiles a tech can read at a glance. Tap one to edit it. */
   function numbersStrip(ty) {
     const ch = footprint(dev, ty);
     const rig = s.data.devices.filter((d) => rigKey(d) === rigKey(dev));
-    const here = rig.filter((d) => d.type_id === dev.type_id).length;
     const probs = rigProblems(rig, (d) => s.ix.type.get(d.type_id)).get(dev.id) || [];
-    const roomName = dev.room_id ? 'this room' : 'this location';
     const end = dev.patch_universe != null && ch > 1 ? fmtPatch(dev.patch_universe, dev.patch_address + ch - 1) : '';
     const tile = (label, value, sub, f, mono = false) => `<button class="num ${value == null || value === '' ? 'is-blank' : ''}" data-a="edit" data-f="${f}">
       <small>${esc(label)}</small><b class="${mono ? 'mono' : ''}">${value == null || value === '' ? 'Add' : esc(value)}</b><em>${esc(sub)}</em></button>`;
     return `<section class="num-strip" aria-label="Lighting numbers">
         ${tile('Fixture ID', dev.fixture_id, 'On the console', 'f-fixture_id')}
-        ${tile('Patch', patchOf(dev), ch ? `${ch} ch${end ? ` · to ${end}` : ''}` : 'Channels not set', 'f-patch', true)}
-        ${tile('Stage #', dev.stage_no, `of ${here} in ${roomName}`, 'f-stage_no')}
-        ${tile('Asset #', dev.asset_no, 'All locations', 'f-asset_no')}
+        ${tile('Patch ID', patchOf(dev), ch ? `${ch} ch${end ? ` · to ${end}` : ''}` : 'Channels not set', 'f-patch', true)}
+        ${tile('Asset #', assetTag(dev.asset_no), 'Its own, everywhere', 'f-asset_no', true)}
       </section>
-      ${problemText(probs.filter(isProblem), (o) => o.name).map((t) => `<p class="warnline">${icon('warn')}${esc(t)}</p>`).join('')}
-      ${problemText(probs.filter((p) => !isProblem(p)), (o) => o.name).map((t) => `<p class="warnline soft">${icon('link')}${esc(t)}</p>`).join('')}`;
+      ${problemText(probs.filter(isProblem), itemLabel).map((t) => `<p class="warnline">${icon('warn')}${esc(t)}</p>`).join('')}
+      ${problemText(probs.filter((p) => !isProblem(p)), itemLabel).map((t) => `<p class="warnline soft">${icon('link')}${esc(t)}</p>`).join('')}`;
   }
 
   async function loadPorts(ty) {
@@ -451,14 +449,14 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     renderEdit();
     const target = focusId && $('#' + focusId, sheet.el);
     if (target) { target.scrollIntoView({ block: 'center' }); target.focus(); }
-    else $(draft.type_id ? '#f-name' : '#f-type', sheet.el)?.focus();
+    else $(draft.type_id && $('#f-name', sheet.el) ? '#f-name' : '#f-type', sheet.el)?.focus();
   }
 
   /** The numbers as the editor shows them (text, so blank means blank). */
   function numbersDraft(d) {
     const str = (v) => (v == null ? '' : String(v));
     return { fixture_id: str(d?.fixture_id), patch: d ? patchOf(d) : '', dmx_channels: str(d?.dmx_channels),
-      stage_no: str(d?.stage_no), asset_no: str(d?.asset_no) };
+      asset_no: assetTag(d?.asset_no) };
   }
 
   /** Moving to another room: the patch and fixture ID belonged to the old console. Moving back restores them. */
@@ -466,8 +464,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     if (!dev) return;
     const home = draft.campus_id === dev.campus_id && (draft.room_id || '') === (dev.room_id || '');
     const was = numbersDraft(dev);
-    if (home) Object.assign(draft, { fixture_id: was.fixture_id, patch: was.patch, stage_no: was.stage_no });
-    else Object.assign(draft, { fixture_id: '', patch: '', stage_no: '' });
+    if (home) Object.assign(draft, { fixture_id: was.fixture_id, patch: was.patch });
+    else Object.assign(draft, { fixture_id: '', patch: '' });
   }
 
   function renderEdit(error = '') {
@@ -483,6 +481,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     }
     const oldPatches = dev && draft.type_id !== dev.type_id && ports?.length;
     const bulk = !dev && draft.qty > 1;
+    const fixture = isFixtureType(ty); // no name of its own
     const names = bulk ? bulkNames() : [];
     const locs = [...new Set(s.data.devices.filter((d) => d.campus_id === campusId).map((d) => d.location).filter(Boolean))].sort();
     const scroll = $('.sh-body', sheet.el)?.scrollTop || 0;
@@ -490,7 +489,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       <header class="sh-head">
         <div class="sh-top"><span class="eyebrow">${dev ? 'Edit item' : 'New item'}</span>
           <button class="icon-btn" data-a="cancel" aria-label="Close">${icon('close')}</button></div>
-        <h2>${esc(draft.name || (ty ? ty.name : dev ? dev.name : 'New item'))}</h2>
+        <h2>${esc(fixture ? ty.name : draft.name || (ty ? ty.name : dev ? dev.name : 'New item'))}</h2>
       </header>
       <form class="sh-body form" id="dev-form" novalidate autocomplete="off">
         <label class="field"><span>Model <b class="req">required</b></span><select id="f-type">
@@ -513,10 +512,12 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
               <button type="button" class="icon-btn" data-a="qty+" aria-label="One more">${icon('plus')}</button>
             </div>
           </div>
-          ${bulk ? `<label class="check"><input type="checkbox" id="f-numbered" ${draft.numbering ? 'checked' : ''}><span>Number the names</span></label>` : ''}
+          ${bulk && !fixture ? `<label class="check"><input type="checkbox" id="f-numbered" ${draft.numbering ? 'checked' : ''}><span>Number the names</span></label>` : ''}
         </div>` : ''}
-        <label class="field"><span>${bulk ? 'Name for all of them' : 'Name'}</span><input id="f-name" value="${esc(draft.name)}" placeholder="${esc(bulk && ty ? bulkBase() : ty ? ty.name : 'FOH Switch, Camera 2, Stage Box…')}"></label>
-        ${bulk && draft.numbering ? `<div class="grid2">
+        ${fixture
+          ? `<div class="field"><span>Name</span><p class="ro-box">${esc(ty.name)}</p><small class="hint">A fixture goes by its model’s name. Its asset # tells it apart from the others.</small></div>`
+          : `<label class="field"><span>${bulk ? 'Name for all of them' : 'Name'}</span><input id="f-name" value="${esc(draft.name)}" placeholder="${esc(bulk && ty ? bulkBase() : ty ? ty.name : 'FOH Switch, Camera 2, Stage Box…')}"></label>`}
+        ${bulk && draft.numbering && !fixture ? `<div class="grid2">
           <label class="field"><span>Start numbering at</span><input id="f-start" class="mono" inputmode="numeric" value="${esc(draft.start)}" placeholder="${nextNumber(bulkBase(), draft.campus_id)}"></label>
           <p class="bulk-preview">${esc(names[0])}<i>→</i>${esc(names[names.length - 1])}</p>
         </div>` : ''}
@@ -611,7 +612,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       ${patchable ? `<div class="grid2">
           <label class="field"><span>Fixture ID</span><input id="f-fixture_id" class="mono" inputmode="numeric" value="${esc(draft.fixture_id)}" placeholder="401" autocomplete="off">
             <small class="hint">Its number on the console</small></label>
-          <div class="field"><label for="f-patch">Patch</label>
+          <div class="field"><label for="f-patch">Patch ID</label>
             <div class="with-btn"><input id="f-patch" class="mono" inputmode="decimal" value="${esc(draft.patch)}" placeholder="1.333" autocapitalize="off" spellcheck="false" autocomplete="off">
               <button type="button" class="btn small" data-a="next-patch" title="Fill in the next free address that fits">${icon('wand')}Next free</button></div>
             <p class="ip-check" id="patch-check" aria-live="polite"></p></div>
@@ -623,13 +624,10 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           </div>
           <small class="hint">${modelCh ? `Uses the model’s ${modelCh}-channel mode unless you set this one differently.` : modes.length ? 'Pick the mode this one is set to.' : 'How many channels this one takes in its DMX mode.'}</small></div>` : ''}
       <div class="grid2">
-        ${patchable ? `<label class="field"><span>Stage #</span><input id="f-stage_no" class="mono" inputmode="numeric" value="${esc(draft.stage_no)}" placeholder="${auto('Next in the room')}" autocomplete="off">
-          <small class="hint">1 to however many of this model are in this room</small></label>` : ''}
-        <label class="field"><span>Asset #</span><input id="f-asset_no" class="mono" inputmode="numeric" value="${esc(draft.asset_no)}" placeholder="${auto('Next for the model')}" autocomplete="off">
-          <small class="hint">This model across every location. It stays with the unit.</small></label>
+        <label class="field"><span>Asset #</span><input id="f-asset_no" class="mono" value="${esc(draft.asset_no)}" placeholder="${dev ? '' : 'The next number'}" autocapitalize="characters" spellcheck="false" autocomplete="off">
+          <small class="hint">UCP-000001 to UCP-999999. Its own number, never shared; it stays with the unit when it moves.</small></label>
       </div>
-      ${moved && (dev.fixture_id != null || dev.patch_universe != null) ? `<p class="fine warn-text">Its patch and fixture ID belonged to the old room’s console, so they’re cleared. Add new ones if it’s patched here.</p>` : ''}
-      ${moved ? `<p class="fine">It gets the next stage # in its new room.</p>` : ''}
+      ${moved && (dev.fixture_id != null || dev.patch_universe != null) ? `<p class="fine warn-text">Its patch ID and fixture ID belonged to the old room’s console, so they’re cleared. Add new ones if it’s patched here.</p>` : ''}
     </fieldset>`;
   }
 
@@ -646,16 +644,16 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       const end = p.address + (ch || 1) - 1;
       if (end > 512) msgs.push(['bad', `With ${ch} channels it runs past 512. Start at ${fmtPatch(p.universe, 513 - ch)} or lower.`]);
       const me_ = { id: draft.id || '__new', type_id: draft.type_id, campus_id: draft.campus_id, room_id: draft.room_id || null,
-        patch_universe: p.universe, patch_address: p.address, dmx_channels: ch || null, fixture_id: Number(draft.fixture_id) || null, stage_no: null };
+        patch_universe: p.universe, patch_address: p.address, dmx_channels: ch || null, fixture_id: Number(draft.fixture_id) || null, asset_no: parseAsset(draft.asset_no) || null, name: draft.name };
       const rig = [...s.data.devices.filter((d) => d.id !== draft.id && rigKey(d) === rigKey(me_)), me_];
-      const probs = (rigProblems(rig, (d) => s.ix.type.get(d.type_id)).get(me_.id) || []).filter((x) => x.kind !== 'stage');
-      for (const line of problemText(probs.filter(isProblem), (o) => o.name)) msgs.push(['bad', line + '.']);
-      for (const line of problemText(probs.filter((x) => !isProblem(x)), (o) => o.name)) msgs.push(['soft', line + '.']);
+      const probs = rigProblems(rig, (d) => s.ix.type.get(d.type_id)).get(me_.id) || [];
+      for (const line of problemText(probs.filter(isProblem), itemLabel)) msgs.push(['bad', line + '.']);
+      for (const line of problemText(probs.filter((x) => !isProblem(x)), itemLabel)) msgs.push(['soft', line + '.']);
       if (!msgs.some(([k]) => k === 'bad')) msgs.push(['ok', `Universe ${p.universe}, ${ch > 1 ? `addresses ${p.address}–${end}` : `address ${p.address}`}${ch ? '' : '. Set its channels to check for overlaps'}.`]);
     } else if (draft.fixture_id) {
       const rig = s.data.devices.filter((d) => d.id !== draft.id && d.campus_id === draft.campus_id && (d.room_id || '') === (draft.room_id || ''));
       const same = rig.filter((d) => String(d.fixture_id) === String(draft.fixture_id));
-      if (same.length) msgs.push(['bad', `Fixture ID ${draft.fixture_id} is already ${same.map((d) => d.name).join(', ')}.`]);
+      if (same.length) msgs.push(['bad', `Fixture ID ${draft.fixture_id} is already ${same.map(itemLabel).join(', ')}.`]);
     }
     box.innerHTML = msgs.map(([k, m]) => `<span class="${k}">${k === 'ok' ? icon('check') : icon('warn')}${esc(m)}</span>`).join('');
   }
@@ -702,7 +700,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   /** Reads every input back into the draft. */
   function collect() {
     const f = (id) => $(`#${id}`, sheet.el);
-    if (!f('f-name')) return;
+    if (!f('dev-form')) return;
     for (const k of ['name', 'location', 'serial_number', 'firmware', 'notes', 'status']) if (f('f-' + k)) draft[k] = f('f-' + k).value;
     for (const k of NUMBER_FIELDS) if (f('f-' + k)) draft[k] = f('f-' + k).value.trim();
     if (f('f-patch')) draft.patch = f('f-patch').value.trim();
@@ -781,6 +779,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     return (draft.name || '').trim() || seriesBase() || s.ix.type.get(draft.type_id)?.name || 'Item';
   }
   function bulkNames() {
+    const ty = s.ix.type.get(draft.type_id);
+    if (isFixtureType(ty)) return Array.from({ length: draft.qty }, () => ty.name);
     const base = bulkBase();
     const start = draft.start !== '' ? Number(draft.start) : nextNumber(base, draft.campus_id);
     return Array.from({ length: draft.qty }, (_, i) => (draft.numbering ? `${base} ${start + i}` : base));
@@ -795,7 +795,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const prev = s.ix.type.get(draft.type_id);
     const next = s.ix.type.get(v);
     draft.type_id = v;
-    if (dev) Object.assign(draft, v === dev.type_id ? { asset_no: String(dev.asset_no ?? ''), stage_no: String(dev.stage_no ?? '') } : { asset_no: '', stage_no: '' });
+    // The asset # stays with the unit even when its model is corrected.
     if (next) {
       if (prev && draft.name.trim() === prev.name) draft.name = '';
       const same = prev && draft.departments.length === prev.departments.length && draft.departments.every((t) => prev.departments.includes(t));
@@ -895,9 +895,16 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         if (!/^\d+$/.test(v) || Number(v) < 1 || Number(v) > max) throw [`${label} should be a whole number${max < 99999999 ? ` from 1 to ${max}` : ''}.`, `#f-${k}`];
         return Number(v);
       };
+      const asset = () => {
+        const n = parseAsset(draft.asset_no);
+        if (Number.isNaN(n)) throw [`Asset # should look like UCP-000123 (1 to ${ASSET_MAX.toLocaleString()}).`, '#f-asset_no'];
+        const other = n != null && n !== dev?.asset_no && s.data.devices.find((d) => d.asset_no === n && d.id !== draft.id);
+        if (other) throw [`${assetTag(n)} is already ${other.name} at ${campusName(other.campus_id)}. Every item has its own asset #.`, '#f-asset_no'];
+        return n;
+      };
       try {
         const want = { fixture_id: whole('fixture_id', 'Fixture ID'), dmx_channels: whole('dmx_channels', 'DMX channels', 512),
-          stage_no: whole('stage_no', 'Stage #'), asset_no: whole('asset_no', 'Asset #') };
+          asset_no: asset() };
         const p = parsePatch(draft.patch);
         if (p.error) throw [p.error, '#f-patch'];
         want.patch_universe = p.empty ? null : p.universe;
@@ -905,7 +912,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         const ch = want.dmx_channels || footprint({}, ty) || 1;
         if (want.patch_address && want.patch_address + ch - 1 > 512) throw [`With ${ch} channels, a patch at ${fmtPatch(want.patch_universe, want.patch_address)} runs past 512. Start at ${fmtPatch(want.patch_universe, 513 - ch)} or lower.`, '#f-patch'];
         for (const [k, v] of Object.entries(want)) {
-          if ((k === 'stage_no' || k === 'asset_no') && v == null) continue; // blank: the next number, filled in for you
+          if (k === 'asset_no' && v == null) continue; // blank: the next number, filled in for you
           if (!dev ? v != null : v !== (dev[k] ?? null)) numbers[k] = v;
         }
         if ('patch_universe' in numbers || 'patch_address' in numbers) Object.assign(numbers, { patch_universe: want.patch_universe, patch_address: want.patch_address });
@@ -919,7 +926,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
 
     const payload = {
       device: {
-        id: draft.id || '', type_id: draft.type_id, campus_id: draft.campus_id, room_id: draft.room_id || '', name: draft.name,
+        id: draft.id || '', type_id: draft.type_id, campus_id: draft.campus_id, room_id: draft.room_id || '',
+        name: isFixtureType(s.ix.type.get(draft.type_id)) ? s.ix.type.get(draft.type_id).name : draft.name, // a fixture is its model
         departments: draft.departments, serial_number: draft.serial_number, firmware: draft.firmware, location: draft.location,
         status: draft.status, notes: draft.notes,
       },
@@ -933,7 +941,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     try {
       const newId = await ctx.store.saveDevice(payload);
       busy = false; dirty = false;
-      ctx.toast(`Saved ${draft.name.trim() || typeLabel(s.ix.type.get(draft.type_id))}`);
+      ctx.toast(`Saved ${(!isFixtureType(s.ix.type.get(draft.type_id)) && draft.name.trim()) || typeLabel(s.ix.type.get(draft.type_id))}`);
       await load(true);
       id = newId; tracker.id = newId;
       dev = s.ix.dev.get(newId);

@@ -11,10 +11,12 @@ import { esc, icon, $, $$, plural } from '../util.js';
 import { typeLabel } from './types.js';
 import {
   takesPatch, parsePatch, fmtPatch, patchOf, footprint, rigKey, rigProblems, problemText, isProblem, usedChannels,
-  rangeText, nameNumber, patchPoint, covers, MAX_UNIVERSE, SLOTS,
+  rangeText, nameNumber, patchPoint, covers, MAX_UNIVERSE, SLOTS, assetTag, itemLabel,
 } from '../lighting.js';
 
 const ALL = 'all';
+/** Asset # order, then name: how a model's fixtures line up when numbering them. */
+const byAsset = (a, b) => (a.asset_no ?? 1e9) - (b.asset_no ?? 1e9) || nameNumber(a.name) - nameNumber(b.name) || a.name.localeCompare(b.name);
 const HUES = [212, 32, 280, 150, 190, 48, 255, 120, 300, 170, 232, 88]; // no reds: red means a problem
 
 /**
@@ -28,7 +30,7 @@ export function patchView(host) {
   const hue = (typeId) => HUES[[...typeId].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 7) % HUES.length];
   s.prig = s.prig || {};          // campus id → chosen room key
   s.puni = s.puni ?? ALL;         // universe filter
-  let edit = null;                // { key, rows: Map(id → {stage_no, fixture_id, patch, dmx_channels}), fill: {} }
+  let edit = null;                // { key, rows: Map(id → {fixture_id, patch, dmx_channels}), fill: {} }
   let saving = false;
 
   // ------------------------------------------------------------- data ----
@@ -116,7 +118,7 @@ export function patchView(host) {
     const lines = [];
     for (const d of rig.items) {
       const probs = (rig.problems.get(d.id) || []).filter(isProblem);
-      if (probs.length) lines.push(`<li><button class="btn link" data-model="${d.id}">${esc(d.name)}</button> ${esc(problemText(probs, (o) => o.name).join('. '))}</li>`);
+      if (probs.length) lines.push(`<li><button class="btn link" data-model="${d.id}">${esc(itemLabel(d))}</button> ${esc(problemText(probs, itemLabel).join('. '))}</li>`);
     }
     if (!lines.length) return '';
     return `<details class="px-problems"><summary>${icon('warn')}${plural(lines.length, 'fixture needs', 'fixtures need')} a look</summary><ul>${lines.join('')}</ul></details>`;
@@ -138,7 +140,7 @@ export function patchView(host) {
       <header class="px-uni-head"><h3>${esc(heading)}</h3><span class="px-use"><b>${used}</b> of 512 used<i>·</i>${SLOTS - used} free</span></header>
       <div class="px-bar" role="img" aria-label="${used} of 512 addresses used">${bar}</div>
       <table class="px-table">
-        <thead><tr><th>Patch</th><th class="px-ch">Ch</th><th>Fixture ID</th><th>Fixture</th><th class="px-st">Stage #</th></tr></thead>
+        <thead><tr><th>Patch ID</th><th class="px-ch">Ch</th><th>Fixture ID</th><th>Fixture</th><th class="px-st">Asset #</th></tr></thead>
         <tbody>${shown.map((d) => fixtureRow(d, rig)).join('')}</tbody>
       </table>
     </section>`;
@@ -154,19 +156,19 @@ export function patchView(host) {
       ${withPatch ? `<td class="mono px-addr">${esc(rangeText(d, ch))}${shared ? `<span class="px-link" title="On the same addresses as another fixture">${icon('link')}</span>` : ''}</td>
       <td class="px-ch mono">${ch || '<span class="muted">?</span>'}</td>` : ''}
       <td class="mono px-fid">${d.fixture_id ?? '<span class="muted">—</span>'}</td>
-      <td class="px-name"><div class="px-nm"><i class="px-dot" style="--h:${hue(d.type_id)}"></i><span><b>${esc(d.name)}</b><small>${esc((t?.name && !d.name.startsWith(t.name) ? t.name : d.location) || '')}${bad ? ` · ${esc(problemText(probs.filter(isProblem), (o) => o.name)[0])}` : ''}</small></span></div></td>
-      <td class="px-st mono">${d.stage_no ?? ''}</td>
+      <td class="px-name"><div class="px-nm"><i class="px-dot" style="--h:${hue(d.type_id)}"></i><span><b>${esc(d.name)}</b><small>${esc((t?.name && !d.name.startsWith(t.name) ? t.name : d.location) || '')}${bad ? ` · ${esc(problemText(probs.filter(isProblem), itemLabel)[0])}` : ''}</small></span></div></td>
+      <td class="px-st mono">${esc(assetTag(d.asset_no))}</td>
     </tr>`;
   }
 
   function unpatchedSection(rig) {
     const left = rig.items.filter((d) => d.patch_universe == null && host.matches(d))
-      .sort((a, b) => (typeOf(a)?.name || '').localeCompare(typeOf(b)?.name || '') || (a.stage_no ?? 1e9) - (b.stage_no ?? 1e9) || nameNumber(a.name) - nameNumber(b.name));
+      .sort((a, b) => (typeOf(a)?.name || '').localeCompare(typeOf(b)?.name || '') || byAsset(a, b));
     if (!left.length) return rig.items.length && rig.patched === rig.items.length ? '<p class="px-done">' + icon('check') + 'Every fixture here is patched.</p>' : '';
     return `<section class="px-uni is-unpatched">
       <header class="px-uni-head"><h3>Not patched</h3><span class="px-use">${plural(left.length, 'fixture')}</span></header>
       <table class="px-table">
-        <thead><tr><th>Fixture ID</th><th>Fixture</th><th class="px-st">Stage #</th></tr></thead>
+        <thead><tr><th>Fixture ID</th><th>Fixture</th><th class="px-st">Asset #</th></tr></thead>
         <tbody>${left.map((d) => fixtureRow(d, rig, false)).join('')}</tbody>
       </table>
     </section>`;
@@ -228,7 +230,6 @@ export function patchView(host) {
     const rig = chosenRig(rigsAt(s.campus));
     if (!rig) return;
     const rows = new Map(rig.items.map((d) => [d.id, {
-      stage_no: d.stage_no == null ? '' : String(d.stage_no),
       fixture_id: d.fixture_id == null ? '' : String(d.fixture_id),
       patch: patchOf(d),
       dmx_channels: d.dmx_channels == null ? '' : String(d.dmx_channels),
@@ -247,7 +248,7 @@ export function patchView(host) {
       const r = edit.rows.get(d.id);
       if (!r) return d;
       const p = parsePatch(r.patch);
-      return { ...d, stage_no: toInt(r.stage_no), fixture_id: toInt(r.fixture_id), dmx_channels: toInt(r.dmx_channels),
+      return { ...d, fixture_id: toInt(r.fixture_id), dmx_channels: toInt(r.dmx_channels),
         patch_universe: p.universe ?? null, patch_address: p.address ?? null };
     });
   }
@@ -269,13 +270,12 @@ export function patchView(host) {
         <button type="button" class="btn" data-px="cancel">Cancel</button>
         <button type="button" class="btn primary" data-px="save">Save</button>
       </div>
-      <p class="fine px-howto">Type a patch as universe.address, like 1.333. Each model has a quick fill: give the first fixture ID and patch and it numbers the rest in stage order. Enter moves down a column.</p>
-      ${order.map((tid) => groupHtml(tid, groups.get(tid).sort(byStage))).join('')}
+      <p class="fine px-howto">Type a patch as universe.address, like 1.333. Each model has a quick fill: give the first fixture ID and patch and it numbers the rest in asset # order. Enter moves down a column.</p>
+      ${order.map((tid) => groupHtml(tid, groups.get(tid).sort(byAsset))).join('')}
       <div class="px-edit-foot"><button type="button" class="btn" data-px="cancel">Cancel</button><button type="button" class="btn primary" data-px="save">Save</button></div>`;
     refreshMarks();
   }
 
-  const byStage = (a, b) => (a.stage_no ?? 1e9) - (b.stage_no ?? 1e9) || nameNumber(a.name) - nameNumber(b.name) || a.name.localeCompare(b.name);
 
   function groupHtml(typeId, list) {
     const t = typeOf({ type_id: typeId }) || {};
@@ -292,16 +292,15 @@ export function patchView(host) {
         <label class="field"><span>Channels each</span><input class="mono" data-fill="ch" data-t="${typeId}" value="${esc(f.ch)}" inputmode="numeric" placeholder="${ch || '?'}"></label>
         <div class="px-fill-btns">
           <button type="button" class="btn" data-px="fill" data-t="${typeId}">${icon('wand')}Fill ${list.length > 1 ? `all ${list.length}` : ''}</button>
-          ${list.length > 1 ? `<button type="button" class="btn ghost" data-px="restage" data-t="${typeId}">Stage # 1–${list.length}</button>` : ''}
         </div>
       </div>
       <div class="px-escroll"><table class="px-etable">
-        <thead><tr><th>Stage #</th><th>Fixture</th><th>Fixture ID</th><th>Patch</th><th>Ch</th></tr></thead>
+        <thead><tr><th>Asset #</th><th>Fixture</th><th>Fixture ID</th><th>Patch ID</th><th>Ch</th></tr></thead>
         <tbody>${list.map((d) => {
           const r = edit.rows.get(d.id);
           const cell = (k, cls, ph, mode = 'numeric') => `<td><input class="mono ${cls}" data-row="${d.id}" data-k="${k}" value="${esc(r[k])}" inputmode="${mode}" placeholder="${esc(ph)}" aria-label="${esc(d.name)} ${k.replace('_', ' ')}" autocomplete="off"></td>`;
           return `<tr data-erow="${d.id}">
-            ${cell('stage_no', 'px-in-st', '')}
+            <td class="mono px-asset">${esc(assetTag(d.asset_no))}</td>
             <td class="px-name"><b>${esc(d.name)}</b><small class="px-row-msg" id="pxm-${d.id}"></small></td>
             ${cell('fixture_id', 'px-in-fid', '')}
             ${cell('patch', 'px-in-patch', '1.001', 'decimal')}
@@ -323,7 +322,7 @@ export function patchView(host) {
       const top = Math.max(0, ...others.map((d) => d.fixture_id || 0));
       fid = top ? (Math.floor(top / 100) + 1) * 100 + 1 : 101;
     }
-    const first = list.find((d) => d.patch_universe != null); // list is in stage order
+    const first = list.find((d) => d.patch_universe != null); // list is in asset # order
     let patch = first ? fmtPatch(first.patch_universe, first.patch_address) : '';
     if (!patch && ch) patch = firstRoom(others, list.length * ch, ch);
     return { fid: String(fid), patch, ch: ch ? String(ch) : '' };
@@ -350,7 +349,7 @@ export function patchView(host) {
 
   function fill(typeId) {
     const f = readFill(typeId);
-    const list = editItems().filter((d) => d.type_id === typeId).sort(byStage);
+    const list = editItems().filter((d) => d.type_id === typeId).sort(byAsset);
     const msg = $('#px-msg');
     const p = f.patch ? parsePatch(f.patch) : { empty: true };
     if (p.error) { msg.textContent = `Patch from: ${p.error}`; msg.className = 'form-msg bad'; return; }
@@ -373,11 +372,6 @@ export function patchView(host) {
     redraw();
   }
 
-  function restage(typeId) {
-    editItems().filter((d) => d.type_id === typeId).sort(byStage).forEach((d, i) => { edit.rows.get(d.id).stage_no = String(i + 1); });
-    redraw();
-  }
-
   function readFill(typeId) {
     const f = edit.fill[typeId];
     for (const el of $$(`[data-fill][data-t="${typeId}"]`)) f[el.dataset.fill] = el.value.trim();
@@ -397,7 +391,7 @@ export function patchView(host) {
       const bad = {};
       const p = parsePatch(r.patch);
       if (p.error) bad.patch = p.error;
-      for (const k of ['stage_no', 'fixture_id', 'dmx_channels']) if (r[k] && !(toInt(r[k]) >= 1)) bad[k] = 'Use a whole number';
+      for (const k of ['fixture_id', 'dmx_channels']) if (r[k] && !(toInt(r[k]) >= 1)) bad[k] = 'Use a whole number';
       if (toInt(r.dmx_channels) > SLOTS) bad.dmx_channels = 'Up to 512';
       const now = rig.find((x) => x.id === d.id);
       const ch = footprint(now, typeOf(d)) || 1;
@@ -406,7 +400,7 @@ export function patchView(host) {
         el.classList.toggle('is-bad', !!bad[el.dataset.k]);
         el.title = bad[el.dataset.k] || '';
       }
-      const lines = [...Object.values(bad), ...problemText((probs.get(d.id) || []).filter(isProblem), (o) => o.name)];
+      const lines = [...Object.values(bad), ...problemText((probs.get(d.id) || []).filter(isProblem), itemLabel)];
       const msgEl = $(`#pxm-${d.id}`);
       if (msgEl) msgEl.textContent = lines.join('. ');
       row.classList.toggle('is-bad', lines.length > 0);
@@ -422,7 +416,7 @@ export function patchView(host) {
   function diffRow(d, r) {
     const out = {};
     const p = parsePatch(r.patch);
-    const want = { stage_no: toInt(r.stage_no), fixture_id: toInt(r.fixture_id), dmx_channels: toInt(r.dmx_channels),
+    const want = { fixture_id: toInt(r.fixture_id), dmx_channels: toInt(r.dmx_channels),
       patch_universe: p.universe ?? null, patch_address: p.address ?? null };
     for (const [k, v] of Object.entries(want)) if (v !== (d[k] ?? null)) out[k] = v;
     if ('patch_universe' in out || 'patch_address' in out) Object.assign(out, { patch_universe: want.patch_universe, patch_address: want.patch_address });
@@ -468,7 +462,6 @@ export function patchView(host) {
       else if (a === 'cancel') { edit = null; redraw(); }
       else if (a === 'save') save();
       else if (a === 'fill') fill(t.dataset.t);
-      else if (a === 'restage') restage(t.dataset.t);
     }
   }
 

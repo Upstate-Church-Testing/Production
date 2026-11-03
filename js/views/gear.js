@@ -6,9 +6,9 @@
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
-import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv } from './devices.js';
+import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT } from './devices.js';
 import { patchView } from './patch.js';
-import { takesPatch, patchOf, footprint, patchPoint, covers } from '../lighting.js';
+import { takesPatch, patchOf, footprint, patchPoint, covers, assetTag, assetWords } from '../lighting.js';
 import { preparePhoto } from '../photo.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
 import { hazeView } from './haze.js';
@@ -19,7 +19,7 @@ const NO_BRAND = '__none';
 const NO_ROOM = '__none';
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
-const MODE_LABEL = { types: 'Models', models: 'Items', grid: 'Grid', patch: 'Patch', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
+const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
 const ALL_GEAR_TABS = ['types', 'models', 'grid', 'systems'];
 
 export function mount(el, ctx) {
@@ -91,8 +91,8 @@ export function mount(el, ctx) {
     <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
   // Filters, in order: location, section, category, brand. Each narrows the next.
-  const itemMode = () => s.mode === 'models' || s.mode === 'patch'; // filters choose from items, not models
-  const unit = () => (s.mode === 'patch' ? ['fixture', 'fixtures'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
+  const itemMode = () => s.mode === 'models' || s.mode === 'patch' || s.mode === 'fixtures'; // filters choose from items, not models
+  const unit = () => (s.mode === 'patch' || s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
     : s.mode === 'systems' ? ['system', 'systems']
     : s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
   const loc = locationDropdown(ctx, $('#g-loc', el), {
@@ -181,6 +181,10 @@ export function mount(el, ctx) {
     else if (s.mode === 'haze') haze.click(e);
     else if (s.mode === 'cameras') cams.click(e);
     else if (s.mode === 'systems') syss.click(e);
+    else if (s.mode === 'fixtures') {
+      const st = e.target.closest('[data-st]');
+      if (st) { e.stopPropagation(); pickStatus(st); } // the pill changes status; the rest of the row opens the fixture
+    }
   });
   results.addEventListener('input', (e) => { if (s.mode === 'patch') patch.input(e); });
   results.addEventListener('keydown', (e) => { if (s.mode === 'patch') patch.keydown(e); });
@@ -303,7 +307,7 @@ export function mount(el, ctx) {
   /** What the filters choose from: models or types at this location. */
   function poolHere() {
     if (s.mode === 'patch') return s.data.devices.filter((d) => inCampus(d) && takesPatch(d, typeOf(d)) && itemInScope(d));
-    return s.mode === 'models' ? s.data.devices.filter((d) => inPlace(d) && itemInScope(d)) : typesHere();
+    return s.mode === 'models' || s.mode === 'fixtures' ? s.data.devices.filter((d) => inPlace(d) && itemInScope(d)) : typesHere();
   }
   function typeFor(x) { return itemMode() ? typeOf(x) || {} : x; }
 
@@ -361,8 +365,7 @@ export function mount(el, ctx) {
     const out = [];
     if (d.fixture_id != null) out.push(String(d.fixture_id), `fid${d.fixture_id}`, `id${d.fixture_id}`);
     if (d.patch_universe != null) out.push(patchOf(d), `${d.patch_universe}.${d.patch_address}`, `u${d.patch_universe}`, `universe ${d.patch_universe}`);
-    if (d.asset_no != null) out.push(`asset ${d.asset_no}`, `#${d.asset_no}`);
-    if (d.stage_no != null) out.push(`stage ${d.stage_no}`);
+    out.push(...assetWords(d.asset_no));
     return out;
   }
 
@@ -380,19 +383,21 @@ export function mount(el, ctx) {
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
     const addLabel = itemMode() ? 'Add items' : 'Add model';
     const own = OWN_VIEWS.includes(s.mode); // Haze and Cameras have their own add buttons
-    $('.add-desktop span', el).textContent = addLabel;
+    $('.add-desktop span', el).textContent = s.mode === 'fixtures' ? 'Add fixtures' : addLabel;
     $('.add-desktop', el).hidden = own;
     $('.fab', el).hidden = own;
     $('.fab', el).setAttribute('aria-label', addLabel);
-    q.placeholder = s.mode === 'patch' ? 'Search fixture, fixture ID or patch (2.041)'
+    q.placeholder = s.mode === 'fixtures' ? 'Search model, fixture ID, patch ID (2.041) or asset # (UCP-000123)'
+      : s.mode === 'patch' ? 'Search fixture, fixture ID or patch (2.041)'
       : s.mode === 'models' ? 'Search name, model, fixture ID, patch, IP' : 'Search model, brand, port, location';
     el.classList.toggle('is-grid', s.mode === 'grid');
     el.classList.toggle('is-patch', s.mode === 'patch');
+    el.classList.toggle('is-fixtures', s.mode === 'fixtures');
     el.classList.toggle('is-own', own);
     $('#g-dep', el).hidden = s.mode === 'patch' || own || !!lock.dep; // the patch sheet is lighting only
     $('#g-room', el).hidden = s.mode === 'patch' || own; // the patch sheet has its own room tabs
     $('#g-cat', el).hidden = own || !!lock.cat;
-    $('#g-brand', el).hidden = own;
+    $('#g-brand', el).hidden = own || s.mode === 'fixtures'; // Fixtures: just location and room
     $('.search', el).hidden = own;
     if (s.error) {
       drawTally(null);
@@ -406,7 +411,7 @@ export function mount(el, ctx) {
 
   /** The count up top: whatever is on screen right now. */
   function drawTally(shown, total) {
-    const unit = itemMode() ? ['item', 'items'] : ['model', 'models'];
+    const unit = s.mode === 'fixtures' ? ['fixture', 'fixtures'] : itemMode() ? ['item', 'items'] : ['model', 'models'];
     $('#g-tally', el).innerHTML = shown == null ? ''
       : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${filtering() && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
@@ -435,6 +440,7 @@ export function mount(el, ctx) {
     const box = $('#g-results', el);
     if (!s.data) return;
     if (s.mode === 'models') return drawModels(box);
+    if (s.mode === 'fixtures') return drawFixtures(box);
     if (s.mode === 'grid') return drawGrid(box);
     if (s.mode === 'patch') return patch.draw(box);
     if (s.mode === 'haze') return haze.draw(box);
@@ -625,6 +631,89 @@ export function mount(el, ctx) {
     </li>`;
   }
 
+  // Fixtures: every light as a row with columns across, so the screen reads like a
+  // sheet: brand, model, status (tap to change), where it is, and its numbers.
+  function drawFixtures(box) {
+    const all = s.data.devices.filter((d) => inPlace(d) && itemInScope(d));
+    if (!all.length) {
+      box.innerHTML = `<div class="empty"><h3>No fixtures ${s.campus === 'all' && s.room === ALL ? 'yet' : `at ${esc(placeName())}`}</h3>
+        <p>Pick a fixture model and how many you have. Each one gets its own asset number.</p>
+        <div class="empty-actions"><button class="btn primary" data-act="add">${icon('plus')}Add fixtures</button></div></div>`;
+      drawTally(0, 0);
+      return;
+    }
+    const rows = all.filter(modelMatches);
+    drawTally(rows.length, all.length);
+    if (!rows.length) {
+      box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No fixture matches “${esc(s.q)}”` : 'No fixture matches these filters'}${s.campus !== 'all' || s.room !== ALL ? ` at ${esc(placeName())}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
+      return;
+    }
+    const order = new Map(ctx.campuses.map((c, i) => [c.id, i]));
+    const roomOf = (d) => s.ix.room.get(d.room_id);
+    const roomRank = (d) => { const n = roomOf(d)?.name || ''; return /storage/i.test(n) || !n ? 2 : /^worship/i.test(n) ? 0 : 1; };
+    rows.sort((a, b) => {
+      const ta = typeOf(a) || {};
+      const tb = typeOf(b) || {};
+      return (ta.manufacturer || '￿').localeCompare(tb.manufacturer || '￿') || (ta.name || '').localeCompare(tb.name || '', undefined, { numeric: true })
+        || (order.get(a.campus_id) ?? 99) - (order.get(b.campus_id) ?? 99)
+        || roomRank(a) - roomRank(b) || (roomOf(a)?.name || '').localeCompare(roomOf(b)?.name || '')
+        || (a.fixture_id ?? 1e9) - (b.fixture_id ?? 1e9) || (a.asset_no ?? 1e9) - (b.asset_no ?? 1e9);
+    });
+    const none = '<span class="fx-none">—</span>';
+    let last = null;
+    const body = rows.map((d) => {
+      const t = typeOf(d) || {};
+      const first = d.type_id !== last;
+      last = d.type_id;
+      return `<tr class="${first ? 'fx-first' : ''}" data-model="${d.id}" tabindex="0" aria-label="Open ${esc(t.name || d.name)} ${esc(assetTag(d.asset_no))}">
+        <td class="fx-brand">${esc(t.manufacturer || 'No brand')}</td>
+        <td class="fx-model"><b>${esc(t.name || d.name)}</b>${t.unknown ? ` ${UNKNOWN_PILL}` : ''}</td>
+        <td class="fx-status">${statusButton(d)}</td>
+        <td class="fx-loc">${esc(campusName(d.campus_id))}</td>
+        <td class="fx-room">${roomOf(d) ? esc(roomOf(d).name) : none}</td>
+        <td class="fx-num mono" data-label="Fixture ID">${d.fixture_id ?? none}</td>
+        <td class="fx-num mono" data-label="Patch ID">${d.patch_universe != null ? esc(patchOf(d)) : none}</td>
+        <td class="fx-asset mono" data-label="Asset #">${esc(assetTag(d.asset_no)) || none}</td>
+      </tr>`;
+    }).join('');
+    box.innerHTML = `${todoNote()}<div class="fx-wrap"><table class="fx-table">
+      <thead><tr><th>Brand</th><th>Model</th><th>Status</th><th>Location</th><th>Room</th><th class="fx-num">Fixture ID</th><th class="fx-num">Patch ID</th><th>Asset #</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>`;
+  }
+
+  function statusButton(d) {
+    const label = STATUS[d.status] || d.status;
+    return `<button type="button" class="st st-${esc(d.status)} st-btn" data-st="${d.id}" aria-haspopup="listbox" aria-label="Status: ${esc(label)}. Change it"><i></i><span class="dd-value">${esc(label)}</span>${icon('down')}</button>`;
+  }
+
+  /** A status pill in the list: pick one and it saves right away, like on the item itself. */
+  function pickStatus(btn) {
+    if (btn.dataset.wired) return;
+    const d = s.data.devices.find((x) => x.id === btn.dataset.st);
+    if (!d) return;
+    btn.dataset.wired = '1';
+    wireDropdown(btn, {
+      label: 'Status',
+      options: () => Object.keys(STATUS).map((k) => ({ value: k, label: STATUS[k], hint: STATUS_HINT[k], dot: k })),
+      get: () => d.status,
+      set: async (v) => {
+        const was = d.status;
+        d.status = v;
+        btn.className = `st st-${v} st-btn`;
+        try {
+          await ctx.store.setDeviceStatus(d.id, v);
+          ctx.toast(`${typeOf(d)?.name || d.name} ${assetTag(d.asset_no)}: ${STATUS[v]}`);
+        } catch (e) {
+          d.status = was;
+          ctx.toast(e.message, 'bad');
+          drawResults();
+        }
+      },
+    });
+    btn.click();
+  }
+
   /** Open positions: items that went in before anyone knew the model. */
   function todoNote() {
     const n = s.data.devices.filter((d) => inPlace(d) && itemInScope(d) && typeOf(d)?.unknown).length;
@@ -698,7 +787,7 @@ export function mount(el, ctx) {
       const roomOrder = (u) => { const n = room(u) || ''; return /storage/i.test(n) || !n ? 2 : /^worship/i.test(n) ? 0 : 1; };
       for (const list of byCampus.values()) {
         list.sort((a, b) => roomOrder(a) - roomOrder(b) || (room(a) || '').localeCompare(room(b) || '')
-          || (a.stage_no ?? 1e9) - (b.stage_no ?? 1e9) || a.name.localeCompare(b.name, undefined, { numeric: true })); // R3 Beam 2 before R3 Beam 10
+          || (a.asset_no ?? 1e9) - (b.asset_no ?? 1e9) || a.name.localeCompare(b.name, undefined, { numeric: true }));
       }
       const patched = units.some((u) => takesPatch(u, t));
       const unitNums = (u) => (u.fixture_id != null || u.patch_universe != null
@@ -736,7 +825,7 @@ export function mount(el, ctx) {
             ${units.length ? campusOrder.map((c) => `<div class="unit-group">
                 <p class="unit-campus">${esc(c.short_name)}</p>
                 <ul class="unit-list">${byCampus.get(c.id).map((u) => `<li><button class="unit" data-unit="${u.id}">
-                  <span><b>${esc(u.name)}</b><small>${esc([room(u), patched && u.stage_no != null ? `Stage #${u.stage_no}` : null, u.location, u.asset_no != null ? `Asset #${u.asset_no}` : null].filter(Boolean).join(' · '))}</small></span>
+                  <span><b>${esc(u.name)}</b><small>${esc([room(u), u.location, assetTag(u.asset_no)].filter(Boolean).join(' · '))}</small></span>
                   ${unitNums(u)}${icon('chevron')}
                 </button></li>`).join('')}</ul>
               </div>`).join('')

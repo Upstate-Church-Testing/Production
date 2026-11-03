@@ -2,7 +2,7 @@
 // example data. Used when no Supabase project is configured.
 
 import { createPcoDemo } from './pco-demo.js';
-import { footprint, nameNumber } from './lighting.js';
+import { footprint, nameNumber, isFixtureType } from './lighting.js';
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2));
 const wait = (ms = 90) => new Promise((r) => setTimeout(r, ms));
@@ -83,7 +83,7 @@ function buildExample() {
     const id = uid();
     const { manufacturer, model, category, networked, ...rest } = d;
     devices.push({ id, type_id: typeFor(d), campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null,
-      serial_number: null, firmware: null, location: null, status: 'active', asset_no: null, stage_no: null,
+      serial_number: null, firmware: null, location: null, status: 'active', asset_no: null,
       fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
     addr.forEach((a, i) => ips.push({ id: uid(), device_id: id, campus_id: 'c-' + code, network_id: a.net ? 'n-' + code + '-' + a.net : null,
       label: a.label || null, ip: a.ip || null, gateway: a.gw || null, mac: a.mac || null, hostname: null,
@@ -217,26 +217,22 @@ function buildExample() {
   setType('HZ-350', { tank_liters: 2.5, haze_fluid_id: 'hf-hzl' });
   setType('ATMe', { tank_liters: 2.5, haze_fluid_id: 'hf-mdg' });
   setType('Projector', { unknown: true, notes: 'Placeholder until we know the model.' });
-  numberAll(devices, rooms);
+  numberAll(devices, rooms, types);
   types.forEach((t) => delete t.key);
 
   return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts };
 }
 
-/** Asset # per model across locations, stage # per model in each room (like the database does). */
-function numberAll(devices, rooms) {
+/** One asset # per item, UCP-000001 up, by location and room; fixtures named for their model (like the database). */
+function numberAll(devices, rooms, types) {
   const campusAt = (id) => CAMPUSES.findIndex((c) => c.id === id);
   const roomRank = (d) => { const n = rooms.find((r) => r.id === d.room_id)?.name || ''; return /storage/i.test(n) || !n ? 2 : /^worship/i.test(n) ? 0 : 1; };
   const sorted = [...devices].sort((a, b) => campusAt(a.campus_id) - campusAt(b.campus_id) || roomRank(a) - roomRank(b)
     || (nameNumber(a.name) - nameNumber(b.name)) || a.name.localeCompare(b.name));
-  const asset = new Map();
-  const stage = new Map();
-  for (const d of sorted) {
-    asset.set(d.type_id, (asset.get(d.type_id) || 0) + 1);
-    d.asset_no = asset.get(d.type_id);
-    const k = `${d.type_id}|${d.campus_id}|${d.room_id}`;
-    stage.set(k, (stage.get(k) || 0) + 1);
-    d.stage_no = stage.get(k);
+  sorted.forEach((d, i) => { d.asset_no = i + 1; });
+  for (const d of devices) {
+    const t = types.find((x) => x.id === d.type_id);
+    if (isFixtureType(t)) d.name = t.name;
   }
 }
 
@@ -281,22 +277,19 @@ export function createDemoStore() {
     return out;
   }
   const blank = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
-  const NUMBER_KEYS = ['asset_no', 'stage_no', 'fixture_id', 'patch_universe', 'patch_address', 'dmx_channels'];
-  const assetHigh = new Map(); // highest asset # each model has handed out (never reused)
+  const NUMBER_KEYS = ['asset_no', 'fixture_id', 'patch_universe', 'patch_address', 'dmx_channels'];
+  let assetHigh = 0; // highest asset # handed out (never reused)
 
-  /** What the database's numbering trigger does: asset #, stage #, clearing a moved item's patch, the 512 check. */
+  /** What the database's numbering trigger does: asset #, a fixture's name, clearing a moved item's patch, the 512 check. */
   function number(dev, prev, explicit = {}) {
     for (const k of NUMBER_KEYS) if (k in explicit) dev[k] = explicit[k] === '' || explicit[k] == null ? null : Number(explicit[k]);
     const moved = prev && (prev.campus_id !== dev.campus_id || (prev.room_id || null) !== (dev.room_id || null));
-    const retyped = prev && prev.type_id !== dev.type_id;
-    const others = db.devices.filter((d) => d.id !== dev.id && d.type_id === dev.type_id);
-    const high = Math.max(assetHigh.get(dev.type_id) || 0, ...others.map((d) => d.asset_no || 0));
-    if (dev.asset_no == null || (retyped && !('asset_no' in explicit))) dev.asset_no = high + 1;
-    else if (others.some((d) => d.asset_no === dev.asset_no)) throw new Error('Another one of this model already has that asset number.');
-    assetHigh.set(dev.type_id, Math.max(high, dev.asset_no));
-    if ((!prev && dev.stage_no == null) || ((moved || retyped) && !('stage_no' in explicit))) {
-      dev.stage_no = Math.max(0, ...others.filter((d) => d.campus_id === dev.campus_id && (d.room_id || null) === (dev.room_id || null)).map((d) => d.stage_no || 0)) + 1;
-    }
+    const everyone = db.devices.filter((d) => d.id !== dev.id);
+    assetHigh = Math.max(assetHigh, ...everyone.map((d) => d.asset_no || 0));
+    if (dev.asset_no == null) { do dev.asset_no = ++assetHigh; while (everyone.some((d) => d.asset_no === dev.asset_no)); }
+    else if (everyone.some((d) => d.asset_no === dev.asset_no)) throw new Error('Another item already has that asset number. Every item has its own.');
+    const t = db.types.find((x) => x.id === dev.type_id);
+    if (isFixtureType(t)) dev.name = t.name;
     if (moved) {
       if (!('fixture_id' in explicit)) dev.fixture_id = null;
       if (!('patch_universe' in explicit)) { dev.patch_universe = null; dev.patch_address = null; }
@@ -506,8 +499,8 @@ export function createDemoStore() {
       }).filter(Boolean);
       // Check everything first so a bad row saves nothing (like one database transaction).
       for (const { dev, next, explicit } of staged) {
-        const others = db.devices.filter((d) => d.id !== dev.id && d.type_id === dev.type_id).map((d) => staged.find((x) => x.dev === d)?.next || d);
-        if (next.asset_no != null && others.some((d) => d.asset_no === next.asset_no)) throw new Error('Another one of this model already has that asset number.');
+        const others = db.devices.filter((d) => d.id !== dev.id).map((d) => staged.find((x) => x.dev === d)?.next || d);
+        if (next.asset_no != null && others.some((d) => d.asset_no === next.asset_no)) throw new Error('Another item already has that asset number. Every item has its own.');
         const { asset_no: _skip, ...rest } = explicit; // asset #s were checked above, across the whole batch
         number({ ...next, asset_no: dev.asset_no }, dev, rest);
       }

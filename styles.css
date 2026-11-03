@@ -2294,3 +2294,48 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 .sys-pool button > span { display: grid; gap: 1px; }
 .sys-sheet .search { margin: 0; }
 @media (max-width: 599px) { .sys-members li { grid-template-columns: minmax(0, 1fr) auto; } .sys-members input { grid-column: 1 / -1; grid-row: 2; } }
+
+/* ------------------------------------------------------------ fixtures -- */
+/* Lighting › Fixtures: one row per light, columns across. Cards on phones. */
+.fx-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
+.fx-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.fx-table thead th {
+  padding: 14px 14px 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line-2);
+  font: 700 10.5px/1 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint);
+}
+.fx-table td { padding: 7px 14px; border-top: 1px solid var(--line); vertical-align: middle; font-size: 14px; }
+.fx-table tbody tr:first-child td { border-top: 0; }
+.fx-table tbody tr.fx-first td { border-top-color: var(--line-2); }
+.fx-table tbody tr { cursor: pointer; }
+.fx-table tbody tr:hover td { background: var(--panel-2); }
+.fx-table tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.fx-brand { color: var(--muted); font-size: 13px !important; white-space: nowrap; }
+.fx-model b { font-weight: 600; }
+.fx-loc, .fx-room { white-space: nowrap; }
+.fx-table td.fx-num, .fx-table td.fx-asset { white-space: nowrap; font-size: 13.5px !important; }
+.fx-asset { color: var(--fg); letter-spacing: 0.01em; }
+.fx-none { color: var(--faint); }
+.fx-status .st-btn { height: 30px; padding: 0 9px 0 11px; font-size: 13px; white-space: nowrap; }
+@media (max-width: 1100px) { .fx-table td, .fx-table thead th { padding-left: 10px; padding-right: 10px; } }
+@media (max-width: 699px) {
+  .fx-table thead { display: none; }
+  .fx-table, .fx-table tbody { display: block; }
+  .fx-table tbody tr {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 10px; padding: 12px 14px;
+    grid-template-areas: "brand brand status" "model model status" "loc room room" "fid patch asset";
+    border-top: 1px solid var(--line);
+  }
+  .fx-table tbody tr:first-child { border-top: 0; }
+  .fx-table tbody tr.fx-first { border-top-color: var(--line-2); }
+  .fx-table td { display: block; padding: 0; border: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .fx-table tbody tr:hover td { background: none; }
+  .fx-brand { grid-area: brand; font-size: 12px !important; }
+  .fx-model { grid-area: model; font-size: 15px; }
+  .fx-status { grid-area: status; justify-self: end; align-self: center; }
+  .fx-loc { grid-area: loc; color: var(--muted); font-size: 13px !important; margin-top: 4px; }
+  .fx-room { grid-area: room; color: var(--muted); font-size: 13px !important; margin-top: 4px; }
+  .fx-table td[data-label] { margin-top: 6px; }
+  .fx-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font: 700 9.5px/1 var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .fx-table td:nth-of-type(6) { grid-area: fid; } .fx-table td:nth-of-type(7) { grid-area: patch; } .fx-table td:nth-of-type(8) { grid-area: asset; }
+}
+.px-etable .px-asset { color: var(--muted); white-space: nowrap; font-size: 13px; }

@@ -274,7 +274,7 @@ tools/build_preview.py         one-file preview with example data
 ## Sidebar
 
 `NAV` in `js/app.js`: All gear (Cables), Audio, Video (Cameras), Lighting (Fixtures,
-Hazers), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Team),
+Hazers, Patch), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it; on a phone it's the tab bar, and
 a group opens a menu of its pages. Audio, Video, Lighting, Fixtures and the rest are the
@@ -288,3 +288,12 @@ Gear view opened with a `scope`: the section (and category) it's locked to and i
 3. Put the project URL and publishable key in `js/config.js`.
 4. Deploy the repo to Netlify (`netlify.toml` copies the app into `dist/`; no build tools needed).
 5. Open the site and create the first account. That account is the admin.
+
+## Asset numbers and fixtures
+
+Every item has its own asset # across all of Upstate Church Production, shown as
+UCP-000001 (up to UCP-999999). The database hands out the next one from a counter
+(`devices_asset_seq`), so a number is never shared or reused, and it stays with the item
+when it moves or its model is corrected. A fixture (category "Fixture") has no name of its
+own: it goes by its model's name and the asset # tells them apart. Lighting › Fixtures is
+the sheet of every light: brand, model, status, location, room, fixture ID, patch ID, asset #.

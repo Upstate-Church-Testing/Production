@@ -38,10 +38,12 @@ const NAV = [
       { id: 'cameras', label: 'Cameras', minRole: 'staff', view: GearView, scope: { modes: ['cameras'] } },
     ] },
   { id: 'lighting', label: 'Lighting', menuLabel: 'All lighting', icon: 'bulb', minRole: 'staff', view: GearView,
-    scope: { dep: 'lighting', modes: [...GEAR_TABS, 'patch'] },
+    scope: { dep: 'lighting', modes: GEAR_TABS },
     children: [
-      { id: 'fixtures', label: 'Fixtures', minRole: 'staff', view: GearView, scope: { dep: 'lighting', cat: 'Fixture', modes: [...GEAR_TABS, 'patch'] } },
+      // Fixtures: the sheet of every light, location and room only (its grid is built, just not offered yet: add 'grid').
+      { id: 'fixtures', label: 'Fixtures', minRole: 'staff', view: GearView, scope: { dep: 'lighting', cat: 'Fixture', modes: ['fixtures'] } },
       { id: 'hazers', label: 'Hazers', minRole: 'staff', view: GearView, scope: { modes: ['haze'] } },
+      { id: 'patch', label: 'Patch', minRole: 'staff', view: GearView, scope: { modes: ['patch'] } },
     ] },
   { id: 'network-gear', label: 'Network', menuLabel: 'All network', icon: 'network', minRole: 'staff', view: GearView,
     scope: { dep: 'network', modes: GEAR_TABS },
@@ -83,7 +85,7 @@ const ctx = {
   openSettings: (section) => goWith('account', { section }),
   openNetworkFlag: (flag) => goWith('network', { flag }),
   openGear: (filters) => goWith('gear', { filters }),
-  openPatch: (universe) => goWith('lighting', { patch: { universe } }),
+  openPatch: (universe) => goWith('patch', { patch: { universe } }),
   // Filters last only while the app is open: every launch starts at All, all locations.
   campus: 'all',
   gearFilters: { dep: 'all', cat: 'all', brand: 'all' },
