@@ -8,6 +8,7 @@ import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo,
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION } from './devices.js';
 import { patchView } from './patch.js';
+import { rigView } from './rigging.js';
 import { takesPatch, patchOf, footprint, patchPoint, covers, assetTag, assetWords } from '../lighting.js';
 import { preparePhoto } from '../photo.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown, wireFilterButton } from '../picker.js';
@@ -19,7 +20,7 @@ import { systemsView } from './systems.js';
 const NO_BRAND = '__none';
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
-const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
+const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', rig: 'Rigging', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
 const ALL_GEAR_TABS = ['types', 'models', 'grid', 'systems'];
 
 export function mount(el, ctx) {
@@ -92,7 +93,7 @@ export function mount(el, ctx) {
 
   // Filters, in order: location, section, category, brand. Each narrows the next.
   const itemMode = () => s.mode === 'models' || s.mode === 'patch' || s.mode === 'fixtures'; // filters choose from items, not models
-  const unit = () => (s.mode === 'patch' || s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
+  const unit = () => (s.mode === 'patch' || s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'rig' ? ['light', 'lights'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
     : s.mode === 'systems' ? ['system', 'systems']
     : s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
   const loc = locationDropdown(ctx, $('#g-loc', el), {
@@ -104,6 +105,7 @@ export function mount(el, ctx) {
       if (s.mode === 'haze') return haze.counts();
       if (s.mode === 'cameras') return cams.counts();
       if (s.mode === 'systems') return syss.counts();
+      if (s.mode === 'rig') return rig.counts();
       const models = itemMode();
       const pool = (s.mode === 'patch' ? s.data.devices.filter((d) => takesPatch(d, typeOf(d))) : s.data.devices).filter(itemInScope);
       const counts = { [ALL]: models ? pool.length : scopeTypes().length };
@@ -163,10 +165,15 @@ export function mount(el, ctx) {
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); draw(); }, 120));
   // Phones: one Filters button opens every filter (and Models | Items | Grid…) on a page of its own.
   wireFilterButton($('.filter-bar', el), { page: el, clear: () => { s.campus = ctx.campus = ALL; clearFilters(); } });
+  const setCampus = (id) => { s.campus = ctx.campus = id; loc.update(); draw(); window.scrollTo({ top: 0 }); };
   const patch = patchView({
     s, ctx, typeOf: (d) => typeOf(d), matches: (d) => patchMatches(d), openModel: (id) => openModel(id), load: (quiet) => load(quiet),
-    setCampus: (id) => { s.campus = ctx.campus = id; loc.update(); draw(); window.scrollTo({ top: 0 }); },
-    campusName: (id) => campusName(id),
+    setCampus, campusName: (id) => campusName(id),
+  });
+  // Rigging: each room's battens and trusses and what hangs on them.
+  const rig = rigView({
+    s, ctx, typeOf: (d) => typeOf(d), matches: (d) => patchMatches(d), load: (quiet) => load(quiet), setCampus,
+    campusName: (id) => campusName(id), setTally: (html) => { $('#g-tally', el).innerHTML = html; }, redraw: () => drawResults(),
   });
   const views = {
     s, ctx, typeOf: (d) => typeOf(d), load: (quiet) => load(quiet), campusName: (id) => campusName(id),
@@ -180,6 +187,7 @@ export function mount(el, ctx) {
   const results = $('#g-results', el);
   results.addEventListener('click', (e) => {
     if (s.mode === 'patch') patch.click(e);
+    else if (s.mode === 'rig') rig.click(e);
     else if (s.mode === 'haze') haze.click(e);
     else if (s.mode === 'cameras') cams.click(e);
     else if (s.mode === 'systems') syss.click(e);
@@ -340,7 +348,7 @@ export function mount(el, ctx) {
     if (!s.q) return true;
     if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
-    return words([d.name, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id),
+    return words([d.name, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id), s.ix.pos.get(d.position_id)?.name,
       t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, PROJECTION[d.projection], ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
   }
 
@@ -358,7 +366,7 @@ export function mount(el, ctx) {
     const t = typeOf(d);
     if (!inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
-    return words([d.name, d.location, d.serial_number, s.ix.room.get(d.room_id)?.name, t?.name, t?.manufacturer, t?.part_number, ...numberWords(d)]);
+    return words([d.name, d.location, d.serial_number, s.ix.room.get(d.room_id)?.name, s.ix.pos.get(d.position_id)?.name, t?.name, t?.manufacturer, t?.part_number, ...numberWords(d)]);
   }
 
   // ------------------------------------------------------------ drawing --
@@ -367,12 +375,14 @@ export function mount(el, ctx) {
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
     const addLabel = itemMode() ? 'Add items' : 'Add model';
     const own = OWN_VIEWS.includes(s.mode); // Haze and Cameras have their own add buttons
+    const rigging = s.mode === 'rig'; // Rigging: location, room tabs and search only; no adding gear there
     $('.add-desktop span', el).textContent = s.mode === 'fixtures' ? 'Add fixtures' : addLabel;
-    $('.add-desktop', el).hidden = own;
-    $('.fab', el).hidden = own;
+    $('.add-desktop', el).hidden = own || rigging;
+    $('.fab', el).hidden = own || rigging;
     $('.fab', el).setAttribute('aria-label', addLabel);
     q.placeholder = matchMedia('(max-width: 699px)').matches // phones: short, beside the Filters button
-      ? (s.mode === 'fixtures' ? 'Search fixtures' : s.mode === 'patch' ? 'Search the patch' : s.mode === 'models' ? 'Search items' : 'Search models')
+      ? (s.mode === 'fixtures' ? 'Search fixtures' : s.mode === 'patch' ? 'Search the patch' : rigging ? 'Search the rig' : s.mode === 'models' ? 'Search items' : 'Search models')
+      : rigging ? 'Search light, fixture ID, patch (2.041) or asset #'
       : s.mode === 'fixtures' ? 'Search model, fixture ID, patch ID (2.041) or asset # (UCP-000123)'
       : s.mode === 'patch' ? 'Search fixture, fixture ID or patch (2.041)'
       : s.mode === 'models' ? 'Search name, model, fixture ID, patch, IP' : 'Search model, brand, port, location';
@@ -380,10 +390,11 @@ export function mount(el, ctx) {
     el.classList.toggle('is-patch', s.mode === 'patch');
     el.classList.toggle('is-fixtures', s.mode === 'fixtures');
     el.classList.toggle('is-own', own);
-    $('#g-dep', el).hidden = s.mode === 'patch' || own || !!lock.dep; // the patch sheet is lighting only
-    $('#g-room', el).hidden = s.mode === 'patch' || own; // the patch sheet has its own room tabs
-    $('#g-cat', el).hidden = own || !!lock.cat;
-    $('#g-brand', el).hidden = own || s.mode === 'fixtures'; // Fixtures: just location and room
+    el.classList.toggle('is-rig', rigging);
+    $('#g-dep', el).hidden = s.mode === 'patch' || own || rigging || !!lock.dep; // the patch sheet is lighting only
+    $('#g-room', el).hidden = s.mode === 'patch' || own || rigging; // the patch sheet and rigging have their own room tabs
+    $('#g-cat', el).hidden = own || rigging || !!lock.cat;
+    $('#g-brand', el).hidden = own || rigging || s.mode === 'fixtures'; // Fixtures: just location and room
     $('.search', el).hidden = own;
     if (s.error) {
       drawTally(null);
@@ -405,7 +416,7 @@ export function mount(el, ctx) {
   /** Keeps each filter's choice valid for the ones before it, then refreshes the pills. */
   function drawFilters() {
     const valid = (dd, v) => dd === null || v === ALL || (s.data && optionValues(dd).includes(v));
-    if (OWN_VIEWS.includes(s.mode)) { loc.update(); return; } // keep the other choices for when they come back
+    if (OWN_VIEWS.includes(s.mode) || s.mode === 'rig') { loc.update(); return; } // keep the other choices for when they come back
     if (s.mode !== 'patch' && !valid(roomDd, s.room)) s.room = ALL;
     if (!lock.dep && s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
     if (!lock.cat && !valid(catDd, s.cat)) s.cat = ALL;
@@ -420,7 +431,10 @@ export function mount(el, ctx) {
     return pool.filter((x) => inCat(typeFor(x))).map((x) => brandOf(typeFor(x)));
   }
 
-  function filtering() { return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || (s.room !== ALL && s.mode !== 'patch')); }
+  function filtering() {
+    if (s.mode === 'rig') return !!s.q;
+    return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || (s.room !== ALL && s.mode !== 'patch'));
+  }
 
   function drawResults() {
     const box = $('#g-results', el);
@@ -429,6 +443,7 @@ export function mount(el, ctx) {
     if (s.mode === 'fixtures') return drawFixtures(box);
     if (s.mode === 'grid') return drawGrid(box);
     if (s.mode === 'patch') return patch.draw(box);
+    if (s.mode === 'rig') return rig.draw(box);
     if (s.mode === 'haze') return haze.draw(box);
     if (s.mode === 'cameras') return cams.draw(box);
     if (s.mode === 'systems') return syss.draw(box);

@@ -2423,3 +2423,106 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
   .fx-table td:nth-of-type(6) { grid-area: fid; } .fx-table td:nth-of-type(7) { grid-area: patch; } .fx-table td:nth-of-type(8) { grid-area: asset; }
 }
 .px-etable .px-asset { color: var(--muted); white-space: nowrap; font-size: 13px; }
+
+/* ----- Lighting › Rigging: positions front to back, and the lights on each ----- */
+.view-gear.is-rig .results { gap: 14px; }
+.rg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.rg-pos { display: grid; gap: 12px; padding: 14px 16px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); }
+.rg-pos.is-empty { padding-block: 10px; background: transparent; border-style: dashed; }
+.rg-pos-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.rg-ord {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  font: 700 12.5px/1 var(--f-mono); color: var(--muted); background: var(--panel-3);
+}
+.rg-pos-name { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.rg-pos-name h3 { font: 500 18px/1.2 var(--f-display); overflow-wrap: anywhere; }
+.rg-pos-name p { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.rg-pos-count { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rg-pos-count b { color: var(--fg); font-size: 16px; }
+.rg-pos-count em { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; color: var(--bad); font-style: normal; font-weight: 700; }
+.rg-pos-count em .ico { width: 13px; height: 13px; }
+.rg-pos.is-empty .rg-pos-count { color: var(--faint); }
+.rg-loose { border-style: dashed; }
+.rg-loose .rg-pos-name h3 { font-size: 17px; color: var(--muted); }
+.rg-none { padding-block: 28px; }
+
+.rg-models { display: grid; gap: 10px; }
+.rg-model { display: flex; gap: 12px; align-items: flex-start; padding-top: 10px; border-top: 1px solid var(--line); }
+.rg-model:first-child { padding-top: 0; border-top: 0; }
+.rg-thumb { width: 44px; height: 44px; border-radius: 11px; }
+.rg-model-body { flex: 1; min-width: 0; display: grid; gap: 7px; }
+.rg-model-name { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.rg-model-name b { font-weight: 600; font-size: 14.5px; }
+.rg-model-name small { font-size: 12.5px; color: var(--muted); }
+.rg-units { display: flex; flex-wrap: wrap; gap: 6px; }
+.rg-unit {
+  display: grid; justify-items: center; gap: 2px; min-width: 52px; padding: 6px 8px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--fg); font: inherit; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.rg-unit:hover { border-color: var(--line-2); background: var(--panel-3); }
+.rg-unit:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.rg-unit b { font: 700 14px/1 var(--f-mono); }
+.rg-unit i { font: 500 11.5px/1 var(--f-mono); font-style: normal; color: var(--muted); }
+.rg-unit.is-bad { border-color: color-mix(in srgb, var(--bad) 60%, transparent); background: color-mix(in srgb, var(--bad) 10%, var(--panel-2)); }
+.px-card.is-bare { border-style: dashed; }
+.rg-card-pos { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+@container results (max-width: 599px) {
+  .rg-pos { padding: 12px 12px 14px; }
+  .rg-pos-head { flex-wrap: wrap; gap: 8px 10px; }
+  .rg-pos-name { flex-basis: calc(100% - 40px); }
+  .rg-pos-head .rg-pos-count { margin-left: 38px; }
+  .rg-pos-head .btn { margin-left: auto; }
+  .rg-loose .rg-pos-head .rg-pos-count { margin-left: 0; }
+}
+
+/* hang lights sheet: a tile per light, by model */
+.rg-pick-group { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.rg-pick-head { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.rg-pick-head input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); flex: none; }
+.rg-pick-head > span { display: grid; gap: 1px; min-width: 0; }
+.rg-pick-head b { font-weight: 600; font-size: 15px; }
+.rg-pick-head small { font-size: 12.5px; color: var(--muted); }
+.rg-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; padding-left: 30px; }
+.rg-pick {
+  position: relative; display: flex; gap: 8px; align-items: flex-start; padding: 8px 9px; min-width: 0;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2); cursor: pointer;
+}
+.rg-pick:hover { border-color: var(--line-2); }
+.rg-pick input { width: 17px; height: 17px; margin: 1px 0 0; accent-color: var(--accent); flex: none; }
+.rg-pick > span { display: grid; gap: 2px; min-width: 0; font-variant-numeric: tabular-nums; }
+.rg-pick b { font: 700 13.5px/1.15 var(--f-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rg-pick small { font: 500 11px/1.2 var(--f-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rg-pick em { font-style: normal; font-size: 11px; line-height: 1.25; color: var(--soft); }
+.rg-pick.is-on { border-color: color-mix(in srgb, var(--accent) 70%, transparent); background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
+.rg-pick.is-bad:not(.is-on) { border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
+.rg-everything { padding-top: 4px; }
+@media (max-width: 699px) { .rg-picks { padding-left: 0; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); } }
+
+/* edit positions sheet */
+.rg-edit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rg-edit-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: var(--r-lg); background: var(--panel-2); border: 1px solid var(--line); }
+.rg-edit-row.is-sure { border-color: color-mix(in srgb, var(--bad) 60%, transparent); }
+.rg-edit-row .rg-ord { margin-top: 8px; }
+.rg-edit-fields { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.rg-edit-fields input {
+  width: 100%; min-height: 42px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line-2);
+  background: var(--panel); color: var(--fg); font: inherit; font-size: 15px;
+}
+.rg-edit-fields input.rg-notes-in { min-height: 36px; font-size: 13.5px; }
+.rg-edit-fields input::placeholder { color: var(--faint); }
+.rg-edit-fields input:focus { outline: 2px solid var(--focus); outline-offset: -1px; border-color: transparent; }
+.rg-edit-btns { display: flex; gap: 2px; flex: none; }
+.rg-edit-btns .icon-btn { width: 38px; height: 38px; }
+.rg-edit-btns .icon-btn:disabled { opacity: 0.3; pointer-events: none; }
+.rg-sure { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; color: var(--bad); line-height: 1.4; }
+.rg-sure .ico { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+.rg-add input { flex: 1; min-width: 0; }
+@media (max-width: 520px) {
+  .rg-edit-row { flex-wrap: wrap; }
+  .rg-edit-fields { flex-basis: calc(100% - 40px); }
+  .rg-edit-btns { margin-left: 38px; }
+}
+.rg-sheet .sh-foot .form-msg { flex-shrink: 0; }
+.rg-notes-btn { justify-self: start; min-height: 0; padding: 2px 0; font-size: 13px; gap: 4px; }
+.rg-notes-btn .ico { width: 14px; height: 14px; }

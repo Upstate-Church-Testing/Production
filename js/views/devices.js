@@ -37,8 +37,11 @@ export const FIELD = {
   mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Model',
   connected_to: 'Connected to', assignment: 'Assignment',
   asset_no: 'Asset #', stage_no: 'Stage #', fixture_id: 'Fixture ID', patch_universe: 'Universe', patch_address: 'Address',
-  dmx_channels: 'DMX channels', patch: 'Patch ID', projection: 'Projection',
+  dmx_channels: 'DMX channels', patch: 'Patch ID', projection: 'Projection', position_id: 'Position',
 };
+/** Positions (battens, trusses) in a room, front to back. */
+export const positionsIn = (s, roomId) => (roomId ? (s.data.positions || []).filter((p) => p.room_id === roomId)
+  .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, undefined, { numeric: true })) : []);
 const NUMBER_FIELDS = ['fixture_id', 'asset_no', 'dmx_channels'];
 
 export function buildIndex(d) {
@@ -46,6 +49,7 @@ export function buildIndex(d) {
     dev: new Map(d.devices.map((x) => [x.id, x])),
     net: new Map(d.networks.map((x) => [x.id, x])),
     room: new Map(d.rooms.map((x) => [x.id, x])),
+    pos: new Map((d.positions || []).map((x) => [x.id, x])),
     type: new Map(d.types.map((x) => [x.id, { ...x, ports: sortPorts(x.ports) }])),
     ipsByDev: new Map(),
     conflicts: new Map(),
@@ -243,6 +247,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <dl class="kv">
             ${kv('Location', campusName(dev.campus_id))}${kv('Room', room)}${kv('Spot', dev.location)}
             ${isProjectorType(ty) ? kv('Projection', PROJECTION[dev.projection] || 'Not set yet') : ''}
+            ${dev.position_id && s.ix.pos.get(dev.position_id) ? kv('Position', s.ix.pos.get(dev.position_id).name)
+              : patchable && positionsIn(s, dev.room_id).length ? kv('Position', 'Not on a position') : ''}
           </dl>
         </section>
         <section class="block">
@@ -414,6 +420,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '<em>empty</em>';
     if (k === 'room_id') v = s.ix.room.get(v)?.name || 'a removed room';
     if (k === 'projection') v = PROJECTION[v] || v;
+    else if (k === 'position_id') v = s.ix.pos.get(v)?.name || 'a removed position';
     else if (k === 'campus_id') v = campusName(v);
     else if (k === 'network_id') v = s.ix.net.get(v)?.name || 'a removed network';
     else if (k === 'type_id') v = s.ix.type.has(v) ? typeLabel(s.ix.type.get(v)) : 'a removed model';
@@ -442,7 +449,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const ips = dev ? s.ix.ipsByDev.get(dev.id) || [] : [];
     const defaultCampus = s.campus !== 'all' ? s.campus : (ctx.me.home_campus_id || ctx.campuses[0]?.id);
     draft = dev
-      ? { ...dev, room_id: dev.room_id || '', departments: [...dev.departments],
+      ? { ...dev, room_id: dev.room_id || '', position_id: dev.position_id || '', departments: [...dev.departments],
           ips: ips.map((ip) => ({ id: ip.id, label: ip.label || '', network_id: ip.network_id || '', addr: ip._addr || '',
             mask: ip._prefix != null ? prefixToMask(ip._prefix) : '', gateway: ip.gateway ? splitInet(ip.gateway).addr : '',
             mac: ip.mac || '', hostname: ip.hostname || '', mode: ip.mode, notes: ip.notes || '' })),
@@ -450,7 +457,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           ports: Object.fromEntries(ports.map((p) => [p.type_port_id, { connected_to: p.connected_to || '', assignment: p.assignment || '', notes: p.notes || '' }])),
           ...numbersDraft(dev) }
       : { id: '', type_id: '', campus_id: defaultCampus, room_id: '', name: '', departments: [], serial_number: '', firmware: '',
-          location: '', status: 'active', notes: '', projection: null, ips: [blankIp()], creds: [], ports: {}, qty: clampQty(preset.qty || 1), numbering: true, start: '',
+          location: '', status: 'active', notes: '', projection: null, position_id: '', ips: [blankIp()], creds: [], ports: {}, qty: clampQty(preset.qty || 1), numbering: true, start: '',
           ...numbersDraft(null) };
     if (!dev && preset.type_id) onTypePicked(preset.type_id, true);
     renderEdit();
@@ -466,13 +473,13 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       asset_no: assetTag(d?.asset_no) };
   }
 
-  /** Moving to another room: the patch and fixture ID belonged to the old console. Moving back restores them. */
+  /** Moving to another room: the patch, fixture ID and position belonged to the old room. Moving back restores them. */
   function followMove() {
-    if (!dev) return;
+    if (!dev) { draft.position_id = ''; return; }
     const home = draft.campus_id === dev.campus_id && (draft.room_id || '') === (dev.room_id || '');
     const was = numbersDraft(dev);
-    if (home) Object.assign(draft, { fixture_id: was.fixture_id, patch: was.patch });
-    else Object.assign(draft, { fixture_id: '', patch: '' });
+    if (home) Object.assign(draft, { fixture_id: was.fixture_id, patch: was.patch, position_id: dev.position_id || '' });
+    else Object.assign(draft, { fixture_id: '', patch: '', position_id: '' });
   }
 
   function renderEdit(error = '') {
@@ -546,6 +553,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
             <button type="button" class="btn" data-a="add-room">Add room</button></div>
             <small class="hint">Part of: a room inside a bigger area, like an office in E-Wing Offices. Most rooms aren’t part of anything.</small>` : ''}
           <label class="field"><span>Spot in the room</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Stage rack, Catwalk…"></label>
+          ${positionField()}
           ${isProjectorType(ty) ? `<div class="field"><span>Projection</span>
             <div class="tag-picker">${Object.entries(PROJECTION).map(([v, label]) => `<button type="button" class="chip big" data-a="proj" data-v="${v}" aria-pressed="${draft.projection === v}">${esc(label)}</button>`).join('')}</div>
             <small class="hint">Front: the projector is on the audience’s side of the screen. Rear: it’s behind the screen. Tap again to clear.</small></div>` : ''}
@@ -709,6 +717,17 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     </div>`;
   }
 
+  /** Which batten or truss it hangs on: only when the room has positions (Lighting › Rigging sets them up). */
+  function positionField() {
+    const list = positionsIn(s, draft.room_id && draft.room_id !== '__new' ? draft.room_id : null);
+    if (!list.length) return '';
+    if (draft.position_id && !list.some((p) => p.id === draft.position_id)) draft.position_id = '';
+    return `<label class="field"><span>Hung on</span><select id="f-position">
+        <option value="">Not on a position</option>
+        ${list.map((p) => `<option value="${p.id}" ${p.id === draft.position_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+      </select><small class="hint">The batten or truss it’s mounted on. Lighting › Rigging shows each one.</small></label>`;
+  }
+
   /** Reads every input back into the draft. */
   function collect() {
     const f = (id) => $(`#${id}`, sheet.el);
@@ -726,6 +745,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     }
     draft.campus_id = f('f-campus').value;
     draft.room_id = f('f-room').value;
+    if (f('f-position')) draft.position_id = f('f-position').value;
     draft.ips.forEach((ip, i) => {
       if (!f(`ip-${i}-addr`)) return;
       ip.network_id = f(`ip-${i}-net`).value; ip.label = f(`ip-${i}-label`).value; ip.addr = f(`ip-${i}-addr`).value.trim();
@@ -944,6 +964,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         departments: draft.departments, serial_number: draft.serial_number, firmware: draft.firmware, location: draft.location,
         status: draft.status, notes: draft.notes,
         projection: isProjectorType(s.ix.type.get(draft.type_id)) ? draft.projection || '' : '', // only projectors have one
+        position_id: positionsIn(s, draft.room_id).some((p) => p.id === draft.position_id) ? draft.position_id : '',
       },
       ips,
       credentials,

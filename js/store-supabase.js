@@ -72,14 +72,33 @@ export async function createSupabaseStore(url, key) {
     },
 
     async networkData() {
-      const [rooms, networks, devices, ips, types] = await Promise.all([
+      const [rooms, networks, devices, ips, types, positions] = await Promise.all([
         all(() => sb.from('rooms').select('*').order('sort_order').order('name')),
         all(() => sb.from('networks').select('*').order('sort_order').order('name')),
         all(() => sb.from('devices').select('*').order('name')),
         all(() => sb.from('device_ips').select('*').order('sort_order')),
         all(() => sb.from('device_types').select('*, ports:device_type_ports(*)').order('name')),
+        // Rigging positions; an app open before they existed still loads the rest.
+        all(() => sb.from('rig_positions').select('*').order('sort_order').order('name')).catch(() => []),
       ]);
-      return { rooms, networks, devices, ips, types };
+      return { rooms, networks, devices, ips, types, positions };
+    },
+
+    // ---- Rigging: a room's battens and trusses, and what hangs on each.
+    /** Insert or update a position ({ id?, campus_id, room_id, name, sort_order, notes }); returns its id. */
+    async savePosition(row) {
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from('rig_positions').update(fields).eq('id', id)); return id; }
+      return ok(await sb.from('rig_positions').insert(fields).select('id').single()).id;
+    },
+    /** Takes the position away; whatever hung on it is left not on a position. */
+    async deletePosition(id) {
+      ok(await sb.from('rig_positions').delete().eq('id', id));
+    },
+    /** Hangs items on a position (or takes them down with null). */
+    async setDevicePosition(ids, positionId) {
+      if (!ids.length) return;
+      ok(await sb.from('devices').update({ position_id: positionId || null }).in('id', ids));
     },
 
     /** payload: { device, ips, credentials, ports, numbers } — numbers holds only what changed. */
@@ -327,7 +346,7 @@ export async function createSupabaseStore(url, key) {
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
-      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers']) {
+      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'rig_positions', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
       }
       for (const table of ['meetings', 'meeting_notes', 'meeting_questions', 'meeting_answers']) {
@@ -379,6 +398,8 @@ function friendly(error) {
     [/streams_campus_id_embed_id_key/i, 'That player is already on this campus.'],
     [/cable_types_signal_end_a_end_b_key/i, 'That kind of cable is already listed.'],
     [/cables_(length_ft|quantity)_check/i, 'Check the length and the count.'],
+    [/rig_positions_room_id_name_key/i, 'There’s already a position with that name in this room.'],
+    [/rig_positions_name_check/i, 'Give the position a name (up to 60 characters).'],
     [/system_items_system_id_device_id_key/i, 'That item is already in this system.'],
     [/camera_builds_campus_id_number_key/i, 'That camera number is already set up at this location.'],
     [/haze_stock_campus_id_fluid_id_key/i, 'That fluid is already listed at this location.'],

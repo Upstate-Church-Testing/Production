@@ -146,6 +146,24 @@ IDs and repeated stage numbers, and treats two fixtures on exactly the same addr
 doubled on purpose. Gear › Patch is the patch sheet: one room at a time, universe by
 universe (1–100), with a fill-in table, or one universe across every location.
 
+## Rigging (Lighting › Rigging)
+
+A room's hanging positions, front of the room first: FOH Batten, Midstage Batten
+Center 1…, Upstage Batten Right. Each position lists what's mounted on it by model, one
+chip per light with its fixture ID over its patch (tap one to open it), and what in the
+room isn't on a position yet.
+
+- **Hang lights** on a position: check every light on it. A light on another position
+  moves here; unchecking takes it down. "Show all gear" lists more than lights, for a
+  speaker or camera on a batten.
+- **Edit positions**: add, rename, add notes (trim height, circuits), move toward the
+  front or back, delete. Deleting a position leaves its lights in the room, not on a position.
+- An item's editor has **Hung on** when its room has positions. Moving an item to
+  another room takes it down (the database does this, like it clears the patch).
+
+Harrison Bridge Worship Center: FOH Batten (the nine ColorSource Spots), Midstage Batten
+Center 1–3, Midstage Batten Left and Right, Upstage Batten Center, Left and Right.
+
 ## Gear: where things are, and what's missing (staff)
 
 Gear filters run Location → Room → Section → Category → Brand, so "North Auditorium,
@@ -188,7 +206,8 @@ campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Win
     ├── networks (subnet, VLAN, gateway, tags)
     │
     └── devices — one physical unit ("item" in the app): name, sections, serial, firmware, room, location, status,
-            │         asset #, stage #, fixture ID, patch (universe + address), DMX channels, projection (front or rear, projectors only)
+            │         asset #, stage #, fixture ID, patch (universe + address), DMX channels, projection (front or rear, projectors only),
+            │         position_id (the batten or truss it hangs on; same room only, cleared when it moves rooms)
             ├── device_ips (IP + mask, gateway, MAC, network, label, static/DHCP)
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)
@@ -211,6 +230,7 @@ pco_service_types ── pco_teams (shown or not; positions)
                                                           └─ pco_plan_items (the flow: songs, hosts, media, lengths, team notes)
 pco_live         one row the sync touches when anything changed (apps listen over realtime)
 
+rig_positions    a room's hanging positions (FOH Batten, Upstage Truss…): name, notes, sort_order front to back
 camera_builds    a location's camera positions (Cam N), in service or not; their gear is items with Spot "Cam N"
 systems ── system_items   gear that works together (an intercom), each member with its role
 haze_fluids ── haze_stock (bottles per location)     haze_checks (each look at a hazer's tank: level, filled, when)
@@ -238,6 +258,7 @@ js/views/cameras.js            Gear › Cameras: camera positions and the gear o
 js/views/systems.js            Gear › Systems: gear that works together, with roles
 js/views/cables.js             Cables: types by their ends, every length and label with a count
 js/views/patch.js              Gear › Patch: each room's patch by universe, the numbers table with quick fill, one universe across locations
+js/views/rigging.js            Lighting › Rigging: each room's positions front to back, what hangs on each, hang and edit sheets
 js/lighting.js                 patch parsing (1.333), footprints, overlap and duplicate checks
 js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)
 js/views/devices.js            the item panel and editor (shared by Network and Gear)
@@ -290,7 +311,7 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 ## Sidebar
 
 `NAV` in `js/app.js`: All gear (Cables), Audio, Video (Cameras), Lighting (Fixtures,
-Hazers, Patch), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Team),
+Hazers, Patch, Rigging), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
 860px) it's hidden: Tally at the top left slides it in as a panel, and picking a page

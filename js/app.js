@@ -44,6 +44,8 @@ const NAV = [
       { id: 'fixtures', label: 'Fixtures', minRole: 'staff', view: GearView, scope: { dep: 'lighting', cat: 'Fixture', modes: ['fixtures'] } },
       { id: 'hazers', label: 'Hazers', minRole: 'staff', view: GearView, scope: { modes: ['haze'] } },
       { id: 'patch', label: 'Patch', minRole: 'staff', view: GearView, scope: { modes: ['patch'] } },
+      // Rigging: each room's battens and trusses, front to back, and the lights on each.
+      { id: 'rigging', label: 'Rigging', minRole: 'staff', view: GearView, scope: { modes: ['rig'] } },
     ] },
   { id: 'network-gear', label: 'Network', menuLabel: 'All network', icon: 'network', minRole: 'staff', view: GearView,
     scope: { dep: 'network', modes: GEAR_TABS },

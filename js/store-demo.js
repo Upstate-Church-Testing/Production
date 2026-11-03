@@ -35,7 +35,7 @@ const PEOPLE = [
 
 // [campus, room, network, name, tags, category, model, location, ip, extra]
 function buildExample() {
-  const rooms = [], networks = [], devices = [], ips = [], creds = [], activity = [], types = [], typePorts = [], devPorts = [];
+  const rooms = [], networks = [], devices = [], ips = [], creds = [], activity = [], types = [], typePorts = [], devPorts = [], positions = [];
   const nums = (prefix, n, o) => Array.from({ length: n }, (_, i) => ({ name: `${prefix}${i + 1}`, ...o }));
   // Example port layouts and specs, keyed by type name.
   const PORTS = {
@@ -84,7 +84,7 @@ function buildExample() {
     const { manufacturer, model, category, networked, ...rest } = d;
     devices.push({ id, type_id: typeFor(d), campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null,
       serial_number: null, firmware: null, location: null, status: 'active', asset_no: null,
-      fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
+      fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, projection: null, position_id: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
     addr.forEach((a, i) => ips.push({ id: uid(), device_id: id, campus_id: 'c-' + code, network_id: a.net ? 'n-' + code + '-' + a.net : null,
       label: a.label || null, ip: a.ip || null, gateway: a.gw || null, mac: a.mac || null, hostname: null,
       mode: a.mode || 'static', notes: null, sort_order: i }));
@@ -198,6 +198,23 @@ function buildExample() {
   cam('RS-701 2', 'RS-701', 'Clear-Com', 'Intercom', 'Director', 'Broadcast');
   cam('ATEM 2 M/E Production Studio 4K', 'ATEM 2 M/E Production Studio 4K', 'Blackmagic', 'Switcher', 'Main rack', 'Broadcast', 'update');
 
+  // Rigging: battens and trusses front to back, and what hangs on each (by the item's spot here).
+  const rig = (code, roomName, names, hang = {}) => {
+    const rid = room(code, roomName);
+    names.forEach((name, i) => {
+      const id = uid();
+      positions.push({ id, campus_id: 'c-' + code, room_id: rid, name, sort_order: i, notes: null, created_at: ago(60 * 24), updated_at: ago(60 * 24), created_by: 'p-me', updated_by: 'p-me' });
+      for (const d of devices) if (d.room_id === rid && hang[name]?.(d)) d.position_id = id;
+    });
+  };
+  rig('SVL', W, ['FOH Batten', 'Downstage Truss', 'Midstage Truss', 'Upstage Truss', 'Upstage Wall'], {
+    'FOH Batten': (d) => d.location === 'FOH batten', 'Downstage Truss': (d) => d.location === 'Downstage truss',
+    'Midstage Truss': (d) => d.location === 'Midstage truss', 'Upstage Truss': (d) => d.location === 'Upstage truss', 'Upstage Wall': (d) => d.location === 'Upstage wall',
+  });
+  positions.find((p) => p.name === 'FOH Batten' && p.campus_id === 'c-SVL').notes = 'Over the front rows. Fly it in from the catwalk.';
+  rig('HB', W, ['FOH Batten', 'Midstage Batten Center 1', 'Midstage Batten Center 2', 'Midstage Batten Center 3', 'Midstage Batten Left', 'Midstage Batten Right',
+    'Upstage Batten Center', 'Upstage Batten Left', 'Upstage Batten Right']);
+
   // A little history so the device screen shows how it works.
   activity.push(
     { id: 1, at: ago(26), actor_id: 'p-bethany', action: 'updated', entity: 'devices', entity_id: cat, device_id: cat, campus_id: 'c-SVL', label: 'Catwalk Gateway', changes: { firmware: ['B1.0 V3.4', 'B1.0 V3.7'] } },
@@ -225,7 +242,7 @@ function buildExample() {
   numberAll(devices, rooms, types);
   types.forEach((t) => delete t.key);
 
-  return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts };
+  return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts, positions };
 }
 
 /** One asset # per item, UCP-000001 up, by location and room; fixtures named for their model (like the database). */
@@ -308,6 +325,13 @@ export function createDemoStore() {
     }
   }
 
+  /** What the database's position trigger does: moving rooms takes an item down; a position must be in its room. */
+  function hangCheck(dev, prev) {
+    const moved = prev && (prev.campus_id !== dev.campus_id || (prev.room_id || null) !== (dev.room_id || null));
+    if (moved && dev.position_id === prev.position_id) dev.position_id = null;
+    if (dev.position_id && db.positions.find((p) => p.id === dev.position_id)?.room_id !== dev.room_id) throw new Error('That position is in a different room.');
+  }
+
   const pco = createPcoDemo({ wait, clone, me, changed });
   let meetings = null;
   let gear = null;
@@ -337,7 +361,7 @@ export function createDemoStore() {
 
     async networkData() {
       await wait(160);
-      return clone({ rooms: db.rooms, networks: db.networks, devices: db.devices, ips: db.ips,
+      return clone({ rooms: db.rooms, networks: db.networks, devices: db.devices, ips: db.ips, positions: db.positions,
         types: db.types.map((t) => ({ ...t, ports: db.typePorts.filter((p) => p.type_id === t.id) })) });
     },
 
@@ -350,7 +374,7 @@ export function createDemoStore() {
       if (!tags.length) tags = [...type.departments];
       const fields = { type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(d.name) || type.name, departments: tags,
         serial_number: blank(d.serial_number), firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes),
-        ...('projection' in d ? { projection: blank(d.projection) } : {}) };
+        ...('projection' in d ? { projection: blank(d.projection) } : {}), ...('position_id' in d ? { position_id: d.position_id || null } : {}) };
       let dev = d.id ? db.devices.find((x) => x.id === d.id) : null;
       if (d.id && !dev) throw new Error('That item was deleted by someone else.');
       if (dev && dev.type_id !== type.id) {
@@ -361,13 +385,15 @@ export function createDemoStore() {
         const before = clone(dev);
         const next = { ...dev, ...fields };
         number(next, before, payload.numbers || {});
-        const keys = [...Object.keys(fields), ...NUMBER_KEYS];
+        hangCheck(next, before);
+        const keys = [...new Set([...Object.keys(fields), ...NUMBER_KEYS, 'position_id'])];
         const ch = diff(dev, next, keys);
         Object.assign(dev, next, { updated_at: now(), updated_by: me.id });
         if (Object.keys(ch).length) log('updated', 'devices', dev, ch);
       } else {
-        dev = { id: uid(), ...fields, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+        dev = { id: uid(), position_id: null, ...fields, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
         number(dev, null, payload.numbers || {});
+        hangCheck(dev, null);
         db.devices.push(dev);
         log('created', 'devices', dev, { name: dev.name });
       }
@@ -476,7 +502,7 @@ export function createDemoStore() {
       for (const n of names) {
         const dev = { id: uid(), type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(n) || type.name,
           departments: tags.length ? tags : [...type.departments], serial_number: null, firmware: null, location: blank(d.location),
-          status: d.status || 'active', notes: blank(d.notes), projection: blank(d.projection), ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
+          status: d.status || 'active', notes: blank(d.notes), projection: blank(d.projection), position_id: null, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
           created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
         number(dev, null);
         db.devices.push(dev);
@@ -519,6 +545,46 @@ export function createDemoStore() {
       }
       changed('devices');
       return staged.length;
+    },
+    // Rigging positions.
+    async savePosition(row) {
+      await wait(120);
+      const name = blank(row.name);
+      const cur = row.id ? db.positions.find((p) => p.id === row.id) : null;
+      if (row.id && !cur) throw new Error('That position was deleted by someone else.');
+      const roomId = row.room_id ?? cur?.room_id;
+      if ('name' in row && (!name || name.length > 60)) throw new Error('Give the position a name (up to 60 characters).');
+      if ('name' in row && db.positions.some((p) => p.id !== row.id && p.room_id === roomId && p.name.toLowerCase() === name.toLowerCase())) {
+        throw new Error('There’s already a position with that name in this room.');
+      }
+      const fields = { ...row, ...('name' in row ? { name } : {}), ...('notes' in row ? { notes: blank(row.notes) } : {}), updated_at: now(), updated_by: me.id };
+      delete fields.id;
+      if (cur) { Object.assign(cur, fields); changed('rig_positions'); return cur.id; }
+      const made = { id: uid(), sort_order: 0, notes: null, created_at: now(), created_by: me.id, ...fields };
+      db.positions.push(made);
+      changed('rig_positions');
+      return made.id;
+    },
+    async deletePosition(id) {
+      await wait(100);
+      db.positions = db.positions.filter((p) => p.id !== id);
+      db.devices.forEach((d) => { if (d.position_id === id) d.position_id = null; });
+      changed('rig_positions');
+    },
+    async setDevicePosition(ids, positionId) {
+      await wait(150);
+      const pos = positionId ? db.positions.find((p) => p.id === positionId) : null;
+      if (positionId && !pos) throw new Error('That position was deleted by someone else.');
+      for (const id of ids) {
+        const dev = db.devices.find((d) => d.id === id);
+        if (!dev) continue;
+        if (pos && pos.room_id !== dev.room_id) throw new Error('That position is in a different room.');
+        const next = positionId || null;
+        if ((dev.position_id || null) === next) continue;
+        log('updated', 'devices', dev, { position_id: [dev.position_id || null, next] });
+        Object.assign(dev, { position_id: next, updated_at: now(), updated_by: me.id });
+      }
+      changed('devices');
     },
     async deleteType(id) {
       await wait(150);
