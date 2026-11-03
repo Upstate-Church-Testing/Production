@@ -165,6 +165,10 @@ function buildExample() {
   dev('AND', W, { name: 'Lighting Console', departments: ['lighting'], category: 'Console', manufacturer: 'High End Systems', model: 'Hoglet 4', location: 'FOH', firmware: '4.2.0' });
 
   room('SVL', 'Chapel'); // a room with nothing in it yet
+  // A room group: E-Wing Offices holds Production Storage and an office.
+  const ewing = room('SVL', 'E-Wing Offices');
+  for (const name of ['Production Storage', 'Luken’s Office']) { const id = room('SVL', name); rooms.find((r) => r.id === id).group_id = ewing; }
+  for (let i = 1; i <= 2; i++) dev('SVL', 'Luken’s Office', { name: `HS5 ${i}`, departments: ['audio'], category: 'Speaker', manufacturer: 'Yamaha', model: 'HS5', networked: false, location: 'Desk' });
   // Hazers: lighting items in the Hazer category, so they keep a patch.
   dev('SVL', W, { name: 'ATMe', departments: ['lighting'], category: 'Hazer', manufacturer: 'MDG', model: 'ATMe', networked: false, location: 'Upstage', fixture_id: 901, patch_universe: 2, patch_address: 501 });
   dev('SVL', 'North Auditorium', { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
@@ -198,6 +202,7 @@ function buildExample() {
   activity.push(
     { id: 1, at: ago(26), actor_id: 'p-bethany', action: 'updated', entity: 'devices', entity_id: cat, device_id: cat, campus_id: 'c-SVL', label: 'Catwalk Gateway', changes: { firmware: ['B1.0 V3.4', 'B1.0 V3.7'] } },
     { id: 2, at: ago(60 * 5), actor_id: 'p-tom', action: 'updated', entity: 'devices', entity_id: ma, device_id: ma, campus_id: 'c-SVL', label: 'Lighting Console', changes: { model: ['HES HedgeHog 4X', 'grandMA3 compact XT'] } },
+    { id: 3, at: ago(60 * 26), actor_id: null, actor_name: 'Claude', action: 'updated', entity: 'devices', entity_id: cat, device_id: cat, campus_id: 'c-SVL', label: 'Catwalk Gateway', changes: { location: [null, 'Catwalk'] } },
   );
 
   patch(stageGw, 'DMX 1', 'Stage left floor', 'Universe 5');
@@ -544,11 +549,13 @@ export function createDemoStore() {
       db.ips.forEach((i) => { if (i.network_id === id) i.network_id = null; });
       changed('networks');
     },
-    async addRoom(campus_id, name) {
+    async addRoom(campus_id, name, group_id = null) {
       await wait(120);
       const existing = db.rooms.find((r) => r.campus_id === campus_id && r.name.toLowerCase() === name.toLowerCase());
       if (existing) return clone(existing);
-      const r = { id: uid(), campus_id, name, sort_order: db.rooms.length };
+      const g = group_id && db.rooms.find((r) => r.id === group_id);
+      if (g && (g.campus_id !== campus_id || g.group_id)) throw new Error('A room can only be part of a group at the same location.');
+      const r = { id: uid(), campus_id, name, sort_order: db.rooms.length, group_id: g ? g.id : null };
       db.rooms.push(r);
       changed('rooms');
       return clone(r);

@@ -7,7 +7,7 @@ import {
 } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet as openModelSheet, statusPill, kv } from './devices.js';
-import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
+import { ALL, dropdownHtml, wireDropdown, locationDropdown, wireFilterButton } from '../picker.js';
 
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
@@ -90,6 +90,7 @@ export function mount(el, ctx) {
   $$('[data-mode]', el).forEach((b) => b.addEventListener('click', () => { s.mode = b.dataset.mode; store('ucp.netmode', s.mode); draw(); }));
   const q = $('#q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); drawResults(); }, 120));
+  wireFilterButton($('.filter-bar', el), { page: el, clear: () => { s.campus = ctx.campus = ALL; s.q = ''; q.value = ''; s.dep = ALL; s.flag = ALL; ctx.netFilters = { dep: ALL, flag: ALL }; draw(); } });
 
   el.addEventListener('click', (e) => {
     const t = e.target.closest('[data-act], [data-open], [data-net], [data-copy]');

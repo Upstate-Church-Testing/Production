@@ -10,6 +10,7 @@ import {
 } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb, CATEGORIES } from './types.js';
 import { wireDropdown } from '../picker.js';
+import { roomSelectHtml, groupChoices, roomPath } from '../rooms.js';
 import {
   takesPatch, parsePatch, fmtPatch, patchOf, footprint, rigKey, rigProblems, problemText, nextFreeAddress, isProblem, MAX_UNIVERSE,
   assetTag, parseAsset, itemLabel, isFixtureType, ASSET_MAX,
@@ -213,8 +214,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   function renderView() {
     if (!dev) return;
     const ips = s.ix.ipsByDev.get(dev.id) || [];
-    const room = s.ix.room.get(dev.room_id)?.name;
-    const by = (pid) => ctx.people.get(pid)?.full_name || 'Someone';
+    const room = roomPath(s.ix.room.get(dev.room_id), s.ix.room);
+    const by = (pid, name) => ctx.people.get(pid)?.full_name || name || 'Someone';
     const ty = s.ix.type.get(dev.type_id);
     const patchable = takesPatch(dev, ty);
     sheet.render(`
@@ -275,7 +276,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <h3>${icon('history')}History</h3>
           <div id="hist"><p class="muted">Loading…</p></div>
         </section>
-        <p class="stamp">Added by ${esc(by(dev.created_by))} ${esc(timeAgo(dev.created_at))}${dev.updated_at && dev.updated_at !== dev.created_at ? ` · edited by ${esc(by(dev.updated_by))} ${esc(timeAgo(dev.updated_at))}` : ''}</p>
+        <p class="stamp">Added by ${esc(by(dev.created_by, dev.created_by_name))} ${esc(timeAgo(dev.created_at))}${dev.updated_at && dev.updated_at !== dev.created_at ? ` · edited by ${esc(by(dev.updated_by, dev.updated_by_name))} ${esc(timeAgo(dev.updated_at))}` : ''}</p>
       </div>
       <footer class="sh-foot">
         ${confirmDelete
@@ -384,7 +385,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   }
 
   function histItem(a) {
-    const who = ctx.people.get(a.actor_id)?.full_name || 'Someone';
+    const who = ctx.people.get(a.actor_id)?.full_name || a.actor_name || 'Someone';
     const thing = { devices: '', device_ips: 'IP ', device_credentials: 'login ', networks: 'network ', device_ports: 'port ' }[a.entity] ?? '';
     let what;
     if (a.entity === 'devices') what = a.action === 'created' ? 'added this item' : a.action === 'deleted' ? 'deleted this item' : 'changed';
@@ -470,7 +471,6 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
 
   function renderEdit(error = '') {
     const campusId = draft.campus_id;
-    const rooms = s.data.rooms.filter((r) => r.campus_id === campusId);
     const nets = s.data.networks.filter((n) => n.campus_id === campusId);
     const ty = s.ix.type.get(draft.type_id);
     const typeGroups = new Map();
@@ -531,11 +531,14 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
             <label class="field"><span>Location</span><select id="f-campus">${ctx.campuses.map((c) => `<option value="${c.id}" ${c.id === campusId ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select></label>
             <label class="field"><span>Room</span><select id="f-room">
               <option value="">No room</option>
-              ${rooms.map((r) => `<option value="${r.id}" ${r.id === draft.room_id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
+              ${roomSelectHtml(s.data.rooms, campusId, draft.room_id, esc)}
               <option value="__new" ${draft.room_id === '__new' ? 'selected' : ''}>＋ New room…</option>
             </select></label>
           </div>
-          ${draft.room_id === '__new' ? `<div class="inline-add"><input id="f-newroom" placeholder="Worship Center, North Auditorium, Kids…" aria-label="New room name"><button type="button" class="btn" data-a="add-room">Add room</button></div>` : ''}
+          ${draft.room_id === '__new' ? `<div class="inline-add new-room"><input id="f-newroom" placeholder="Worship Center, Luken’s Office, Kids…" aria-label="New room name">
+            <select id="f-newgroup" aria-label="Part of"><option value="">Not part of a group</option>${groupChoices(s.data.rooms, campusId).map((r) => `<option value="${r.id}">Part of ${esc(r.name)}</option>`).join('')}</select>
+            <button type="button" class="btn" data-a="add-room">Add room</button></div>
+            <small class="hint">Part of: a room inside a bigger area, like an office in E-Wing Offices. Most rooms aren’t part of anything.</small>` : ''}
           <label class="field"><span>Spot in the room</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Stage rack, Catwalk…"></label>
         </fieldset>
 
@@ -849,9 +852,10 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const input = $('#f-newroom', sheet.el);
     const name = input.value.trim();
     if (!name) return input.focus();
+    const group = $('#f-newgroup', sheet.el)?.value || null;
     collect();
     try {
-      const room = await ctx.store.addRoom(draft.campus_id, name);
+      const room = await ctx.store.addRoom(draft.campus_id, name, group);
       if (!s.data.rooms.some((r) => r.id === room.id)) s.data.rooms.push(room);
       s.ix.room.set(room.id, room);
       draft.room_id = room.id;

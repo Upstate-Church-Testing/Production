@@ -9,7 +9,8 @@
 // Search like you'd say it: "5-pin 25", "3-pin to 5-pin", "powercon 10".
 
 import { esc, icon, $, $$, debounce, storage, store, plural, pageTitle } from '../util.js';
-import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
+import { ALL, dropdownHtml, wireDropdown, locationDropdown, wireFilterButton } from '../picker.js';
+import { roomOptions as buildRoomOptions, roomMatches, optionValues, roomSelectHtml, roomWords } from '../rooms.js';
 
 export const SIGNALS = ['DMX', 'Audio', 'SDI', 'HDMI', 'Ethernet', 'Power', 'Other'];
 export const ENDS = ['XLR 3-pin male', 'XLR 3-pin female', 'XLR 5-pin male', 'XLR 5-pin female', 'PowerCon blue (in)', 'PowerCon white (out)',
@@ -19,7 +20,6 @@ const DEFAULT_ENDS = { DMX: ['XLR 5-pin male', 'XLR 5-pin female'], Audio: ['XLR
 export const LENGTHS = [3, 5, 10, 15, 20, 25, 30, 35, 50, 100];
 export const LABEL_COLORS = { Purple: '#a78bfa', Blue: '#4da3ff', Green: '#3dd68c', Orange: '#ff9f43', Red: '#ff6b6b', Yellow: '#f5d544',
   Pink: '#f472b6', White: '#f2f4f5', Gray: '#959ca5', Brown: '#a0703c', Black: '#26292e' };
-const NO_ROOM = '__none';
 const NO_LABEL = '__plain';
 const STOP = new Set(['to', '→', '->', '>', 'cable', 'cables', 'x', 'of', 'and']);
 
@@ -94,13 +94,7 @@ export function mount(el, ctx) {
   });
   function roomOptions() {
       const here = s.data ? s.data.cables.filter(inCampus) : [];
-      const by = new Map();
-      for (const c of here) {
-        const k = roomKey(c);
-        const o = by.get(k) || { value: k, label: k === NO_ROOM ? 'No room' : roomOf(c.room_id)?.name.trim(), count: 0 };
-        o.count += c.quantity; by.set(k, o);
-      }
-      return [{ value: ALL, label: 'All rooms', count: total(here) }, ...[...by.values()].sort((a, b) => (a.value === NO_ROOM) - (b.value === NO_ROOM) || a.label.localeCompare(b.label))];
+      return buildRoomOptions({ rooms: s.data?.rooms || [], items: here, countOf: total, allCount: total(here) });
   }
   const sigDd = wireDropdown($('#c-sig', el), {
     label: 'Signal', unit: ['cable', 'cables'], get: () => s.signal, set: (v) => { s.signal = v; draw(); }, options: () => sigOptions(),
@@ -123,6 +117,7 @@ export function mount(el, ctx) {
 
   const q = $('#c-q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim(); draw(); }, 120));
+  wireFilterButton($('.filter-bar', el), { page: el, clear: () => { s.campus = ctx.campus = ALL; s.q = ''; q.value = ''; s.room = ALL; s.signal = ALL; s.label = ALL; draw(); } });
   el.addEventListener('click', onClick);
   const unsubscribe = ctx.store.subscribe(debounce((table) => { if (!table || table === 'cables' || table === 'rooms') load(true); }, 300));
   // ---------------------------------------------------------------- data --
@@ -136,10 +131,10 @@ export function mount(el, ctx) {
   }
   function typeOf(c) { return s.data.types.find((t) => t.id === c.type_id); }
   function roomOf(id) { return s.data.rooms.find((r) => r.id === id); }
-  function roomKey(c) { const r = c.room_id && roomOf(c.room_id); return r ? r.name.trim().toLowerCase() : NO_ROOM; }
+  const roomsById = () => new Map(s.data.rooms.map((r) => [r.id, r]));
   function campusName(id) { return ctx.campusById.get(id)?.short_name || 'Unknown location'; }
   function inCampus(c) { return s.campus === ALL || c.campus_id === s.campus; }
-  function inRoom(c) { return s.room === ALL || roomKey(c) === s.room; }
+  function inRoom(c) { return s.room === ALL || roomMatches(s.room, c.room_id ? roomOf(c.room_id) : null, roomsById()); }
   function inSignal(c) { return s.signal === ALL || typeOf(c)?.signal === s.signal; }
   function inLabel(c) { return s.label === ALL || (s.label === NO_LABEL ? !c.labeled : c.labeled && (c.label_color || 'No color') === s.label); }
   function sigOrder(g) { const i = SIGNALS.indexOf(g); return i < 0 ? SIGNALS.length : i; }
@@ -153,7 +148,7 @@ export function mount(el, ctx) {
     const dir = /(\S+)\s+(?:to|→|->|>)\s+(\S+)/.exec(text);
     if (dir && !(norm(t.end_a).includes(dir[1]) && norm(t.end_b).includes(dir[2]))) return false;
     const hay = norm([t.signal, t.end_a, t.end_b, t.name, cableName(t), labelText(c), c.labeled ? 'elite core label labeled' : 'no label unlabeled plain',
-      c.notes, t.notes, campusName(c.campus_id), ctx.campusById.get(c.campus_id)?.name, roomOf(c.room_id)?.name, `${Number(c.length_ft)}ft`].filter(Boolean).join(' '));
+      c.notes, t.notes, campusName(c.campus_id), ctx.campusById.get(c.campus_id)?.name, ...roomWords(roomOf(c.room_id), roomsById()), `${Number(c.length_ft)}ft`].filter(Boolean).join(' '));
     return text.split(/\s+/).filter((w) => w && !STOP.has(w)).every((w) => {
       if (/^\d+(\.\d+)?$/.test(w)) return Number(w) === Number(c.length_ft) || hay.includes(`${w}-pin`);
       if (/^\d+(\.\d+)?ft$/.test(w)) return Number(w.slice(0, -2)) === Number(c.length_ft);
@@ -175,7 +170,7 @@ export function mount(el, ctx) {
     }
     if (!s.data) return;
     // Each filter stays valid for the ones before it.
-    if (!roomOptions().some((o) => o.value === s.room)) s.room = ALL;
+    if (!optionValues(roomOptions()).includes(s.room)) s.room = ALL;
     if (!sigOptions().some((o) => o.value === s.signal)) s.signal = ALL;
     if (!labOptions().some((o) => o.value === s.label)) s.label = ALL;
     loc.update(); roomDd.update(); sigDd.update(); labDd.update();
@@ -283,14 +278,13 @@ export function mount(el, ctx) {
 
   const head = (eyebrow, title, sub = '') => `<header class="sh-head"><div class="sh-top"><span class="eyebrow">${esc(eyebrow)}</span><button class="icon-btn" data-close aria-label="Close">${icon('close')}</button></div><h2>${esc(title)}</h2>${sub ? `<p class="sh-sub">${esc(sub)}</p>` : ''}</header>`;
   const fail = (sheet, err, btn) => { const m = $('.form-msg', sheet.el); m.textContent = err.message || err; m.classList.add('bad'); if (btn) btn.disabled = false; };
-  const roomsAt = (campusId) => s.data.rooms.filter((r) => r.campus_id === campusId).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name));
   const defaultCampus = () => (s.campus !== ALL ? s.campus : ctx.me?.home_campus_id || ctx.campuses[0]?.id);
 
   /** Where + label fields, shared by Add and Edit. */
   function placeFields(v) {
     return `<div class="grid2">
         <label class="field"><span>Location</span><select id="cb-campus">${ctx.campuses.map((c) => `<option value="${c.id}" ${c.id === v.campus_id ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select></label>
-        <label class="field"><span>Room</span><select id="cb-room"><option value="">No room</option>${roomsAt(v.campus_id).map((r) => `<option value="${r.id}" ${r.id === v.room_id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>Room</span><select id="cb-room"><option value="">No room</option>${roomSelectHtml(s.data.rooms, v.campus_id, v.room_id, esc)}</select></label>
       </div>
       <div class="field"><span>Label</span>
         <button type="button" class="switch" role="switch" id="cb-labeled" aria-checked="${!!v.labeled}"><span class="switch-track"><i></i></span>Elite Core label</button>
@@ -301,7 +295,7 @@ export function mount(el, ctx) {
     sheet.el.addEventListener('change', (e) => {
       if (e.target.id !== 'cb-campus') return;
       v.campus_id = e.target.value; v.room_id = '';
-      $('#cb-room', sheet.el).innerHTML = `<option value="">No room</option>${roomsAt(v.campus_id).map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('')}`;
+      $('#cb-room', sheet.el).innerHTML = `<option value="">No room</option>${roomSelectHtml(s.data.rooms, v.campus_id, null, esc)}`;
     });
     sheet.el.addEventListener('click', (e) => {
       if (e.target.closest('#cb-labeled')) {

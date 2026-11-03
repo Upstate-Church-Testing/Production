@@ -156,8 +156,8 @@ export async function createSupabaseStore(url, key) {
     async deleteNetwork(id) {
       ok(await sb.from('networks').delete().eq('id', id));
     },
-    async addRoom(campus_id, name) {
-      return ok(await sb.from('rooms').insert({ campus_id, name }).select('*').single());
+    async addRoom(campus_id, name, group_id = null) {
+      return ok(await sb.from('rooms').insert({ campus_id, name, group_id: group_id || null }).select('*').single());
     },
 
     async streams() {

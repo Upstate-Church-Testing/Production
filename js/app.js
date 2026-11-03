@@ -236,15 +236,22 @@ function renderShell() {
   appEl().innerHTML = `
     ${ctx.store.mode === 'demo' ? `<div class="demo-bar" role="note">Preview with example data. Nothing is saved.</div>` : ''}
     <div class="shell">
-      <nav class="nav" aria-label="Sections"></nav>
+      <nav class="nav" id="app-nav" aria-label="Sections"></nav>
+      <div class="nav-scrim" hidden></div>
       <div class="main">
         <header class="topbar">
-          <span class="brand">${brandMark()}<span class="brand-name">${esc(APP_NAME)}</span></span>
+          <button type="button" class="brand menu-btn" aria-controls="app-nav" aria-expanded="false" aria-label="Menu">${brandMark()}<span class="brand-name">${esc(APP_NAME)}</span></button>
         </header>
         <main id="view" tabindex="-1"></main>
       </div>
     </div>`;
   renderNav();
+  // Phones and small iPads: Tally (top left) slides the sidebar in.
+  $('.menu-btn').addEventListener('click', (e) => {
+    lastPointer = e.pointerType || (e.detail === 0 ? 'keyboard' : 'touch');
+    setRail(!$('.nav').classList.contains('is-open'));
+    if (e.detail === 0) $('.nav a.on, .nav .nav-item')?.focus({ preventScroll: true }); // from the keyboard: into the menu
+  });
 }
 
 // The sidebar's open dropdown: one at a time, so the list stays short. It's the
@@ -311,11 +318,12 @@ function markNav() {
   resetGroups();
 }
 
-// ------------------------------------------------- sidebar: rail and menus --
+// ------------------------------------------------------ sidebar: rail and panel --
 // From 860px wide the sidebar is a rail of icons. With a mouse it opens while
 // the pointer is over it and closes when it leaves; on a touchscreen (iPad) the
-// first tap opens it, picking a page closes it. On phones it's the tab bar, and a
-// group with pages under it opens a small menu above the bar.
+// first tap opens it, picking a page closes it. Narrower than that it's hidden:
+// Tally at the top left slides it in, and picking a page (or tapping beside it)
+// slides it away.
 
 const railMQ = matchMedia('(min-width: 860px)');
 let railTimer = null;
@@ -326,7 +334,11 @@ function setRail(open) {
   const nav = $('.nav');
   if (!nav || nav.classList.contains('is-open') === open) return;
   nav.classList.toggle('is-open', open);
-  document.documentElement.classList.toggle('rail-open', open && lastPointer !== 'mouse');
+  const dim = open && (!railMQ.matches || lastPointer !== 'mouse');
+  document.documentElement.classList.toggle('rail-open', dim);
+  const scrim = $('.nav-scrim');
+  if (scrim) scrim.hidden = !dim;
+  $('.menu-btn')?.setAttribute('aria-expanded', String(open));
   if (!open) { $('.nav-items', nav)?.scrollTo({ top: 0 }); resetGroups(); }
 }
 
@@ -352,67 +364,36 @@ function wireNav(nav) {
     const t = e.target.closest('a, button');
     if (!t) return;
     const group = t.closest('.nav-group');
-    if (railMQ.matches) {
-      // A tap on the closed rail just opens it, with that group's pages showing.
-      if (!nav.classList.contains('is-open') && lastPointer !== 'mouse') {
-        e.preventDefault();
-        setRail(true);
-        if (group?.classList.contains('has-kids')) setGroupOpen(group.dataset.group, true);
-        return;
-      }
-      if (t.dataset.toggle) {
-        e.preventDefault();
-        setGroupOpen(t.dataset.toggle, !openGroups.has(t.dataset.toggle));
-        return;
-      }
-      if (t.matches('a') && lastPointer !== 'mouse') setTimeout(() => setRail(false), 0);
+    // A tap on the closed rail just opens it, with that group's pages showing.
+    if (railMQ.matches && !nav.classList.contains('is-open') && lastPointer !== 'mouse') {
+      e.preventDefault();
+      setRail(true);
+      if (group?.classList.contains('has-kids')) setGroupOpen(group.dataset.group, true);
       return;
     }
-    // Phone tab bar: a group with pages under it opens its menu.
-    if (group?.classList.contains('has-kids') && t.closest('.nav-head')) {
+    if (t.dataset.toggle) {
       e.preventDefault();
-      toggleNavMenu(group);
+      setGroupOpen(t.dataset.toggle, !openGroups.has(t.dataset.toggle));
+      return;
     }
+    // Picking a page closes the panel (and the rail after a tap).
+    if (t.matches('a') && (!railMQ.matches || lastPointer !== 'mouse')) setTimeout(() => setRail(false), 0);
   });
   if (!wireNav.once) {
     wireNav.once = true; // these are on the page, so only once ever
     // Tapping the page beside an opened rail closes it.
+    // Tapping beside an open panel or rail closes it.
     document.addEventListener('pointerdown', (e) => {
       const n = $('.nav');
-      if (n?.classList.contains('is-open') && !n.contains(e.target)) setRail(false);
-      if (!e.target.closest('.nav-pop, .nav')) closeNavMenu();
+      if (n?.classList.contains('is-open') && !n.contains(e.target) && !e.target.closest('.menu-btn')) setRail(false);
     });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeNavMenu(); setRail(false); } });
-    railMQ.addEventListener?.('change', () => { closeNavMenu(); setRail(false); });
-    window.addEventListener('resize', closeNavMenu);
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !$('.nav')?.classList.contains('is-open')) return;
+      setRail(false);
+      if (!railMQ.matches) $('.menu-btn')?.focus({ preventScroll: true });
+    });
+    railMQ.addEventListener?.('change', () => setRail(false));
   }
-}
-
-function closeNavMenu() {
-  $('.nav-pop')?.remove();
-  $$('.nav-group.menu-open').forEach((g) => g.classList.remove('menu-open'));
-}
-
-function toggleNavMenu(groupEl) {
-  const was = groupEl.classList.contains('menu-open');
-  closeNavMenu();
-  if (was) return;
-  const g = visibleNav().find((x) => x.id === groupEl.dataset.group);
-  if (!g) return;
-  const items = [...(g.folder ? [] : [{ id: g.id, label: g.menuLabel || g.label }]), ...g.children];
-  const pop = document.createElement('div');
-  pop.className = 'nav-pop';
-  pop.setAttribute('role', 'menu');
-  pop.setAttribute('aria-label', g.label);
-  pop.innerHTML = `<p class="nav-pop-h">${esc(g.label)}</p>${items.map((x) => `<a role="menuitem" href="#${x.id}" class="${x.id === current?.id ? 'on' : ''}">${esc(x.label)}${x.id === current?.id ? icon('check') : ''}</a>`).join('')}`;
-  pop.addEventListener('click', (e) => { if (e.target.closest('a')) closeNavMenu(); });
-  document.body.appendChild(pop);
-  groupEl.classList.add('menu-open');
-  // Sit above the tab, kept on screen.
-  const tab = groupEl.getBoundingClientRect();
-  const w = pop.offsetWidth;
-  pop.style.left = `${Math.round(Math.min(window.innerWidth - w - 12, Math.max(12, tab.left + tab.width / 2 - w / 2)))}px`;
-  requestAnimationFrame(() => pop.classList.add('in'));
 }
 
 function goWith(mod, pending) {
@@ -424,7 +405,7 @@ function goWith(mod, pending) {
 function onHash() {
   if (!ctx.me || !$('#view')) return;
   if (/access_token|type=/.test(location.hash)) return;
-  closeNavMenu();
+  if (!railMQ.matches) setRail(false);
   const pages = visiblePages();
   const want = location.hash.replace('#', '');
   const page = pages.find((m) => m.id === want) || pages[0];

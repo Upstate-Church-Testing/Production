@@ -10,13 +10,13 @@ import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATU
 import { patchView } from './patch.js';
 import { takesPatch, patchOf, footprint, patchPoint, covers, assetTag, assetWords } from '../lighting.js';
 import { preparePhoto } from '../photo.js';
-import { ALL, dropdownHtml, wireDropdown, locationDropdown } from '../picker.js';
+import { ALL, dropdownHtml, wireDropdown, locationDropdown, wireFilterButton } from '../picker.js';
+import { roomOptions as buildRoomOptions, roomMatches, roomFilterLabel, optionValues as flatValues, roomWords, NO_ROOM } from '../rooms.js';
 import { hazeView } from './haze.js';
 import { camerasView, camNumber } from './cameras.js';
 import { systemsView } from './systems.js';
 
 const NO_BRAND = '__none';
-const NO_ROOM = '__none';
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
 const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
@@ -38,7 +38,7 @@ export function mount(el, ctx) {
     dep: lock.dep || (shared ? ctx.gearFilters.dep : ALL), // Section: audio, video, lighting, network
     cat: lock.cat || (shared ? ctx.gearFilters.cat : ALL),
     brand: shared ? ctx.gearFilters.brand : ALL,
-    room: (shared && ctx.gearFilters.room) || ALL, // a room name, so "Storage" works across locations too
+    room: (shared && ctx.gearFilters.room) || ALL, // a room name ("Storage" works across locations) or a room group
     mode: storage(modeKey, tabs[0]),
     gridRooms: storage('ucp.gridrooms', false), // grid: one column per room instead of per location
     campus: ctx.campus,           // shared with Network and Statistics; All on every launch
@@ -161,6 +161,8 @@ export function mount(el, ctx) {
   });
   const q = $('#g-q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); draw(); }, 120));
+  // Phones: one Filters button opens every filter (and Models | Items | Grid…) on a page of its own.
+  wireFilterButton($('.filter-bar', el), { page: el, clear: () => { s.campus = ctx.campus = ALL; clearFilters(); } });
   const patch = patchView({
     s, ctx, typeOf: (d) => typeOf(d), matches: (d) => patchMatches(d), openModel: (id) => openModel(id), load: (quiet) => load(quiet),
     setCampus: (id) => { s.campus = ctx.campus = id; loc.update(); draw(); window.scrollTo({ top: 0 }); },
@@ -248,50 +250,32 @@ export function mount(el, ctx) {
   }
 
   function inCampus(d) { return s.campus === 'all' || d.campus_id === s.campus; }
-  /** Rooms go by name, so "Storage" picks every storage room when all locations are showing. */
-  function roomKey(d) { const r = d.room_id && s.ix.room.get(d.room_id); return r ? r.name.trim().toLowerCase() : NO_ROOM; }
-  function inRoom(d) { return s.room === ALL || roomKey(d) === s.room; }
+  /** Rooms go by name, so "Storage" picks every storage room when all locations are showing;
+   *  a room group ("E-Wing Offices") picks every room in it. */
+  function inRoom(d) { return roomMatches(s.room, d.room_id ? s.ix.room.get(d.room_id) : null, s.ix.room); }
   /** At the picked location and room. */
   function inPlace(d) { return inCampus(d) && inRoom(d); }
-  function roomLabel() {
-    if (s.room === ALL) return '';
-    if (s.room === NO_ROOM) return 'no room';
-    const r = s.data.rooms.find((x) => x.name.trim().toLowerCase() === s.room);
-    return r ? r.name.trim() : s.room;
-  }
+  function roomLabel() { return roomFilterLabel(s.room, s.data.rooms); }
   /** "Simpsonville", "Simpsonville · Storage" or "every Storage". */
   function placeName() {
     const room = roomLabel();
     if (s.campus === ALL) return room ? (s.room === NO_ROOM ? 'items with no room' : `every ${room}`) : 'any location';
     return room ? `${campusName(s.campus)} · ${s.room === NO_ROOM ? 'No room' : room}` : campusName(s.campus);
   }
-  /** Room pill: the rooms at the picked location (by name across all of them), with counts. */
+  /** Room pill: the rooms at the picked location (by name across all of them), with counts.
+   *  A room group is one entry holding its rooms. */
   function roomOptions() {
     if (!s.data) return [{ value: ALL, label: 'All rooms' }];
     const items = itemMode();
     const here = s.data.devices.filter((d) => inCampus(d) && itemInScope(d) && (s.mode !== 'patch' || takesPatch(d, typeOf(d))));
-    const by = new Map();
-    for (const d of here) {
-      const k = roomKey(d);
-      let o = by.get(k);
-      if (!o) {
-        const r = s.ix.room.get(d.room_id);
-        by.set(k, (o = { value: k, label: k === NO_ROOM ? 'No room' : r.name.trim(), sort: r?.sort_order ?? 999, n: 0, types: new Set() }));
-      }
-      o.n += 1;
-      o.types.add(d.type_id);
-    }
-    // With one location picked, every room there shows up, even one with nothing in it yet (like a new Chapel).
-    if (s.campus !== ALL && s.mode !== 'patch') {
-      for (const r of s.data.rooms.filter((x) => x.campus_id === s.campus)) {
-        const k = r.name.trim().toLowerCase();
-        if (!by.has(k)) by.set(k, { value: k, label: r.name.trim(), sort: r.sort_order ?? 999, n: 0, types: new Set() });
-      }
-    }
-    const all = items ? here.length : s.campus === ALL ? scopeTypes().length : new Set(here.map((d) => d.type_id)).size;
-    const list = [...by.values()].sort((a, b) => (a.value === NO_ROOM) - (b.value === NO_ROOM)
-      || (s.campus === ALL ? b.n - a.n : a.sort - b.sort) || a.label.localeCompare(b.label));
-    return [{ value: ALL, label: 'All rooms', count: all }, ...list.map((o) => ({ value: o.value, label: o.label, count: items ? o.n : o.types.size }))];
+    const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
+    return buildRoomOptions({
+      rooms: s.data.rooms, items: here, countOf,
+      // With one location picked, every room there shows up, even one with nothing in it yet (like a new Chapel).
+      emptyAt: s.campus !== ALL && s.mode !== 'patch' ? s.campus : null,
+      byCount: s.campus === ALL,
+      allCount: items ? here.length : s.campus === ALL ? scopeTypes().length : countOf(here),
+    });
   }
   function campusName(id) { return ctx.campusById.get(id)?.short_name || 'Unknown campus'; }
   function campusWords(id) { const c = ctx.campusById.get(id); return c ? [c.short_name, c.name, c.code] : []; }
@@ -356,7 +340,7 @@ export function mount(el, ctx) {
     if (!s.q) return true;
     if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
-    return words([d.name, d.location, d.serial_number, d.firmware, d.notes, s.ix.room.get(d.room_id)?.name, ...campusWords(d.campus_id),
+    return words([d.name, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id),
       t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
   }
 
@@ -387,7 +371,9 @@ export function mount(el, ctx) {
     $('.add-desktop', el).hidden = own;
     $('.fab', el).hidden = own;
     $('.fab', el).setAttribute('aria-label', addLabel);
-    q.placeholder = s.mode === 'fixtures' ? 'Search model, fixture ID, patch ID (2.041) or asset # (UCP-000123)'
+    q.placeholder = matchMedia('(max-width: 699px)').matches // phones: short, beside the Filters button
+      ? (s.mode === 'fixtures' ? 'Search fixtures' : s.mode === 'patch' ? 'Search the patch' : s.mode === 'models' ? 'Search items' : 'Search models')
+      : s.mode === 'fixtures' ? 'Search model, fixture ID, patch ID (2.041) or asset # (UCP-000123)'
       : s.mode === 'patch' ? 'Search fixture, fixture ID or patch (2.041)'
       : s.mode === 'models' ? 'Search name, model, fixture ID, patch, IP' : 'Search model, brand, port, location';
     el.classList.toggle('is-grid', s.mode === 'grid');
@@ -427,7 +413,7 @@ export function mount(el, ctx) {
     loc.update(); roomDd.update(); depDd.update(); catDd.update(); brandDd.update();
   }
   function optionValues(dd) {
-    if (dd === roomDd) return roomOptions().map((o) => o.value);
+    if (dd === roomDd) return flatValues(roomOptions());
     if (dd === depDd) return ctx.departments.map((d) => d.slug);
     const pool = poolHere().filter((x) => s.mode === 'patch' || inDep(x.departments));
     if (dd === catDd) return pool.map((x) => catOf(typeFor(x)));
@@ -783,7 +769,7 @@ export function mount(el, ctx) {
       const campusOrder = ctx.campuses.filter((c) => byCampus.has(c.id));
       const firstIp = (u) => { const ip = s.data.ips.find((i) => i.device_id === u.id && i.ip); return ip ? splitInet(ip.ip).addr : ''; };
       const room = (u) => s.data.rooms.find((r) => r.id === u.room_id)?.name;
-      const by = (pid) => ctx.people.get(pid)?.full_name || 'Someone';
+      const by = (pid, name) => ctx.people.get(pid)?.full_name || name || 'Someone';
       const roomOrder = (u) => { const n = room(u) || ''; return /storage/i.test(n) || !n ? 2 : /^worship/i.test(n) ? 0 : 1; };
       for (const list of byCampus.values()) {
         list.sort((a, b) => roomOrder(a) - roomOrder(b) || (room(a) || '').localeCompare(room(b) || '')
@@ -834,7 +820,7 @@ export function mount(el, ctx) {
           </section>
           ${t.manual_url ? `<a class="btn" href="${esc(t.manual_url)}" target="_blank" rel="noopener">${icon('open')}Open manual</a>` : ''}
           ${t.notes ? `<p class="notes">${esc(t.notes)}</p>` : ''}
-          <p class="stamp">Added by ${esc(by(t.created_by))} ${esc(timeAgo(t.created_at))}${t.updated_at !== t.created_at ? ` · edited by ${esc(by(t.updated_by))} ${esc(timeAgo(t.updated_at))}` : ''}</p>
+          <p class="stamp">Added by ${esc(by(t.created_by, t.created_by_name))} ${esc(timeAgo(t.created_at))}${t.updated_at !== t.created_at ? ` · edited by ${esc(by(t.updated_by, t.updated_by_name))} ${esc(timeAgo(t.updated_at))}` : ''}</p>
         </div>
         <footer class="sh-foot">
           ${confirmDelete

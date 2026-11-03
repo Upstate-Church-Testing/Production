@@ -181,7 +181,7 @@ matters), "powercon 10", "purple".
 ## Data model
 
 ```
-campuses ── rooms
+campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Wing Offices)
     │
     ├── streams (a campus's Resi web player: embed id + type; status comes from Resi live)
     │
@@ -201,7 +201,7 @@ device_types     the shared catalog entry ("model" in the app): name, brand, mod
 departments      audio / video / lighting / network — the section tag on every item
 profiles         one per login: role, teams, home campus, matched Planning Center person
 volunteers       everyone on the production teams (no login): Planning Center link, lanyard (+ when/by whom), tags, notes, home location
-activity         every change: who, when, old → new (passwords never copied)
+activity         every change: who, when, old → new (passwords never copied); actor_name = "Claude" for Claude's changes
 
 pco_connection   the one Planning Center connection (token secret in Vault; the app can't read this table)
 pco_service_types ── pco_teams (shown or not; positions)
@@ -244,7 +244,8 @@ js/views/devices.js            the item panel and editor (shared by Network and 
 js/views/types.js              the model editor (shared by Gear and the item editor)
 js/views/team.js               people and access
 js/views/stats.js              Statistics: gear and network numbers for one location or all of them
-js/picker.js                   the filter dropdowns and their menus (location, section, category, brand…)
+js/picker.js                   the filter dropdowns and their menus (location, section, category, brand…), and the phone Filters page
+js/rooms.js                    room groups: the Room filter's entries, matching, the grouped room picker
 js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on
@@ -263,6 +264,21 @@ tools/stamp.py                 run before each publish; open copies reload thems
 tools/build_preview.py         one-file preview with example data
 ```
 
+## Changes Claude makes
+
+Claude edits the live database directly, without signing in, so a change has no
+person on it. Every SQL call Claude runs starts with
+
+```sql
+select set_config('app.actor', 'Claude', true);
+```
+
+which lasts for that one call. History then says **Claude** (`activity.actor_name`),
+and items and models say "Added by Claude" / "edited by Claude"
+(`created_by_name`, `updated_by_name`). A change with no signed-in person and no
+marker still says "Someone"; nothing is guessed. Everything with no name from
+Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
+
 ## Adding a section
 
 1. Add tables in a new migration with `departments text[]`, the `stamp` and
@@ -276,9 +292,24 @@ tools/build_preview.py         one-file preview with example data
 `NAV` in `js/app.js`: All gear (Cables), Audio, Video (Cameras), Lighting (Fixtures,
 Hazers, Patch), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
-mouse is over it; on an iPad the first tap opens it; on a phone it's the tab bar, and
-a group opens a menu of its pages. Audio, Video, Lighting, Fixtures and the rest are the
+mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
+860px) it's hidden: Tally at the top left slides it in as a panel, and picking a page
+or tapping beside it slides it away. Audio, Video, Lighting, Fixtures and the rest are the
 Gear view opened with a `scope`: the section (and category) it's locked to and its tabs.
+
+**Filters on phones** (under 700px): Gear, Network and Cables show one **Filters** button
+beside the search instead of the row of dropdowns. It opens a full page with the view
+tabs (Models | Items | Grid…) and every filter as taps; **Show N items** goes back to the
+list. The Tally bar and the search + Filters bar stay at the top while you scroll
+(`wireFilterButton` in `js/picker.js`).
+
+## Room groups
+
+A room can be part of a bigger area at the same location (`rooms.group_id`, one level):
+at Simpsonville, **E-Wing Offices** holds Production Storage and Luken's Office. Most
+rooms aren't part of anything. In the Room filter a group is one entry: pick it for
+everything in it, or open it for one room. The item editor lists a group's rooms under
+it, and "New room…" has a **Part of** choice. Helpers are in `js/rooms.js`.
 
 ## Setting it up
 
