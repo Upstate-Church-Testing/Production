@@ -197,7 +197,7 @@ Hazer" or "Lighting, Simpsonville, Lighting Storage, Fixture" is a few taps each
   under "Fixture".
 - **Cameras**: each location's camera positions (Cam 1…N), in service or out of
   commission, with the gear on each one (any item whose Spot is "Cam 3").
-- **Systems**: gear that works together wherever it sits, like the Clear-Com intercom
+- **Systems** (Logistics › Systems): gear that works together wherever it sits, like the Clear-Com intercom
   (main station in Broadcast, packs on every camera), each piece with what it does.
 
 ## Cables (staff)
@@ -266,10 +266,10 @@ js/app.js                      sign-in, roles, the sidebar (NAV) and pages, shee
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Models, Items (every unit A–Z), Grid (models × locations or rooms, like the old lighting sheet), Patch, Haze, Cameras and Systems, filtered by location, room, section, category and brand
+js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, position, category, used as and brand. Grid (models × locations or rooms) is built but not offered for now
 js/views/haze.js               Gear › Haze: hazers, tank checks, fluid bottles per location
 js/views/cameras.js            Gear › Cameras: camera positions and the gear on each
-js/views/systems.js            Gear › Systems: gear that works together, with roles
+js/views/systems.js            Logistics › Systems: gear that works together, with roles
 js/views/cables.js             Cables: types by their ends, every length and label with a count
 js/views/patch.js              Gear › Patch: each room's patch by universe, the numbers table with quick fill, one universe across locations
 js/views/rigging.js            Lighting › Rigging: each room's positions front to back, what hangs on each, hang and edit sheets
@@ -325,16 +325,17 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 ## Sidebar
 
 `NAV` in `js/app.js`: All gear (Cables), Audio, Video (Cameras), Lighting (Fixtures,
-Hazers, Patch, Rigging), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Team),
+Hazers, Patch, Rigging), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Systems, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
 860px) it's hidden: Tally at the top left slides it in as a panel, and picking a page
 or tapping beside it slides it away. Audio, Video, Lighting, Fixtures and the rest are the
-Gear view opened with a `scope`: the section (and category) it's locked to and its tabs.
+Gear view opened with a `scope`: the department (and category) it's locked to and its tabs.
+All gear and the department pages have two tabs, Models and Items.
 
 **Filters on phones** (under 700px): Gear, Network and Cables show one **Filters** button
 beside the search instead of the row of dropdowns. It opens a full page with the view
-tabs (Models | Items | Grid…) on one row and each filter as a pill showing its choice;
+tabs (Models | Items) on one row and each filter as a pill showing its choice;
 tap a pill to open its choices as a list (one choice per row, the current one checked,
 one pill open at a time), and picking one closes it again. Each
 filter only offers what fits the ones above it: pick Simpsonville and Room lists

@@ -23,7 +23,7 @@ const NO_USE = '__nouse';  // Used as filter: items not set yet
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
 const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', rig: 'Rigging', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
-const ALL_GEAR_TABS = ['types', 'models', 'grid', 'systems'];
+const ALL_GEAR_TABS = ['types', 'models']; // Grid is built but not offered for now; Systems is its own page under Logistics
 
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section

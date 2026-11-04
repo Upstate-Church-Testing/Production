@@ -23,7 +23,8 @@ export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunte
 // address (#fixtures). Gear pages are the Gear view opened on one section,
 // category or tab: `scope` says which, and the Section/Category filters it
 // locks are hidden there. Pages show for anyone at or above `minRole`.
-const GEAR_TABS = ['types', 'models', 'grid'];
+// Grid is built (gear.js drawGrid) but not offered for now: Models and Items only.
+const GEAR_TABS = ['types', 'models'];
 const NAV = [
   { id: 'gear', label: 'All gear', short: 'Gear', icon: 'box', minRole: 'staff', view: GearView, title: 'All gear',
     scope: null, // the whole Gear view, filters and all
@@ -58,6 +59,8 @@ const NAV = [
       { id: 'meetings', label: 'Meetings', icon: 'chat', minRole: 'staff', view: MeetingsView },
       { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
       { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
+      // Systems: gear that works together (an intercom). The Gear view on its one tab.
+      { id: 'systems', label: 'Systems', icon: 'link', minRole: 'staff', view: GearView, scope: { modes: ['systems'] } },
       { id: 'team', label: 'Team', icon: 'team', minRole: 'staff', view: TeamView },
     ] },
 ];
