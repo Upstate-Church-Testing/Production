@@ -166,13 +166,18 @@ Center 1–3, Midstage Batten Left and Right, Upstage Batten Center, Left and Ri
 
 ## Gear: where things are, and what's missing (staff)
 
-Gear filters run Department → Location → Room → Position → Category → Used as → Brand,
+Gear filters run Department → Location → Room → Spot → Position → Category → Used as → Brand,
 each narrowing the ones after it. Department (Audio, Video, Lighting, Network; called
 "section" before) comes first because most people look in their own: pick Audio and
 Location, Room and Category only offer what audio has. "Lighting, North Auditorium,
 Hazer" or "Lighting, Simpsonville, Lighting Storage, Fixture" is a few taps each. Picking a room with all locations showing picks that room everywhere (every
 "Worship Center"). With one location picked, every room there is listed, even an empty one.
 
+- **Spot** is where in the room: FOH rack, Stage rack, CG, House left… (the item's "Spot in
+  the room"). It shows once a location or room is picked: Five Forks › Worship Center ›
+  FOH rack is just what's in that rack. With All locations and a room picked, "FOH rack"
+  is every Worship Center's FOH rack. Spots match regardless of capitals; "No spot" lists
+  what doesn't have one.
 - **Position** is what an item makes possible: CG, Director, Switcher, Audio, Lighting,
   Camera… An item can be in more than one. Position CG shows everything behind CG at every
   location: the Mac minis, their screens, keyboards, UltraStudios, Stream Decks and the
@@ -271,7 +276,7 @@ js/app.js                      sign-in, roles, the sidebar (NAV) and pages, shee
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, position, category, used as and brand. Grid (models × locations or rooms) is built but not offered for now
+js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, spot, position, category, used as and brand. Grid (models × locations or rooms) is built but not offered for now
 js/views/haze.js               Gear › Haze: hazers, tank checks, fluid bottles per location
 js/views/cameras.js            Gear › Cameras: camera positions and the gear on each
 js/views/systems.js            Logistics › Systems: gear that works together, with roles

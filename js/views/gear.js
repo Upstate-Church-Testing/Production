@@ -20,6 +20,7 @@ import { systemsView } from './systems.js';
 const NO_BRAND = '__none';
 const NO_POS = '__nopos';  // Position filter: items with no position yet
 const NO_USE = '__nouse';  // Used as filter: items not set yet
+const NO_SPOT = '__nospot'; // Spot filter: items with no spot in the room
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
 const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', rig: 'Rigging', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
@@ -42,6 +43,7 @@ export function mount(el, ctx) {
     cat: lock.cat || (shared ? ctx.gearFilters.cat : ALL),
     brand: shared ? ctx.gearFilters.brand : ALL,
     room: (shared && ctx.gearFilters.room) || ALL, // a room name ("Storage" works across locations) or a room group
+    spot: (shared && ctx.gearFilters.spot) || ALL, // a spot in the room (FOH rack…), by its lowercase key
     pos: (shared && ctx.gearFilters.pos) || ALL,   // a position (CG, Director…), by its lowercase key
     use: (shared && ctx.gearFilters.use) || ALL,   // what it's used as (Stage display…), lowercase key
     mode: storage(modeKey, tabs[0]),
@@ -66,7 +68,7 @@ export function mount(el, ctx) {
     s.puni = ctx.pending.patch.universe ?? 'all';
     ctx.pending = null;
   }
-  const remember = () => { if (shared) ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand, room: s.room, pos: s.pos, use: s.use }; };
+  const remember = () => { if (shared) ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand, room: s.room, spot: s.spot, pos: s.pos, use: s.use }; };
   remember();
   let openType = null; // { id, refresh } of the type panel on screen
   let openDev = null;  // { id, refresh } of the model panel on screen
@@ -88,6 +90,7 @@ export function mount(el, ctx) {
         ${dropdownHtml('g-dep', 'Department')}
         ${dropdownHtml('g-loc', 'Location', 'caps')}
         ${dropdownHtml('g-room', 'Room')}
+        ${dropdownHtml('g-spot', 'Spot')}
         ${dropdownHtml('g-pos', 'Position')}
         ${dropdownHtml('g-cat', 'Category')}
         ${dropdownHtml('g-use', 'Used as')}
@@ -97,7 +100,7 @@ export function mount(el, ctx) {
     <div id="g-results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
-  // Filters, in order: department, location, room, position, category, used as, brand.
+  // Filters, in order: department, location, room, spot, position, category, used as, brand.
   // Each narrows the ones after it (most people look in their own department first).
   const itemMode = () => s.mode === 'models' || s.mode === 'patch' || s.mode === 'fixtures'; // filters choose from items, not models
   const unit = () => (s.mode === 'patch' || s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'rig' ? ['light', 'lights'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
@@ -129,6 +132,14 @@ export function mount(el, ctx) {
     get: () => s.room,
     set: (v) => { s.room = v; remember(); draw(); },
     options: () => roomOptions(),
+  });
+  // Spot: where in the room (FOH rack, Stage display…). Shows once a location or room is picked.
+  const spotDd = wireDropdown($('#g-spot', el), {
+    label: 'Spot',
+    unit,
+    get: () => s.spot,
+    set: (v) => { s.spot = v; remember(); draw(); },
+    options: () => spotOptions(),
   });
   // Position: what an item makes possible (CG, Director…). One item can be in several.
   const posDd = wireDropdown($('#g-pos', el), {
@@ -230,7 +241,7 @@ export function mount(el, ctx) {
     else if (t.dataset.gmode) { setMode(t.dataset.gmode); patch.cancel(); draw(); }
     else if (t.dataset.type) openTypeSheet(t.dataset.type);
     else if (t.dataset.act === 'add') itemMode() ? openModel(null, true) : newType();
-    else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; s.room = ALL; remember(); loc.update(); draw(); }
+    else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; s.room = ALL; s.spot = ALL; remember(); loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
     else if (t.dataset.act === 'retry') load();
     else if (t.dataset.act === 'todo') { s.todo = !s.todo; draw(); }
@@ -272,7 +283,7 @@ export function mount(el, ctx) {
 
   function clearFilters() {
     s.todo = false;
-    s.q = ''; q.value = ''; s.dep = base.dep; s.cat = base.cat; s.brand = ALL; s.room = ALL; s.pos = ALL; s.use = ALL;
+    s.q = ''; q.value = ''; s.dep = base.dep; s.cat = base.cat; s.brand = ALL; s.room = ALL; s.spot = ALL; s.pos = ALL; s.use = ALL;
     remember();
     draw();
   }
@@ -291,17 +302,32 @@ export function mount(el, ctx) {
     return s.pos === NO_POS ? !list.length : list.some((p) => posKey(p) === s.pos);
   }
   function inUse(d) { return s.use === ALL || (s.use === NO_USE ? !d.used_as : posKey(d.used_as) === s.use); }
-  /** At the picked location and room, in the picked position and used as the picked use.
+  function inSpot(d) { return s.spot === ALL || (s.spot === NO_SPOT ? !d.location?.trim() : posKey(d.location) === s.spot); }
+  /** At the picked location, room and spot, in the picked position and used as the picked use.
    *  `skip` leaves one out ('use'), for the filters that come before it. */
-  function inPlace(d, skip) { return inCampus(d) && inRoom(d) && inPos(d) && (skip === 'use' || inUse(d)); }
+  function inPlace(d, skip) { return inCampus(d) && inRoom(d) && inSpot(d) && inPos(d) && (skip === 'use' || inUse(d)); }
   /** A brand-pill choice that fits the Used as filter: the item, or for a model, one of its items. */
   function useOk(x) { return s.use === ALL || (itemMode() ? inUse(x) : unitsHere(x.id).length > 0); }
 
-  /** Position pill: every position at the picked location and room, with counts; then "No position". */
-  function posOptions() {
+  /** Spot pill: the spots in the picked room (or location), with counts; then "No spot".
+   *  Spots go by name, so "FOH rack" across every Worship Center works too. */
+  function spotOptions() {
     if (!s.data) return [{ value: ALL, label: 'All' }];
     const items = itemMode();
     const here = s.data.devices.filter((d) => inCampus(d) && inRoom(d) && itemInScope(d) && inDep(d.departments));
+    const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
+    const names = new Map();
+    for (const d of here) if (d.location?.trim() && !names.has(posKey(d.location))) names.set(posKey(d.location), d.location.trim());
+    const opts = [...names].sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true })).map(([k, label]) => ({ value: k, label, count: countOf(here.filter((d) => posKey(d.location) === k)) }));
+    const none = here.filter((d) => !d.location?.trim());
+    return [{ value: ALL, label: 'All', count: countOf(here) }, ...opts, ...(opts.length && none.length ? [{ value: NO_SPOT, label: 'No spot', hint: 'Nowhere in particular yet', count: countOf(none) }] : [])];
+  }
+
+  /** Position pill: every position at the picked location, room and spot, with counts; then "No position". */
+  function posOptions() {
+    if (!s.data) return [{ value: ALL, label: 'All' }];
+    const items = itemMode();
+    const here = s.data.devices.filter((d) => inCampus(d) && inRoom(d) && inSpot(d) && itemInScope(d) && inDep(d.departments));
     const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
     const names = new Map();
     for (const d of here) for (const p of d.positions || []) if (!names.has(posKey(p))) names.set(posKey(p), p.trim());
@@ -371,7 +397,7 @@ export function mount(el, ctx) {
 
   /** Types in play: with a location, room, position or use picked, only types that have items there. */
   function typesHere(skip) {
-    const open = s.campus === 'all' && s.room === ALL && s.pos === ALL && (skip === 'use' || s.use === ALL);
+    const open = s.campus === 'all' && s.room === ALL && s.spot === ALL && s.pos === ALL && (skip === 'use' || s.use === ALL);
     return open ? scopeTypes() : scopeTypes().filter((t) => unitsHere(t.id, skip).length);
   }
 
@@ -458,6 +484,7 @@ export function mount(el, ctx) {
     $('#g-room', el).hidden = s.mode === 'patch' || own || rigging; // the patch sheet and rigging have their own room tabs
     $('#g-pos', el).hidden = s.mode === 'patch' || own || rigging || s.mode === 'fixtures';
     $('#g-use', el).hidden = true; // shown by drawFilters when anything here has a use
+    $('#g-spot', el).hidden = true; // shown by drawFilters once a location or room is picked
     $('#g-cat', el).hidden = own || rigging || !!lock.cat;
     $('#g-brand', el).hidden = own || rigging || s.mode === 'fixtures'; // Fixtures: just location and room
     $('.search', el).hidden = own;
@@ -485,6 +512,10 @@ export function mount(el, ctx) {
     const posless = s.mode === 'patch' || s.mode === 'fixtures';
     if (!lock.dep && s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
     if (s.mode !== 'patch' && !valid(roomDd, s.room)) s.room = ALL;
+    // Spot: once there's a location or room to look inside (the full list everywhere is too long to be useful).
+    const spots = posless || (s.campus === ALL && s.room === ALL) ? [] : spotOptions();
+    if (spots.length < 2 || !spots.some((o) => o.value === s.spot)) s.spot = ALL;
+    $('#g-spot', el).hidden = spots.length < 2;
     if (posless) s.pos = ALL;
     else if (!valid(posDd, s.pos)) s.pos = ALL;
     if (!lock.cat && !valid(catDd, s.cat)) s.cat = ALL;
@@ -492,7 +523,7 @@ export function mount(el, ctx) {
     if (uses.length < 2 || !uses.some((o) => o.value === s.use)) s.use = ALL;
     $('#g-use', el).hidden = uses.length < 2; // only when something here has a use
     if (!valid(brandDd, s.brand)) s.brand = ALL;
-    depDd.update(); loc.update(); roomDd.update(); posDd.update(); catDd.update(); useDd.update(); brandDd.update();
+    depDd.update(); loc.update(); roomDd.update(); spotDd.update(); posDd.update(); catDd.update(); useDd.update(); brandDd.update();
   }
   function optionValues(dd) {
     if (dd === roomDd) return flatValues(roomOptions());
@@ -505,7 +536,7 @@ export function mount(el, ctx) {
 
   function filtering() {
     if (s.mode === 'rig') return !!s.q;
-    return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || s.pos !== ALL || s.use !== ALL || (s.room !== ALL && s.mode !== 'patch'));
+    return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || s.spot !== ALL || s.pos !== ALL || s.use !== ALL || (s.room !== ALL && s.mode !== 'patch'));
   }
 
   function drawResults() {
