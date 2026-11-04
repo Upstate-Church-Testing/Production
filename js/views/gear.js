@@ -6,7 +6,7 @@
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
-import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION } from './devices.js';
+import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION, posKey } from './devices.js';
 import { patchView } from './patch.js';
 import { rigView } from './rigging.js';
 import { takesPatch, patchOf, footprint, patchPoint, covers, assetTag, assetWords } from '../lighting.js';
@@ -18,6 +18,8 @@ import { camerasView, camNumber } from './cameras.js';
 import { systemsView } from './systems.js';
 
 const NO_BRAND = '__none';
+const NO_POS = '__nopos';  // Position filter: items with no position yet
+const NO_USE = '__nouse';  // Used as filter: items not set yet
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
 const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', rig: 'Rigging', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
@@ -40,6 +42,8 @@ export function mount(el, ctx) {
     cat: lock.cat || (shared ? ctx.gearFilters.cat : ALL),
     brand: shared ? ctx.gearFilters.brand : ALL,
     room: (shared && ctx.gearFilters.room) || ALL, // a room name ("Storage" works across locations) or a room group
+    pos: (shared && ctx.gearFilters.pos) || ALL,   // a position (CG, Director…), by its lowercase key
+    use: (shared && ctx.gearFilters.use) || ALL,   // what it's used as (Stage display…), lowercase key
     mode: storage(modeKey, tabs[0]),
     gridRooms: storage('ucp.gridrooms', false), // grid: one column per room instead of per location
     campus: ctx.campus,           // shared with Network and Statistics; All on every launch
@@ -62,7 +66,7 @@ export function mount(el, ctx) {
     s.puni = ctx.pending.patch.universe ?? 'all';
     ctx.pending = null;
   }
-  const remember = () => { if (shared) ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand, room: s.room }; };
+  const remember = () => { if (shared) ctx.gearFilters = { dep: s.dep, cat: s.cat, brand: s.brand, room: s.room, pos: s.pos, use: s.use }; };
   remember();
   let openType = null; // { id, refresh } of the type panel on screen
   let openDev = null;  // { id, refresh } of the model panel on screen
@@ -83,8 +87,10 @@ export function mount(el, ctx) {
       <div class="filters">
         ${dropdownHtml('g-loc', 'Location', 'caps')}
         ${dropdownHtml('g-room', 'Room')}
+        ${dropdownHtml('g-pos', 'Position')}
         ${dropdownHtml('g-dep', 'Section')}
         ${dropdownHtml('g-cat', 'Category')}
+        ${dropdownHtml('g-use', 'Used as')}
         ${dropdownHtml('g-brand', 'Brand')}
       </div>
     </div>
@@ -123,6 +129,22 @@ export function mount(el, ctx) {
     set: (v) => { s.room = v; remember(); draw(); },
     options: () => roomOptions(),
   });
+  // Position: what an item makes possible (CG, Director…). One item can be in several.
+  const posDd = wireDropdown($('#g-pos', el), {
+    label: 'Position',
+    unit,
+    get: () => s.pos,
+    set: (v) => { s.pos = v; remember(); draw(); },
+    options: () => posOptions(),
+  });
+  // Used as: within a kind of thing, what this one is (a Display used as a Stage display).
+  const useDd = wireDropdown($('#g-use', el), {
+    label: 'Used as',
+    unit,
+    get: () => s.use,
+    set: (v) => { s.use = v; remember(); draw(); },
+    options: () => useOptions(),
+  });
   const depDd = wireDropdown($('#g-dep', el), {
     label: 'Section',
     unit,
@@ -153,7 +175,7 @@ export function mount(el, ctx) {
     get: () => s.brand,
     set: (v) => { s.brand = v; remember(); draw(); },
     options: () => {
-      const pool = s.data ? poolHere().filter((x) => inDep(x.departments) && inCat(typeFor(x))) : [];
+      const pool = s.data ? poolHere().filter((x) => inDep(x.departments) && inCat(typeFor(x)) && useOk(x)) : [];
       const names = s.data ? brandNames() : new Map();
       const m = new Map();
       for (const x of pool) { const k = brandOf(typeFor(x)); m.set(k, (m.get(k) || 0) + 1); }
@@ -248,7 +270,7 @@ export function mount(el, ctx) {
 
   function clearFilters() {
     s.todo = false;
-    s.q = ''; q.value = ''; s.dep = base.dep; s.cat = base.cat; s.brand = ALL; s.room = ALL;
+    s.q = ''; q.value = ''; s.dep = base.dep; s.cat = base.cat; s.brand = ALL; s.room = ALL; s.pos = ALL; s.use = ALL;
     remember();
     draw();
   }
@@ -261,8 +283,43 @@ export function mount(el, ctx) {
   /** Rooms go by name, so "Storage" picks every storage room when all locations are showing;
    *  a room group ("E-Wing Offices") picks every room in it. */
   function inRoom(d) { return roomMatches(s.room, d.room_id ? s.ix.room.get(d.room_id) : null, s.ix.room); }
-  /** At the picked location and room. */
-  function inPlace(d) { return inCampus(d) && inRoom(d); }
+  function inPos(d) {
+    if (s.pos === ALL) return true;
+    const list = d.positions || [];
+    return s.pos === NO_POS ? !list.length : list.some((p) => posKey(p) === s.pos);
+  }
+  function inUse(d) { return s.use === ALL || (s.use === NO_USE ? !d.used_as : posKey(d.used_as) === s.use); }
+  /** At the picked location and room, in the picked position and used as the picked use.
+   *  `skip` leaves one out ('use'), for the filters that come before it. */
+  function inPlace(d, skip) { return inCampus(d) && inRoom(d) && inPos(d) && (skip === 'use' || inUse(d)); }
+  /** A brand-pill choice that fits the Used as filter: the item, or for a model, one of its items. */
+  function useOk(x) { return s.use === ALL || (itemMode() ? inUse(x) : unitsHere(x.id).length > 0); }
+
+  /** Position pill: every position at the picked location and room, with counts; then "No position". */
+  function posOptions() {
+    if (!s.data) return [{ value: ALL, label: 'All' }];
+    const items = itemMode();
+    const here = s.data.devices.filter((d) => inCampus(d) && inRoom(d) && itemInScope(d));
+    const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
+    const names = new Map();
+    for (const d of here) for (const p of d.positions || []) if (!names.has(posKey(p))) names.set(posKey(p), p.trim());
+    const opts = [...names].sort((a, b) => a[1].localeCompare(b[1])).map(([k, label]) => ({ value: k, label, count: countOf(here.filter((d) => (d.positions || []).some((p) => posKey(p) === k))) }));
+    const none = here.filter((d) => !(d.positions || []).length);
+    return [{ value: ALL, label: 'All', count: countOf(here) }, ...opts, ...(opts.length && none.length ? [{ value: NO_POS, label: 'No position', hint: 'Not part of a position yet', count: countOf(none) }] : [])];
+  }
+
+  /** Used-as pill: what the items left after the filters before it are used as; then "Not set". */
+  function useOptions() {
+    if (!s.data) return [{ value: ALL, label: 'All' }];
+    const items = itemMode();
+    const here = s.data.devices.filter((d) => inPlace(d, 'use') && itemInScope(d) && inDep(d.departments) && inCat(typeOf(d)));
+    const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
+    const names = new Map();
+    for (const d of here) if (d.used_as && !names.has(posKey(d.used_as))) names.set(posKey(d.used_as), d.used_as.trim());
+    const opts = [...names].sort((a, b) => a[1].localeCompare(b[1])).map(([k, label]) => ({ value: k, label, count: countOf(here.filter((d) => posKey(d.used_as) === k)) }));
+    const none = here.filter((d) => !d.used_as);
+    return [{ value: ALL, label: 'All', count: countOf(here) }, ...opts, ...(opts.length && none.length ? [{ value: NO_USE, label: 'Not set', count: countOf(none) }] : [])];
+  }
   function roomLabel() { return roomFilterLabel(s.room, s.data.rooms); }
   /** "Simpsonville", "Simpsonville · Storage" or "every Storage". */
   function placeName() {
@@ -288,7 +345,7 @@ export function mount(el, ctx) {
   function campusName(id) { return ctx.campusById.get(id)?.short_name || 'Unknown campus'; }
   function campusWords(id) { const c = ctx.campusById.get(id); return c ? [c.short_name, c.name, c.code] : []; }
   function unitsOf(typeId) { return s.data.devices.filter((d) => d.type_id === typeId); }
-  function unitsHere(typeId) { return s.data.devices.filter((d) => d.type_id === typeId && inPlace(d)); }
+  function unitsHere(typeId, skip) { return s.data.devices.filter((d) => d.type_id === typeId && inPlace(d, skip)); }
   function catOf(t) { return t?.category || 'Uncategorized'; }
   function brandOf(t) { return brandKey(t?.manufacturer) || NO_BRAND; }
   function tagDots(tags = []) { return tagDotsHtml(ctx, tags); }
@@ -299,7 +356,7 @@ export function mount(el, ctx) {
   /** What the filters choose from: models or types at this location. */
   function poolHere() {
     if (s.mode === 'patch') return s.data.devices.filter((d) => inCampus(d) && takesPatch(d, typeOf(d)) && itemInScope(d));
-    return s.mode === 'models' || s.mode === 'fixtures' ? s.data.devices.filter((d) => inPlace(d) && itemInScope(d)) : typesHere();
+    return s.mode === 'models' || s.mode === 'fixtures' ? s.data.devices.filter((d) => inPlace(d, 'use') && itemInScope(d)) : typesHere('use');
   }
   function typeFor(x) { return itemMode() ? typeOf(x) || {} : x; }
 
@@ -310,9 +367,10 @@ export function mount(el, ctx) {
   }
   function scopeTypes() { return lock.dep || lock.cat ? s.data.types.filter(typeInScope) : s.data.types; }
 
-  /** Types in play: with a location or room picked, only types that have items there. */
-  function typesHere() {
-    return s.campus === 'all' && s.room === ALL ? scopeTypes() : scopeTypes().filter((t) => unitsHere(t.id).length);
+  /** Types in play: with a location, room, position or use picked, only types that have items there. */
+  function typesHere(skip) {
+    const open = s.campus === 'all' && s.room === ALL && s.pos === ALL && (skip === 'use' || s.use === ALL);
+    return open ? scopeTypes() : scopeTypes().filter((t) => unitsHere(t.id, skip).length);
   }
 
   /** How each brand is written most often ("ETC", not "etc"). */
@@ -336,9 +394,11 @@ export function mount(el, ctx) {
   function typeMatches(t) {
     if (!inDep(t.departments) || !inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
+    const units = unitsHere(t.id);
     return words([t.name, t.manufacturer, t.category, t.part_number, t.description, t.unknown ? 'unknown model' : null, ...t.departments.map((x) => ctx.dep[x]?.name || x),
       ...(t.ports || []).map((p) => `${p.name} ${p.signal || ''}`),
-      ...new Set(unitsHere(t.id).flatMap((u) => campusWords(u.campus_id)))]); // "net-x simpsonville" finds it
+      ...new Set(units.flatMap((u) => campusWords(u.campus_id))), // "net-x simpsonville" finds it
+      ...new Set(units.flatMap((u) => [...(u.positions || []), u.used_as]))]); // "cg" finds the models CG runs on
   }
 
   function modelMatches(d) {
@@ -349,7 +409,8 @@ export function mount(el, ctx) {
     if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
     return words([d.name, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id), s.ix.pos.get(d.position_id)?.name,
-      t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, PROJECTION[d.projection], ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d)]);
+      t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, PROJECTION[d.projection], ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d),
+      ...(d.positions || []), d.used_as]);
   }
 
   /** Fixture ID, patch, stage and asset numbers as searchable words: "401", "fid401", "2.041", "u2", "asset 17". */
@@ -393,6 +454,8 @@ export function mount(el, ctx) {
     el.classList.toggle('is-rig', rigging);
     $('#g-dep', el).hidden = s.mode === 'patch' || own || rigging || !!lock.dep; // the patch sheet is lighting only
     $('#g-room', el).hidden = s.mode === 'patch' || own || rigging; // the patch sheet and rigging have their own room tabs
+    $('#g-pos', el).hidden = s.mode === 'patch' || own || rigging || s.mode === 'fixtures';
+    $('#g-use', el).hidden = true; // shown by drawFilters when anything here has a use
     $('#g-cat', el).hidden = own || rigging || !!lock.cat;
     $('#g-brand', el).hidden = own || rigging || s.mode === 'fixtures'; // Fixtures: just location and room
     $('.search', el).hidden = own;
@@ -417,23 +480,30 @@ export function mount(el, ctx) {
   function drawFilters() {
     const valid = (dd, v) => dd === null || v === ALL || (s.data && optionValues(dd).includes(v));
     if (OWN_VIEWS.includes(s.mode) || s.mode === 'rig') { loc.update(); return; } // keep the other choices for when they come back
+    const posless = s.mode === 'patch' || s.mode === 'fixtures';
     if (s.mode !== 'patch' && !valid(roomDd, s.room)) s.room = ALL;
+    if (posless) s.pos = ALL;
+    else if (!valid(posDd, s.pos)) s.pos = ALL;
     if (!lock.dep && s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
     if (!lock.cat && !valid(catDd, s.cat)) s.cat = ALL;
+    const uses = posless ? [] : useOptions();
+    if (uses.length < 2 || !uses.some((o) => o.value === s.use)) s.use = ALL;
+    $('#g-use', el).hidden = uses.length < 2; // only when something here has a use
     if (!valid(brandDd, s.brand)) s.brand = ALL;
-    loc.update(); roomDd.update(); depDd.update(); catDd.update(); brandDd.update();
+    loc.update(); roomDd.update(); posDd.update(); depDd.update(); catDd.update(); useDd.update(); brandDd.update();
   }
   function optionValues(dd) {
     if (dd === roomDd) return flatValues(roomOptions());
+    if (dd === posDd) return posOptions().map((o) => o.value);
     if (dd === depDd) return ctx.departments.map((d) => d.slug);
     const pool = poolHere().filter((x) => s.mode === 'patch' || inDep(x.departments));
     if (dd === catDd) return pool.map((x) => catOf(typeFor(x)));
-    return pool.filter((x) => inCat(typeFor(x))).map((x) => brandOf(typeFor(x)));
+    return pool.filter((x) => inCat(typeFor(x)) && useOk(x)).map((x) => brandOf(typeFor(x)));
   }
 
   function filtering() {
     if (s.mode === 'rig') return !!s.q;
-    return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || (s.room !== ALL && s.mode !== 'patch'));
+    return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || s.pos !== ALL || s.use !== ALL || (s.room !== ALL && s.mode !== 'patch'));
   }
 
   function drawResults() {
@@ -624,7 +694,7 @@ export function mount(el, ctx) {
       <span class="g-text">
         <span class="g-brand"><span>${t?.manufacturer ? esc(t.manufacturer) : '<i>No brand</i>'}</span>${tagDots(d.departments)}</span>
         <b class="g-name">${esc(d.name)}${t?.unknown ? ` ${UNKNOWN_PILL}` : ''}${d.status !== 'active' ? ` ${statusPill(d.status)}` : ''}</b>
-        ${sub ? `<span class="g-sub">${esc(sub)}</span>` : ''}
+        ${sub || d.used_as || d.positions?.length ? `<span class="g-sub">${esc(sub)}${purposePills(d, !!sub)}</span>` : ''}
       </span>
       ${ip ? `<button class="r-ip mono" data-copy="${esc(ip._addr)}" aria-label="Copy ${esc(ip._addr)}">${ipHtml(ip._addr)}</button>`
         : d.patch_universe != null || d.fixture_id != null ? `<span class="r-num mono">${d.fixture_id != null ? `<b>${d.fixture_id}</b>` : ''}${d.patch_universe != null ? `<span>${esc(patchOf(d))}</span>` : ''}</span>`
@@ -722,6 +792,12 @@ export function mount(el, ctx) {
     return `<button type="button" class="todo-note ${s.todo ? 'is-on' : ''}" data-act="todo">${icon('warn')}<span>${s.todo
       ? `Showing ${n === 1 ? 'the item that still needs' : `the ${n} items that still need`} a model`
       : `${plural(n, 'item')} ${n === 1 ? 'still needs' : 'still need'} a model${s.campus !== ALL || s.room !== ALL ? ` at ${esc(placeName())}` : ''}`}</span><b>${s.todo ? 'Show everything' : 'Show them'}</b></button>`;
+  }
+
+  /** "Stage display · CG": what it's used as, then its positions, as small pills on an item's row. */
+  function purposePills(d, lead) {
+    const bits = [d.used_as ? `<i class="pp-use">${esc(d.used_as)}</i>` : '', ...(d.positions || []).map((p) => `<i class="pp-pos">${esc(p)}</i>`)].filter(Boolean);
+    return bits.length ? `<span class="pp ${lead ? 'has-lead' : ''}">${bits.join('')}</span>` : '';
   }
 
   /** The Spot, saying so when it's a camera that's out of commission. */
@@ -826,7 +902,7 @@ export function mount(el, ctx) {
             ${units.length ? campusOrder.map((c) => `<div class="unit-group">
                 <p class="unit-campus">${esc(c.short_name)}</p>
                 <ul class="unit-list">${byCampus.get(c.id).map((u) => `<li><button class="unit" data-unit="${u.id}">
-                  <span><b>${esc(u.name)}</b><small>${esc([room(u), u.location, assetTag(u.asset_no)].filter(Boolean).join(' · '))}</small></span>
+                  <span><b>${esc(u.name)}</b><small>${esc([room(u), u.location, assetTag(u.asset_no)].filter(Boolean).join(' · '))}${purposePills(u, true)}</small></span>
                   ${unitNums(u)}${icon('chevron')}
                 </button></li>`).join('')}</ul>
               </div>`).join('')

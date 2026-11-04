@@ -2526,3 +2526,21 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 .rg-sheet .sh-foot .form-msg { flex-shrink: 0; }
 .rg-notes-btn { justify-self: start; min-height: 0; padding: 2px 0; font-size: 13px; gap: 4px; }
 .rg-notes-btn .ico { width: 14px; height: 14px; }
+
+/* ----- what an item is for: Position (CG, Director…) and Used as (Stage display…) ----- */
+/* Seven filters: on an iPad they wrap to a second row instead of squeezing. */
+@media (min-width: 700px) {
+  .filters { flex-wrap: wrap; }
+  .filters > .dd { min-width: 150px; }
+  .filters > .dd.caps { min-width: 190px; }
+}
+.pp { display: inline-flex; flex-wrap: nowrap; gap: 4px; vertical-align: 1px; }
+.pp.has-lead { margin-left: 8px; }
+.pp i {
+  font-style: normal; font-size: 11.5px; font-weight: 600; line-height: 1; padding: 3px 7px; border-radius: 999px;
+  background: var(--panel-3); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.pp i.pp-use { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.field.purpose .tag-picker { margin-bottom: 2px; }
+.purpose-add { max-width: 420px; }
+.purpose-add input { flex: 1; min-width: 0; }

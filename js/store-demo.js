@@ -84,7 +84,7 @@ function buildExample() {
     const { manufacturer, model, category, networked, ...rest } = d;
     devices.push({ id, type_id: typeFor(d), campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null,
       serial_number: null, firmware: null, location: null, status: 'active', asset_no: null,
-      fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, projection: null, position_id: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
+      fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, projection: null, position_id: null, positions: [], used_as: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
     addr.forEach((a, i) => ips.push({ id: uid(), device_id: id, campus_id: 'c-' + code, network_id: a.net ? 'n-' + code + '-' + a.net : null,
       label: a.label || null, ip: a.ip || null, gateway: a.gw || null, mac: a.mac || null, hostname: null,
       mode: a.mode || 'static', notes: null, sort_order: i }));
@@ -215,6 +215,21 @@ function buildExample() {
   rig('HB', W, ['FOH Batten', 'Midstage Batten Center 1', 'Midstage Batten Center 2', 'Midstage Batten Center 3', 'Midstage Batten Left', 'Midstage Batten Right',
     'Upstage Batten Center', 'Upstage Batten Left', 'Upstage Batten Right']);
 
+  // What things are for: the positions they make possible, and what displays are used as.
+  const forPos = (code, name, positions, used_as = null) => devices.filter((x) => x.campus_id === 'c-' + code && x.name === name).forEach((x) => Object.assign(x, { positions, used_as }));
+  forPos('SVL', 'CG1', ['CG']); forPos('SVL', 'Director’s Mac', ['Director']); forPos('SVL', 'Switcher Panel', ['Switcher']); forPos('SVL', 'Switcher', ['Switcher']);
+  forPos('SVL', 'FOH Console', ['Audio']); forPos('SVL', 'Lighting Console', ['Lighting']); forPos('HB', 'Lighting PC', ['Lighting']);
+  forPos('FF', 'Lighting PC', ['Lighting']); forPos('AND', 'Lighting Console', ['Lighting']); forPos('AND', 'Sound Board', ['Audio']);
+  forPos('SVL', 'Videohub 40x40', ['CG', 'Director']);
+  const screen = (code, name, manufacturer, model, location, positions, used_as) => dev(code, W, { name, departments: ['video'], category: 'Display', manufacturer, model, networked: false, location, positions, used_as });
+  screen('SVL', 'CG monitor', 'Samsung', 'LF27T35', 'FOH Desk', ['CG'], 'Computer monitor');
+  screen('SVL', 'Stage display', 'NEC', 'C751Q', 'Stage display', ['CG'], 'Stage display');
+  screen('SVL', 'Director monitor', 'Dell', 'U2417H', 'A-Control Desk', ['Director'], 'Computer monitor');
+  screen('HB', 'Stage display', 'Samsung', 'BE75T-H', 'Stage display', ['CG'], 'Stage display');
+  screen('HB', 'Hog screen 1', 'Dell', 'P2418HT', 'FOH', ['Lighting'], 'Computer monitor');
+  screen('HB', 'Hog screen 2', 'Dell', 'P2418HT', 'FOH', ['Lighting'], 'Computer monitor');
+  screen('AND', 'Confidence monitor', 'Samsung', 'BE55T-H', 'Downstage', [], 'Confidence monitor');
+
   // A little history so the device screen shows how it works.
   activity.push(
     { id: 1, at: ago(26), actor_id: 'p-bethany', action: 'updated', entity: 'devices', entity_id: cat, device_id: cat, campus_id: 'c-SVL', label: 'Catwalk Gateway', changes: { firmware: ['B1.0 V3.4', 'B1.0 V3.7'] } },
@@ -299,6 +314,12 @@ export function createDemoStore() {
     return out;
   }
   const blank = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim());
+  /** Like the database: trimmed, no blanks, each position once (any case), in order. */
+  const cleanPositions = (list) => {
+    const out = [];
+    for (const p of list || []) { const v = String(p || '').trim(); if (v && !out.some((x) => x.toLowerCase() === v.toLowerCase())) out.push(v); }
+    return out;
+  };
   const NUMBER_KEYS = ['asset_no', 'fixture_id', 'patch_universe', 'patch_address', 'dmx_channels'];
   let assetHigh = 0; // highest asset # handed out (never reused)
 
@@ -374,7 +395,8 @@ export function createDemoStore() {
       if (!tags.length) tags = [...type.departments];
       const fields = { type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(d.name) || type.name, departments: tags,
         serial_number: blank(d.serial_number), firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes),
-        ...('projection' in d ? { projection: blank(d.projection) } : {}), ...('position_id' in d ? { position_id: d.position_id || null } : {}) };
+        ...('projection' in d ? { projection: blank(d.projection) } : {}), ...('position_id' in d ? { position_id: d.position_id || null } : {}),
+        ...('positions' in d ? { positions: cleanPositions(d.positions) } : {}), ...('used_as' in d ? { used_as: blank(d.used_as) } : {}) };
       let dev = d.id ? db.devices.find((x) => x.id === d.id) : null;
       if (d.id && !dev) throw new Error('That item was deleted by someone else.');
       if (dev && dev.type_id !== type.id) {
@@ -391,7 +413,7 @@ export function createDemoStore() {
         Object.assign(dev, next, { updated_at: now(), updated_by: me.id });
         if (Object.keys(ch).length) log('updated', 'devices', dev, ch);
       } else {
-        dev = { id: uid(), position_id: null, ...fields, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+        dev = { id: uid(), position_id: null, positions: [], used_as: null, ...fields, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
         number(dev, null, payload.numbers || {});
         hangCheck(dev, null);
         db.devices.push(dev);
@@ -502,7 +524,8 @@ export function createDemoStore() {
       for (const n of names) {
         const dev = { id: uid(), type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(n) || type.name,
           departments: tags.length ? tags : [...type.departments], serial_number: null, firmware: null, location: blank(d.location),
-          status: d.status || 'active', notes: blank(d.notes), projection: blank(d.projection), position_id: null, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
+          status: d.status || 'active', notes: blank(d.notes), projection: blank(d.projection), position_id: null,
+          positions: cleanPositions(d.positions), used_as: blank(d.used_as), ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
           created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
         number(dev, null);
         db.devices.push(dev);

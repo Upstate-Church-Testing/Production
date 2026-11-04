@@ -5,7 +5,7 @@ import { esc, icon, $, $$ } from '../util.js';
 import { parseModes } from '../lighting.js';
 
 export const CATEGORIES = ['Console', 'Switcher', 'Control Panel', 'Router', 'Converter', 'Camera', 'PTZ Controller',
-  'Projector', 'Display', 'Monitor', 'LED Processor', 'LED Driver', 'Computer', 'Recorder', 'Encoder / Decoder',
+  'Projector', 'Display', 'Monitor', 'LED Processor', 'LED Driver', 'Computer', 'Keyboard', 'Mouse', 'Tablet', 'Recorder', 'Encoder / Decoder',
   'Node / Gateway', 'Switch', 'Access Point', 'Wall Station', 'Amplifier', 'Stagebox', 'Wireless Receiver',
   'Microphone', 'Speaker', 'Intercom', 'Fixture', 'Dimmer', 'Cable', 'Other'];
 export const SIGNALS = ['Ethernet', 'Dante', 'DMX', 'Art-Net / sACN', 'HDMI', 'SDI', 'NDI', 'DisplayPort', 'Analog audio',

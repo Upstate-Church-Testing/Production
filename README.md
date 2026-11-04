@@ -166,10 +166,21 @@ Center 1–3, Midstage Batten Left and Right, Upstage Batten Center, Left and Ri
 
 ## Gear: where things are, and what's missing (staff)
 
-Gear filters run Location → Room → Section → Category → Brand, so "North Auditorium,
-Lighting, Hazer" or "Simpsonville, Lighting Storage, Fixture" is two taps each. Picking
-a room with all locations showing picks that room everywhere (every "Worship Center").
-With one location picked, every room there is listed, even an empty one.
+Gear filters run Location → Room → Position → Section → Category → Used as → Brand, so
+"North Auditorium, Lighting, Hazer" or "Simpsonville, Lighting Storage, Fixture" is two
+taps each. Picking a room with all locations showing picks that room everywhere (every
+"Worship Center"). With one location picked, every room there is listed, even an empty one.
+
+- **Position** is what an item makes possible: CG, Director, Switcher, Audio, Lighting,
+  Camera… An item can be in more than one. Position CG shows everything behind CG at every
+  location: the Mac minis, their screens, keyboards, UltraStudios, Stream Decks and the
+  stage displays. Add Category Computer and it's every CG Mac mini; leave Position on All
+  and it's every Mac mini, CG or not. "No position" lists what isn't tagged yet.
+- **Used as** is what this one is within its kind: a Display used as a Stage display,
+  Computer monitor, Confidence monitor or LED wall. It shows once something in the list
+  has one. Position CG + Category Display + Used as Stage display = every CG stage display.
+- Search finds both, so "cg stage display" works too. In the item editor they're chips
+  under Sections; a new one is typed in once and then offered everywhere, spelled the same.
 
 - **Status** is a colored pill on every item; tap it to change: In use, Ready (works,
   not in use), Needs update (works, needs an upgrade or software update), Needs a check,
@@ -207,7 +218,8 @@ campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Win
     │
     └── devices — one physical unit ("item" in the app): name, sections, serial, firmware, room, location, status,
             │         asset #, stage #, fixture ID, patch (universe + address), DMX channels, projection (front or rear, projectors only),
-            │         position_id (the batten or truss it hangs on; same room only, cleared when it moves rooms)
+            │         position_id (the batten or truss it hangs on; same room only, cleared when it moves rooms),
+            │         positions (what it makes possible: CG, Director, Audio…; several allowed), used_as (Stage display, Computer monitor…)
             ├── device_ips (IP + mask, gateway, MAC, network, label, static/DHCP)
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
             └── device_credentials (staff only, loaded one device at a time)
