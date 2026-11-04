@@ -1295,6 +1295,14 @@ button.r-ip:hover { border-color: var(--line-2); background: var(--panel-3); }
 .fp-seg button[aria-selected="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
 .fp-foot { padding: 12px var(--gutter-r) calc(12px + env(safe-area-inset-bottom, 0px)) var(--gutter-l); border-top: 1px solid var(--line); }
 .fp-done { width: 100%; min-height: 54px; justify-content: center; font-size: 16px; }
+/* Each filter as a closed pill; the open one shows its choices under it. */
+.fp-body:has(.fp-acc) { gap: 10px; }
+.fp-acc + .fp-acc { margin-top: 0; }
+.fp-sec:not(.fp-acc) { margin-bottom: 10px; }
+.fp-pill { width: 100%; min-height: 60px; }
+.fp-pill-n { flex: none; font: 600 13px/1 var(--f-body); color: var(--muted); font-variant-numeric: tabular-nums; }
+.fp-pill.is-set .fp-pill-n { color: var(--fg); }
+.fp-acc.is-open .fp-chips { padding: 12px 2px 8px; }
 @media (prefers-reduced-motion: reduce) { .fp-root { transition: none; } }
 
 /* the item editor's new room: a name, and what it's part of */
@@ -2544,3 +2552,6 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 .field.purpose .tag-picker { margin-bottom: 2px; }
 .purpose-add { max-width: 420px; }
 .purpose-add input { flex: 1; min-width: 0; }
+/* The Show tabs on one row, like the segmented control they stand for. */
+.fp-seg { flex-wrap: nowrap; gap: 6px; }
+.fp-seg button { flex: 1 1 0; min-width: 0; justify-content: center; padding: 0 8px; }

@@ -332,8 +332,11 @@ Gear view opened with a `scope`: the section (and category) it's locked to and i
 
 **Filters on phones** (under 700px): Gear, Network and Cables show one **Filters** button
 beside the search instead of the row of dropdowns. It opens a full page with the view
-tabs (Models | Items | Grid…) and every filter as taps; **Show N items** goes back to the
-list. The Tally bar and the search + Filters bar stay at the top while you scroll
+tabs (Models | Items | Grid…) on one row and each filter as a pill showing its choice;
+tap a pill to open its choices (one at a time), and picking one closes it again. Each
+filter only offers what fits the ones above it: pick Simpsonville and Room lists
+Simpsonville's rooms; leave All locations and pick Worship Center to get every location's
+Worship Center. **Show N items** goes back to the list. The Tally bar and the search + Filters bar stay at the top while you scroll
 (`wireFilterButton` in `js/picker.js`).
 
 ## Room groups
