@@ -1302,7 +1302,8 @@ button.r-ip:hover { border-color: var(--line-2); background: var(--panel-3); }
 .fp-pill { width: 100%; min-height: 60px; }
 .fp-pill-n { flex: none; font: 600 13px/1 var(--f-body); color: var(--muted); font-variant-numeric: tabular-nums; }
 .fp-pill.is-set .fp-pill-n { color: var(--fg); }
-.fp-acc.is-open .fp-chips { padding: 12px 2px 8px; }
+.fp-list { margin-top: 8px; border: 1px solid var(--line-2); border-radius: 18px; background: var(--panel); overflow: visible; }
+.fp-list .dd-opt { min-height: 50px; }
 @media (prefers-reduced-motion: reduce) { .fp-root { transition: none; } }
 
 /* the item editor's new room: a name, and what it's part of */

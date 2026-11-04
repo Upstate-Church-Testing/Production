@@ -223,11 +223,6 @@ export function wireFilterButton(bar, { page, clear = null }) {
     requestAnimationFrame(() => root.classList.add('in'));
     $('.fp-done', root).focus({ preventScroll: true });
 
-    function chip(o, value, extra = '') {
-      const on = o.value === value;
-      const n = o.count != null ? `<small>${o.count}</small>` : '';
-      return `<button type="button" class="fp-chip ${extra}" data-fv="${esc(o.value)}" aria-pressed="${on}">${o.dep ? `<i class="tag" data-dep="${esc(o.dep)}">${esc(o.label[0])}</i>` : ''}<span>${esc(o.label)}</span>${n}${extra.includes('is-group') ? icon('down') : ''}</button>`;
-    }
     function draw() {
       const y = body.scrollTop;
       const seg = $('.mode-seg', page);
@@ -244,18 +239,23 @@ export function wireFilterButton(bar, { page, clear = null }) {
         const list = options();
         const cur = findOption(list, value);
         const open = openKey === label;
-        const chips = open ? list.map((o) => {
-          if (!o.children) return chip(o, value);
+        // Open: a list like the dropdown menus on a computer, one choice per row, the pick checked.
+        const row = (o, n, kid = false) => `<button type="button" class="dd-opt ${n === 0 && o.value === ALL ? 'is-first' : ''} ${kid ? 'is-kid' : ''}" role="option" data-fv="${esc(o.value)}" aria-selected="${o.value === value}">
+            ${o.dep ? `<i class="tag" data-dep="${esc(o.dep)}">${esc(o.label[0])}</i>` : ''}<span class="dd-opt-name">${esc(o.label)}</span>
+            ${o.count != null ? `<span class="dd-opt-count">${o.count}</span>` : '<span></span>'}
+            <span class="dd-check">${o.value === value ? icon('check') : ''}</span></button>`;
+        const group = (o, n) => {
           const inside = o.value === value || o.children.some((c) => c.value === value);
-          return chip(o, value, `is-group ${inside ? 'is-open' : ''}`) + (inside
-            ? `<div class="fp-kids" aria-label="Rooms in ${esc(o.label)}">${o.children.map((c) => chip(c, value)).join('')}</div>` : '');
-        }).join('') : '';
+          return `<div class="dd-grp" data-open="${inside}"><div class="dd-grp-row">${row(o, n)}<button type="button" class="dd-grp-toggle" aria-expanded="${inside}" aria-label="Rooms in ${esc(o.label)}">${icon('down')}</button></div>
+            <div class="dd-kids">${o.children.map((c) => row(c, -1, true)).join('')}</div></div>`;
+        };
+        const chips = open ? `<div class="fp-list dd-options" role="listbox" aria-label="${esc(label)}">${list.map((o, n) => (o.children ? group(o, n) : row(o, n))).join('')}</div>` : '';
         sections.push(`<section class="fp-sec fp-acc ${open ? 'is-open' : ''}" data-fd="${i}">
           <button type="button" class="dd fp-pill ${d.classList.contains('is-set') ? 'is-set' : ''}" data-fo="${esc(label)}" aria-expanded="${open}">
             <span class="dd-text"><span class="dd-label">${esc(label)}</span><span class="dd-value">${esc(cur?.label || 'All')}</span></span>
             ${cur?.count != null && value !== ALL ? `<span class="fp-pill-n">${cur.count}</span>` : ''}
             <span class="dd-caret">${icon('down')}</span></button>
-          ${open ? `<div class="fp-chips">${chips}</div>` : ''}
+          ${chips}
         </section>`);
       });
       body.innerHTML = sections.join('') || '<p class="muted">Nothing to filter here.</p>';
@@ -293,13 +293,20 @@ export function wireFilterButton(bar, { page, clear = null }) {
         if (openKey) $(`[data-fo="${CSS.escape(openKey)}"]`, root)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         return;
       }
+      const g = e.target.closest('.dd-grp-toggle'); // a room group's rooms show and hide in place
+      if (g) {
+        const grp = g.closest('.dd-grp');
+        const on = grp.dataset.open !== 'true';
+        grp.dataset.open = String(on);
+        g.setAttribute('aria-expanded', String(on));
+        return;
+      }
       const c = e.target.closest('[data-fv]');
       if (!c) return;
       const d = pills()[Number(c.closest('[data-fd]').dataset.fd)];
       if (!d) return;
       d._dd.pick(c.dataset.fv);
-      // A room group stays open to show its rooms; any other choice closes the pill.
-      if (!c.classList.contains('is-group')) openKey = null;
+      openKey = null; // picked: the pill closes and shows it
       draw();
     });
   }
