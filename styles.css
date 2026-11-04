@@ -2559,3 +2559,10 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 /* The Show tabs on one row, like the segmented control they stand for. */
 .fp-seg { flex-wrap: nowrap; gap: 6px; }
 .fp-seg button { flex: 1 1 0; min-width: 0; justify-content: center; padding: 0 8px; }
+
+/* Models and Items with all locations: a block per location, so it's clear where one ends. */
+.gear-campus { gap: 10px; }
+.gear-campus + .gear-campus { margin-top: 10px; }
+.gear-campus .campus-h { display: flex; align-items: baseline; gap: 12px; padding-top: 6px; }
+.gear-campus .campus-h small { font: 600 13px/1 var(--f-body); color: var(--muted); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.gear-campus.is-muted .campus-h { font-size: 22px; color: var(--muted); }
