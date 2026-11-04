@@ -539,17 +539,6 @@ export function mount(el, ctx) {
       box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No model matches “${esc(s.q)}”` : 'No model matches these filters'}${s.campus !== 'all' || s.room !== ALL ? ` at ${esc(placeName())}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>${elsewhere}`;
       return;
     }
-    // All locations: one block per location, in the Location list's order, each model
-    // A–Z with how many are there; a model at three locations shows in all three.
-    if (s.campus === ALL) {
-      const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-      const blocks = ctx.campuses.map((c) => ({ c, list: shown.filter((t) => unitsHere(t.id).some((u) => u.campus_id === c.id)).sort(byName) }))
-        .filter((b) => b.list.length).map((b) => campusBlock(b.c.short_name, plural(b.list.length, 'model'), b.list.map((t) => typeRow(t, b.c.id)).join('')));
-      const nowhere = shown.filter((t) => !unitsHere(t.id).length).sort(byName);
-      if (nowhere.length) blocks.push(campusBlock('Not at any location yet', plural(nowhere.length, 'model'), nowhere.map((t) => typeRow(t)).join(''), true));
-      box.innerHTML = todoNote() + blocks.join('') + elsewhere;
-      return;
-    }
     const groups = new Map();
     for (const t of shown) {
       const k = catOf(t);
@@ -560,11 +549,11 @@ export function mount(el, ctx) {
     const byBrandThenName = (a, b) => (a.manufacturer || '￿').localeCompare(b.manufacturer || '￿') || a.name.localeCompare(b.name, undefined, { numeric: true });
     box.innerHTML = todoNote() + keys.map((k) => `<section class="net">
       <header class="net-head"><div class="net-title"><h3>${esc(k)}</h3><span class="count">${groups.get(k).length}</span></div></header>
-      <ul class="gear-list">${groups.get(k).sort(byBrandThenName).map((t) => typeRow(t)).join('')}</ul>
+      <ul class="gear-list">${groups.get(k).sort(byBrandThenName).map(typeRow).join('')}</ul>
     </section>`).join('') + elsewhere;
   }
 
-  /** A location's block in a list: its name big, a count, then its rows. */
+  /** A location's block in the Items list: its name big, a count, then its rows. */
   function campusBlock(name, count, rows, muted = false) {
     return `<section class="campus-block gear-campus ${muted ? 'is-muted' : ''}">
       <h2 class="campus-h">${esc(name)}<small>${esc(count)}</small></h2>
@@ -572,9 +561,8 @@ export function mount(el, ctx) {
     </section>`;
   }
 
-  /** A model's row; with campusId, the count is just that location's. */
-  function typeRow(t, campusId = null) {
-    const units = unitsHere(t.id).filter((u) => !campusId || u.campus_id === campusId);
+  function typeRow(t) {
+    const units = unitsHere(t.id);
     const sub = t.unknown ? `${t.category || 'Model'} · placeholder until you know the model`
       : [t.category, t.ports?.length ? plural(t.ports.length, 'port') : null, t.networked === false ? 'No IP' : null].filter(Boolean).join(' · ');
     return `<li class="gear-row">

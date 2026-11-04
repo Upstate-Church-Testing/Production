@@ -184,11 +184,11 @@ Hazer" or "Lighting, Simpsonville, Lighting Storage, Fixture" is a few taps each
 - Search finds both, so "cg stage display" works too. In the item editor they're chips
   under Departments; a new one is typed in once and then offered everywhere, spelled the same.
 
-- **By location**: with All locations showing, Models and Items are split into a block per
-  location (in the Location list's order), A–Z inside each, so any filter (all encoders,
-  say) reads Anderson, Five Forks, Harrison Bridge, Simpsonville… A model at three
-  locations shows under each with that location's count. With one location picked,
-  Models groups by category and Items is one A–Z list.
+- **By location**: with All locations showing, Items is split into a block per location
+  (in the Location list's order), A–Z inside each, so any filter (all encoders, say) reads
+  Anderson, Five Forks, Harrison Bridge, Simpsonville… With one location picked it's one
+  A–Z list. Models stays grouped by category, never split by location: a model is one
+  entry with all its items, wherever they are.
 - **Status** is a colored pill on every item; tap it to change: In use, Ready (works,
   not in use), Needs update (works, needs an upgrade or software update), Needs a check,
   Broken, In repair, Retired.
