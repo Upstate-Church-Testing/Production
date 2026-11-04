@@ -31,7 +31,7 @@ export const MODES = { static: 'Static', reserved: 'DHCP reservation', dhcp: 'DH
 export const PROJECTION = { front: 'Front projection', rear: 'Rear projection' };
 export const isProjectorType = (t) => /projector/i.test(String(t?.category || ''));
 export const FIELD = {
-  name: 'Name', departments: 'Sections', category: 'Category', manufacturer: 'Brand', model: 'Model',
+  name: 'Name', departments: 'Departments', category: 'Category', manufacturer: 'Brand', model: 'Model',
   serial_number: 'Serial', firmware: 'Firmware', location: 'Spot', room_id: 'Room', campus_id: 'Location',
   status: 'Status', notes: 'Notes', ip: 'IP', gateway: 'Gateway', mac: 'MAC', label: 'Label', network_id: 'Network',
   mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Model',
@@ -588,7 +588,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <p class="bulk-preview">${esc(names[0])}<i>→</i>${esc(names[names.length - 1])}</p>
         </div>` : ''}
         ${bulk ? `<p class="fine">Serial numbers, IPs and what's plugged into each port get filled in on each one after they're added.</p>` : ''}
-        <div class="field"><span>Sections <b class="req">at least one</b></span>
+        <div class="field"><span>Departments <b class="req">at least one</b></span>
           <div class="tag-picker">${ctx.departments.map((d) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${d.slug}" data-dep="${d.slug}" aria-pressed="${draft.departments.includes(d.slug)}"><i class="dot"></i>${esc(d.name)}</button>`).join('')}</div>
         </div>
         ${purposeFields(ty)}
@@ -997,7 +997,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     if (typedUse) draft.used_as = canonical(knownUses(s, s.ix.type.get(draft.type_id)?.category), typedUse);
     const err = (m, sel) => { renderEdit(m); if (sel) $(sel, sheet.el)?.focus(); };
     if (!draft.type_id) return err('Pick a model, or choose “New model…” to add one.', '#f-type');
-    if (!draft.departments.length) return err('Pick at least one section: Audio, Video, Lighting or Network.');
+    if (!draft.departments.length) return err('Pick at least one department: Audio, Video, Lighting or Network.');
     if (draft.room_id === '__new') return err('Finish adding the new room, or pick “No room”.', '#f-newroom');
     if (!dev && draft.qty > 1) return saveMany(err);
 

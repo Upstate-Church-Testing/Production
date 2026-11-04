@@ -487,7 +487,7 @@ export function createDemoStore() {
       const name = blank(t.name);
       if (!name) throw new Error('Give the model a name.');
       const tags = depOrder(t.departments || []);
-      if (!tags.length) throw new Error('Pick at least one section: Audio, Video, Lighting or Network.');
+      if (!tags.length) throw new Error('Pick at least one department: Audio, Video, Lighting or Network.');
       const mfr = blank(t.manufacturer);
       if (db.types.some((x) => x.id !== t.id && x.name.toLowerCase() === name.toLowerCase() && (x.manufacturer || '').toLowerCase() === (mfr || '').toLowerCase())) {
         throw new Error('There’s already a model with that name from that brand.');

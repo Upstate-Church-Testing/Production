@@ -150,7 +150,7 @@ export function mount(el, ctx) {
       </section>` : ''}
       <section class="st-group st-bars">
         ${byUniverse.length ? bars('Fixtures by universe', byUniverse, 'universe', { keepOrder: true }) : ''}
-        ${bars('Items by section', byTeam, 'team', { colored: true, keepZero: true })}
+        ${bars('Items by department', byTeam, 'team', { colored: true, keepZero: true })}
         ${s.campus === 'all' ? bars('Items by location', byLocation, 'location') : ''}
         ${bars('Items by category', byCategory, 'category')}
         ${bars('Items by brand', byBrand, 'brand')}

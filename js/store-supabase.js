@@ -388,7 +388,7 @@ function friendly(error) {
     [/That (unit|device) was deleted by someone else/i, 'That item was deleted by someone else.'],
     [/That type was deleted by someone else/i, 'That model was deleted by someone else.'],
     [/isn't on this unit's type/i, 'That port isn’t on this item’s model.'],
-    [/Tag it audio, video or lighting/i, 'Pick at least one section: Audio, Video, Lighting or Network.'],
+    [/Tag it audio, video or lighting/i, 'Pick at least one department: Audio, Video, Lighting or Network.'],
     [/is at a different campus/i, (m) => m.replace('campus', 'location')],
     [/devices_asset_no_key|devices_type_asset_key/i, 'Another item already has that asset number. Every item has its own.'],
     [/devices_patch_pair/i, 'A patch needs both a universe and an address, like 1.333.'],

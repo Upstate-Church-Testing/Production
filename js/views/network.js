@@ -15,7 +15,7 @@ export function mount(el, ctx) {
     campus: ctx.campus, // shared with Gear and Statistics; All on every launch
     mode: storage('ucp.netmode', 'devices'),
     q: '',
-    dep: ctx.netFilters.dep, // Section: audio, video, lighting, network
+    dep: ctx.netFilters.dep, // Department: audio, video, lighting, network
     flag: ctx.netFilters.flag, // or 'conflicts' / 'noip'
     data: null,
     ix: null,
@@ -40,14 +40,14 @@ export function mount(el, ctx) {
       <div class="search" id="n-search">${icon('search')}<input id="q" type="search" placeholder="Search name, IP, model, MAC, location" autocomplete="off" enterkeyhint="search" aria-label="Search"></div>
       <div class="filters">
         ${dropdownHtml('n-loc', 'Location', 'caps')}
-        ${dropdownHtml('n-dep', 'Section')}
+        ${dropdownHtml('n-dep', 'Department')}
         ${dropdownHtml('n-flag', 'Show')}
       </div>
     </div>
     <div id="results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add item">${icon('plus')}</button>`;
 
-  // Filters, in order: location, section, and problems to chase down.
+  // Filters, in order: location, department, and problems to chase down.
   const loc = locationDropdown(ctx, $('#n-loc', el), {
     unit: () => (s.mode === 'networks' ? ['network', 'networks'] : ['item', 'items']),
     get: () => s.campus,
@@ -64,7 +64,7 @@ export function mount(el, ctx) {
   });
   const devsIn = (list) => [...new Map(list.map((e) => [e.dev.id, e.dev])).values()];
   const depDd = wireDropdown($('#n-dep', el), {
-    label: 'Section',
+    label: 'Department',
     unit: ['item', 'items'],
     get: () => s.dep,
     set: (v) => { s.dep = ctx.netFilters.dep = v; drawFilters(); drawResults(); },
@@ -394,7 +394,7 @@ export function mount(el, ctx) {
             <label class="field"><span>Gateway</span><input id="n-gateway" class="mono" value="${esc(d.gateway || '')}" placeholder="10.50.10.1" inputmode="decimal"></label>
             <label class="field"><span>VLAN ID</span><input id="n-vlan" class="mono" value="${esc(d.vlan_id ?? '')}" inputmode="numeric" placeholder="203"></label>
           </div>
-          <div class="field"><span>Sections</span><div class="tag-picker">${ctx.departments.map((t) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${t.slug}" data-dep="${t.slug}" aria-pressed="${d.departments.includes(t.slug)}"><i class="dot"></i>${esc(t.name)}</button>`).join('')}</div></div>
+          <div class="field"><span>Departments</span><div class="tag-picker">${ctx.departments.map((t) => `<button type="button" class="chip dep big" data-a="tag" data-tag="${t.slug}" data-dep="${t.slug}" aria-pressed="${d.departments.includes(t.slug)}"><i class="dot"></i>${esc(t.name)}</button>`).join('')}</div></div>
           <label class="check"><input type="checkbox" id="n-iso" ${d.is_isolated ? 'checked' : ''}><span>Separate switches, not connected to the church network (Dante, Art-Net…)</span></label>
           <label class="field"><span>Notes</span><textarea id="n-notes" rows="3">${esc(d.notes || '')}</textarea></label>
         </form>

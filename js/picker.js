@@ -1,4 +1,4 @@
-// Filter dropdowns (Location, Section, Category, Brand…): a pill that shows the
+// Filter dropdowns (Department, Location, Category, Brand…): a pill that shows the
 // current choice and opens the app's own menu, a popover on iPad and computers,
 // a sheet on phones, instead of the device's built-in list.
 //
@@ -15,7 +15,7 @@ export function locationName(ctx, id) {
   return id === ALL ? ALL_LOCATIONS : ctx.campusById.get(id)?.short_name || ALL_LOCATIONS;
 }
 
-/** The pill. `label` is the small heading inside it ("Location", "Section"…). */
+/** The pill. `label` is the small heading inside it ("Location", "Department"…). */
 export function dropdownHtml(id, label, cls = '') {
   return `<button type="button" class="dd ${cls}" id="${id}" aria-haspopup="listbox" aria-expanded="false">
     <span class="dd-text"><span class="dd-label">${esc(label)}</span><span class="dd-value"></span></span>

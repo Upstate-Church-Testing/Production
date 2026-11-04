@@ -166,9 +166,11 @@ Center 1–3, Midstage Batten Left and Right, Upstage Batten Center, Left and Ri
 
 ## Gear: where things are, and what's missing (staff)
 
-Gear filters run Location → Room → Position → Section → Category → Used as → Brand, so
-"North Auditorium, Lighting, Hazer" or "Simpsonville, Lighting Storage, Fixture" is two
-taps each. Picking a room with all locations showing picks that room everywhere (every
+Gear filters run Department → Location → Room → Position → Category → Used as → Brand,
+each narrowing the ones after it. Department (Audio, Video, Lighting, Network; called
+"section" before) comes first because most people look in their own: pick Audio and
+Location, Room and Category only offer what audio has. "Lighting, North Auditorium,
+Hazer" or "Lighting, Simpsonville, Lighting Storage, Fixture" is a few taps each. Picking a room with all locations showing picks that room everywhere (every
 "Worship Center"). With one location picked, every room there is listed, even an empty one.
 
 - **Position** is what an item makes possible: CG, Director, Switcher, Audio, Lighting,
@@ -180,7 +182,7 @@ taps each. Picking a room with all locations showing picks that room everywhere 
   Computer monitor, Confidence monitor or LED wall. It shows once something in the list
   has one. Position CG + Category Display + Used as Stage display = every CG stage display.
 - Search finds both, so "cg stage display" works too. In the item editor they're chips
-  under Sections; a new one is typed in once and then offered everywhere, spelled the same.
+  under Departments; a new one is typed in once and then offered everywhere, spelled the same.
 
 - **Status** is a colored pill on every item; tap it to change: In use, Ready (works,
   not in use), Needs update (works, needs an upgrade or software update), Needs a check,

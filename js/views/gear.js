@@ -38,7 +38,7 @@ export function mount(el, ctx) {
   const modeKey = shared ? 'ucp.gearmode' : `ucp.gearmode.${page.id}`;
   const s = {
     q: '',
-    dep: lock.dep || (shared ? ctx.gearFilters.dep : ALL), // Section: audio, video, lighting, network
+    dep: lock.dep || (shared ? ctx.gearFilters.dep : ALL), // Department: audio, video, lighting, network
     cat: lock.cat || (shared ? ctx.gearFilters.cat : ALL),
     brand: shared ? ctx.gearFilters.brand : ALL,
     room: (shared && ctx.gearFilters.room) || ALL, // a room name ("Storage" works across locations) or a room group
@@ -85,10 +85,10 @@ export function mount(el, ctx) {
     <div class="toolbar filter-bar">
       <div class="search">${icon('search')}<input id="g-q" type="search" autocomplete="off" enterkeyhint="search" aria-label="Search gear"></div>
       <div class="filters">
+        ${dropdownHtml('g-dep', 'Department')}
         ${dropdownHtml('g-loc', 'Location', 'caps')}
         ${dropdownHtml('g-room', 'Room')}
         ${dropdownHtml('g-pos', 'Position')}
-        ${dropdownHtml('g-dep', 'Section')}
         ${dropdownHtml('g-cat', 'Category')}
         ${dropdownHtml('g-use', 'Used as')}
         ${dropdownHtml('g-brand', 'Brand')}
@@ -97,7 +97,8 @@ export function mount(el, ctx) {
     <div id="g-results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
-  // Filters, in order: location, section, category, brand. Each narrows the next.
+  // Filters, in order: department, location, room, position, category, used as, brand.
+  // Each narrows the ones after it (most people look in their own department first).
   const itemMode = () => s.mode === 'models' || s.mode === 'patch' || s.mode === 'fixtures'; // filters choose from items, not models
   const unit = () => (s.mode === 'patch' || s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'rig' ? ['light', 'lights'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
     : s.mode === 'systems' ? ['system', 'systems']
@@ -113,8 +114,8 @@ export function mount(el, ctx) {
       if (s.mode === 'systems') return syss.counts();
       if (s.mode === 'rig') return rig.counts();
       const models = itemMode();
-      const pool = (s.mode === 'patch' ? s.data.devices.filter((d) => takesPatch(d, typeOf(d))) : s.data.devices).filter(itemInScope);
-      const counts = { [ALL]: models ? pool.length : scopeTypes().length };
+      const pool = (s.mode === 'patch' ? s.data.devices.filter((d) => takesPatch(d, typeOf(d))) : s.data.devices).filter((d) => itemInScope(d) && inDep(d.departments));
+      const counts = { [ALL]: models ? pool.length : s.dep === ALL ? scopeTypes().length : scopeTypes().filter((t) => inDep(t.departments)).length };
       for (const c of ctx.campuses) {
         const here = pool.filter((d) => d.campus_id === c.id);
         counts[c.id] = models ? here.length : new Set(here.map((d) => d.type_id)).size;
@@ -146,12 +147,13 @@ export function mount(el, ctx) {
     options: () => useOptions(),
   });
   const depDd = wireDropdown($('#g-dep', el), {
-    label: 'Section',
+    label: 'Department',
     unit,
     get: () => s.dep,
     set: (v) => { s.dep = v; remember(); draw(); },
     options: () => {
-      const pool = s.data ? poolHere() : [];
+      // First in line: counts everywhere, not just at the picked location.
+      const pool = !s.data ? [] : itemMode() ? s.data.devices.filter(itemInScope) : scopeTypes();
       return [{ value: ALL, label: 'All', count: pool.length },
         ...ctx.departments.map((d) => ({ value: d.slug, label: d.name, dep: d.slug, count: pool.filter((x) => x.departments.includes(d.slug)).length }))];
     },
@@ -299,7 +301,7 @@ export function mount(el, ctx) {
   function posOptions() {
     if (!s.data) return [{ value: ALL, label: 'All' }];
     const items = itemMode();
-    const here = s.data.devices.filter((d) => inCampus(d) && inRoom(d) && itemInScope(d));
+    const here = s.data.devices.filter((d) => inCampus(d) && inRoom(d) && itemInScope(d) && inDep(d.departments));
     const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
     const names = new Map();
     for (const d of here) for (const p of d.positions || []) if (!names.has(posKey(p))) names.set(posKey(p), p.trim());
@@ -332,14 +334,14 @@ export function mount(el, ctx) {
   function roomOptions() {
     if (!s.data) return [{ value: ALL, label: 'All rooms' }];
     const items = itemMode();
-    const here = s.data.devices.filter((d) => inCampus(d) && itemInScope(d) && (s.mode !== 'patch' || takesPatch(d, typeOf(d))));
+    const here = s.data.devices.filter((d) => inCampus(d) && itemInScope(d) && inDep(d.departments) && (s.mode !== 'patch' || takesPatch(d, typeOf(d))));
     const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
     return buildRoomOptions({
       rooms: s.data.rooms, items: here, countOf,
       // With one location picked, every room there shows up, even one with nothing in it yet (like a new Chapel).
       emptyAt: s.campus !== ALL && s.mode !== 'patch' ? s.campus : null,
       byCount: s.campus === ALL,
-      allCount: items ? here.length : s.campus === ALL ? scopeTypes().length : countOf(here),
+      allCount: items ? here.length : s.campus === ALL ? scopeTypes().filter((t) => inDep(t.departments)).length : countOf(here),
     });
   }
   function campusName(id) { return ctx.campusById.get(id)?.short_name || 'Unknown campus'; }
@@ -481,16 +483,16 @@ export function mount(el, ctx) {
     const valid = (dd, v) => dd === null || v === ALL || (s.data && optionValues(dd).includes(v));
     if (OWN_VIEWS.includes(s.mode) || s.mode === 'rig') { loc.update(); return; } // keep the other choices for when they come back
     const posless = s.mode === 'patch' || s.mode === 'fixtures';
+    if (!lock.dep && s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
     if (s.mode !== 'patch' && !valid(roomDd, s.room)) s.room = ALL;
     if (posless) s.pos = ALL;
     else if (!valid(posDd, s.pos)) s.pos = ALL;
-    if (!lock.dep && s.mode !== 'patch' && !valid(depDd, s.dep)) s.dep = ALL;
     if (!lock.cat && !valid(catDd, s.cat)) s.cat = ALL;
     const uses = posless ? [] : useOptions();
     if (uses.length < 2 || !uses.some((o) => o.value === s.use)) s.use = ALL;
     $('#g-use', el).hidden = uses.length < 2; // only when something here has a use
     if (!valid(brandDd, s.brand)) s.brand = ALL;
-    loc.update(); roomDd.update(); posDd.update(); depDd.update(); catDd.update(); useDd.update(); brandDd.update();
+    depDd.update(); loc.update(); roomDd.update(); posDd.update(); catDd.update(); useDd.update(); brandDd.update();
   }
   function optionValues(dd) {
     if (dd === roomDd) return flatValues(roomOptions());

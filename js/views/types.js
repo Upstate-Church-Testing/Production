@@ -68,7 +68,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
           <label class="field"><span>Model number</span><input id="t-part_number" class="mono" value="${esc(d.part_number || '')}" autocapitalize="characters" spellcheck="false" placeholder="JOL299, ROGUER2XWASH…"><small class="hint">The maker’s exact model or part number, from the label or spec sheet</small></label>
           <label class="field"><span>Manual or product page</span><input id="t-manual_url" value="${esc(d.manual_url || '')}" inputmode="url" placeholder="https://…" autocapitalize="off" spellcheck="false"></label>
         </div>
-        <div class="field"><span>Sections <b class="req">at least one</b></span>
+        <div class="field"><span>Departments <b class="req">at least one</b></span>
           <div class="tag-picker">${ctx.departments.map((t) => `<button type="button" class="chip dep big" data-ta="tag" data-tag="${t.slug}" data-dep="${t.slug}" aria-pressed="${d.departments.includes(t.slug)}"><i class="dot"></i>${esc(t.name)}</button>`).join('')}</div>
           <small class="hint">New items start with these tags. Each item can change its own.</small>
         </div>
@@ -161,7 +161,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     if (busy) return;
     collect();
     if (!d.name.trim()) { render('Give the model a name.'); $('#t-name', sheet.el)?.focus(); return; }
-    if (!d.departments.length) return render('Pick at least one section: Audio, Video, Lighting or Network.');
+    if (!d.departments.length) return render('Pick at least one department: Audio, Video, Lighting or Network.');
     const ports = d.ports.filter((p) => p.name.trim() || p.id);
     const names = ports.map((p) => p.name.trim().toLowerCase());
     if (ports.some((p) => !p.name.trim())) return render('Every port needs a name.');
