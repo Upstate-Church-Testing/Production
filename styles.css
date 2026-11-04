@@ -2546,6 +2546,12 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
   .filters > .dd { min-width: 150px; }
   .filters > .dd.caps { min-width: 190px; }
 }
+/* Gear has up to eight: equal columns, and a second row lines up under the first
+   instead of one pill stretching across. */
+@media (min-width: 700px) {
+  .view-gear:not(.is-own) .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .view-gear:not(.is-own) .filters > .dd { min-width: 0; width: auto; }
+}
 .pp { display: inline-flex; flex-wrap: nowrap; gap: 4px; vertical-align: 1px; }
 .pp.has-lead { margin-left: 8px; }
 .pp i {
@@ -2566,3 +2572,9 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 .gear-campus .campus-h { display: flex; align-items: baseline; gap: 12px; padding-top: 6px; }
 .gear-campus .campus-h small { font: 600 13px/1 var(--f-body); color: var(--muted); letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .gear-campus.is-muted .campus-h { font-size: 22px; color: var(--muted); }
+/* Items: a card per place, room › area › spot */
+.place-card .net-head { padding: 14px 16px 4px 18px; }
+.place-path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; white-space: normal !important; overflow: visible !important; }
+.place-path span { color: var(--muted); }
+.place-path span:last-child { color: var(--fg); }
+.place-path i { font-style: normal; color: var(--faint); }

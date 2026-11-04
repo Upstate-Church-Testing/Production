@@ -72,7 +72,7 @@ export function wireDropdown(btn, { label, options, get, set, unit = null }) {
     const groupHtml = (o, i) => {
       const open = o.value === value || o.children.some((c) => c.value === value);
       return `<div class="dd-grp" data-open="${open}">
-        <div class="dd-grp-row">${optHtml(o, i)}<button type="button" class="dd-grp-toggle" aria-expanded="${open}" aria-label="Rooms in ${esc(o.label)}">${icon('down')}</button></div>
+        <div class="dd-grp-row">${optHtml(o, i)}<button type="button" class="dd-grp-toggle" aria-expanded="${open}" aria-label="What’s in ${esc(o.label)}">${icon('down')}</button></div>
         <div class="dd-kids">${o.children.map((c) => optHtml(c, -1, true)).join('')}</div>
       </div>`;
     };
@@ -246,7 +246,7 @@ export function wireFilterButton(bar, { page, clear = null }) {
             <span class="dd-check">${o.value === value ? icon('check') : ''}</span></button>`;
         const group = (o, n) => {
           const inside = o.value === value || o.children.some((c) => c.value === value);
-          return `<div class="dd-grp" data-open="${inside}"><div class="dd-grp-row">${row(o, n)}<button type="button" class="dd-grp-toggle" aria-expanded="${inside}" aria-label="Rooms in ${esc(o.label)}">${icon('down')}</button></div>
+          return `<div class="dd-grp" data-open="${inside}"><div class="dd-grp-row">${row(o, n)}<button type="button" class="dd-grp-toggle" aria-expanded="${inside}" aria-label="What’s in ${esc(o.label)}">${icon('down')}</button></div>
             <div class="dd-kids">${o.children.map((c) => row(c, -1, true)).join('')}</div></div>`;
         };
         const chips = open ? `<div class="fp-list dd-options" role="listbox" aria-label="${esc(label)}">${list.map((o, n) => (o.children ? group(o, n) : row(o, n))).join('')}</div>` : '';

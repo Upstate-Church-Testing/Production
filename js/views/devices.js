@@ -38,12 +38,18 @@ export const FIELD = {
   connected_to: 'Connected to', assignment: 'Assignment',
   asset_no: 'Asset #', stage_no: 'Stage #', fixture_id: 'Fixture ID', patch_universe: 'Universe', patch_address: 'Address',
   dmx_channels: 'DMX channels', patch: 'Patch ID', projection: 'Projection', position_id: 'Hung on',
-  positions: 'Position', used_as: 'Used as',
+  positions: 'Operator position', used_as: 'Used as', area: 'Area',
 };
-// What an item is for. Position: the production positions it makes possible (CG,
-// Director, Audio…), one or more. Used as: what this one is, within its kind
-// (a Display used as a Stage display). Both on the item, so filters stack.
+// What an item is for. Operator position: the jobs it serves (CG, Director, Audio…),
+// one or more. Used as: what this one is, within its kind (a Display used as a Stage
+// display). Both on the item, so filters stack.
+// Where it is, apart from that: Location (campus) › Room › Area (Front of house,
+// Stage, Backstage…) › Spot (FOH rack…). An operator position is a job, not a place.
 const SUGGEST_POSITIONS = ['Audio', 'CG', 'Director', 'Lighting'];
+export const SUGGEST_AREAS = ['Front of house', 'Stage', 'Backstage', 'House'];
+/** Areas in their usual order: front of house, stage, backstage, house, then the rest A–Z. */
+export const areaRank = (a) => { const i = SUGGEST_AREAS.findIndex((x) => posKey(x) === posKey(a)); return i < 0 ? SUGGEST_AREAS.length : i; };
+export const byArea = (a, b) => areaRank(a) - areaRank(b) || String(a).localeCompare(String(b));
 const SUGGEST_USES = { Display: ['Stage display', 'Confidence monitor', 'Computer monitor', 'LED wall'] };
 export const posKey = (p) => String(p || '').trim().toLowerCase();
 /** Every position in use, most-used first, each written the way it's written most. */
@@ -71,6 +77,20 @@ export function knownUses(s, category) {
   const list = [...seen.values()].sort((a, b) => b.n - a.n).map((e) => e.label);
   for (const u of SUGGEST_USES[category] || []) if (!seen.has(posKey(u))) list.push(u);
   return list;
+}
+/** Every area in use (each written the way it's written most), plus the usual ones, in the usual order. */
+export function knownAreas(s) {
+  const seen = new Map();
+  for (const d of s.data.devices) {
+    if (!d.area?.trim()) continue;
+    const k = posKey(d.area);
+    const e = seen.get(k) || new Map();
+    e.set(d.area.trim(), (e.get(d.area.trim()) || 0) + 1);
+    seen.set(k, e);
+  }
+  const list = [...seen.values()].map((forms) => [...forms].sort((a, b) => b[1] - a[1])[0][0]);
+  for (const a of SUGGEST_AREAS) if (!seen.has(posKey(a))) list.push(a);
+  return list.sort(byArea);
 }
 /** "cg" → "CG" when CG is already in use somewhere, so the same position isn't spelled two ways. */
 const canonical = (list, v) => list.find((x) => posKey(x) === posKey(v)) || v.trim();
@@ -222,6 +242,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     }
     else if (a === 'add-posn') addPosition();
     else if (a === 'use') setUse(t.dataset.v);
+    else if (a === 'area') setArea(t.dataset.v);
+    else if (a === 'add-area') { const v = $('#f-newarea', sheet.el)?.value.trim(); if (v) { setArea(v); } else $('#f-newarea', sheet.el)?.focus(); }
     else if (a === 'add-use') { const v = $('#f-newuse', sheet.el)?.value.trim(); if (v) { setUse(v); } else $('#f-newuse', sheet.el)?.focus(); }
     else if (a === 'tag') { collect(); const tg = t.dataset.tag; draft.departments = draft.departments.includes(tg) ? draft.departments.filter((x) => x !== tg) : [...draft.departments, tg]; dirty = true; renderEdit(); }
     else if (a === 'next-ip') { collect(); fillNextIp(+t.dataset.i); }
@@ -240,6 +262,18 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     dirty = true;
     if (e.target.matches('[id$="-addr"], [id$="-mask"]')) { collect(); checkIp(+e.target.closest('.ip-card').dataset.i); }
     if (e.target.matches('#f-patch, #f-dmx_channels, #f-fixture_id')) { collect(); checkNumbers(); }
+    if (e.target.matches('#f-location') && !draft.area) fillAreaFromSpot(e.target.value);
+  }
+
+  /** A spot that's already somewhere in this room brings its area along ("FOH rack" → Front of house). */
+  function fillAreaFromSpot(spot) {
+    const k = posKey(spot);
+    if (!k) return;
+    const room = $('#f-room', sheet.el)?.value || '';
+    const twin = s.data.devices.find((d) => d.id !== draft.id && d.area && posKey(d.location) === k && (d.room_id || '') === room && d.campus_id === $('#f-campus', sheet.el)?.value);
+    if (!twin) return;
+    draft.area = canonical(knownAreas(s), twin.area);
+    $$('[data-a="area"]', sheet.el).forEach((b) => b.setAttribute('aria-pressed', String(posKey(b.dataset.v) === posKey(draft.area))));
   }
 
   function onChange(e) {
@@ -294,11 +328,11 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         <section class="block">
           <h3>Where</h3>
           <dl class="kv">
-            ${kv('Location', campusName(dev.campus_id))}${kv('Room', room)}${kv('Spot', dev.location)}
+            ${kv('Location', campusName(dev.campus_id))}${kv('Room', room)}${dev.area ? kv('Area', dev.area) : ''}${kv('Spot', dev.location)}
             ${isProjectorType(ty) ? kv('Projection', PROJECTION[dev.projection] || 'Not set yet') : ''}
             ${dev.position_id && s.ix.pos.get(dev.position_id) ? kv('Hung on', s.ix.pos.get(dev.position_id).name)
               : patchable && positionsIn(s, dev.room_id).length ? kv('Hung on', 'Not on a position') : ''}
-            ${dev.positions?.length ? kv('Position', dev.positions.join(', ')) : ''}
+            ${dev.positions?.length ? kv('Operator position', dev.positions.join(', ')) : ''}
             ${dev.used_as ? kv('Used as', dev.used_as) : ''}
           </dl>
         </section>
@@ -502,7 +536,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const defaultCampus = s.campus !== 'all' ? s.campus : (ctx.me.home_campus_id || ctx.campuses[0]?.id);
     draft = dev
       ? { ...dev, room_id: dev.room_id || '', position_id: dev.position_id || '', departments: [...dev.departments],
-          positions: [...(dev.positions || [])], used_as: dev.used_as || '',
+          positions: [...(dev.positions || [])], used_as: dev.used_as || '', area: dev.area || '',
           ips: ips.map((ip) => ({ id: ip.id, label: ip.label || '', network_id: ip.network_id || '', addr: ip._addr || '',
             mask: ip._prefix != null ? prefixToMask(ip._prefix) : '', gateway: ip.gateway ? splitInet(ip.gateway).addr : '',
             mac: ip.mac || '', hostname: ip.hostname || '', mode: ip.mode, notes: ip.notes || '' })),
@@ -510,7 +544,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           ports: Object.fromEntries(ports.map((p) => [p.type_port_id, { connected_to: p.connected_to || '', assignment: p.assignment || '', notes: p.notes || '' }])),
           ...numbersDraft(dev) }
       : { id: '', type_id: '', campus_id: defaultCampus, room_id: '', name: '', departments: [], serial_number: '', firmware: '',
-          location: '', status: 'active', notes: '', projection: null, position_id: '', positions: [...(preset.positions || [])], used_as: '', ips: [blankIp()], creds: [], ports: {}, qty: clampQty(preset.qty || 1), numbering: true, start: '',
+          location: '', status: 'active', notes: '', projection: null, position_id: '', positions: [...(preset.positions || [])], used_as: '', area: preset.area || '', ips: [blankIp()], creds: [], ports: {}, qty: clampQty(preset.qty || 1), numbering: true, start: '',
           ...numbersDraft(null) };
     if (!dev && preset.type_id) onTypePicked(preset.type_id, true);
     renderEdit();
@@ -549,7 +583,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const bulk = !dev && draft.qty > 1;
     const fixture = isFixtureType(ty); // no name of its own
     const names = bulk ? bulkNames() : [];
-    const locs = [...new Set(s.data.devices.filter((d) => d.campus_id === campusId).map((d) => d.location).filter(Boolean))].sort();
+    const locs = [...new Set(s.data.devices.filter((d) => d.campus_id === campusId && (!draft.area || posKey(d.area) === posKey(draft.area))).map((d) => d.location).filter(Boolean))].sort();
     const scroll = $('.sh-body', sheet.el)?.scrollTop || 0;
     sheet.render(`
       <header class="sh-head">
@@ -606,7 +640,9 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
             <select id="f-newgroup" aria-label="Part of"><option value="">Not part of a group</option>${groupChoices(s.data.rooms, campusId).map((r) => `<option value="${r.id}">Part of ${esc(r.name)}</option>`).join('')}</select>
             <button type="button" class="btn" data-a="add-room">Add room</button></div>
             <small class="hint">Part of: a room inside a bigger area, like an office in E-Wing Offices. Most rooms aren’t part of anything.</small>` : ''}
-          <label class="field"><span>Spot in the room</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Stage rack, Catwalk…"></label>
+          ${areaField()}
+          <label class="field"><span>Spot</span><input id="f-location" value="${esc(draft.location)}" list="dl-loc" placeholder="FOH rack, Backstage rack, Cam 1…">
+            <small class="hint">The exact place in the area, if it has one. Leave it blank for things that move around.</small></label>
           ${positionField()}
           ${isProjectorType(ty) ? `<div class="field"><span>Projection</span>
             <div class="tag-picker">${Object.entries(PROJECTION).map(([v, label]) => `<button type="button" class="chip big" data-a="proj" data-v="${v}" aria-pressed="${draft.projection === v}">${esc(label)}</button>`).join('')}</div>
@@ -778,11 +814,11 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const uses = knownUses(s, ty?.category);
     if (draft.used_as && !uses.some((u) => posKey(u) === posKey(draft.used_as))) uses.push(draft.used_as);
     const on = (p) => draft.positions.some((x) => posKey(x) === posKey(p));
-    return `<div class="field purpose"><span>Position</span>
+    return `<div class="field purpose"><span>Operator position</span>
         <div class="tag-picker">${pos.map((p) => `<button type="button" class="chip big" data-a="posn" data-v="${esc(p)}" aria-pressed="${on(p)}">${esc(p)}</button>`).join('')}</div>
-        <div class="inline-add purpose-add"><input id="f-newpos" maxlength="40" placeholder="Another position…" aria-label="Add a position" enterkeyhint="done">
+        <div class="inline-add purpose-add"><input id="f-newpos" maxlength="40" placeholder="Another operator position…" aria-label="Add an operator position" enterkeyhint="done">
           <button type="button" class="btn" data-a="add-posn">${icon('plus')}Add</button></div>
-        <small class="hint">What it makes possible: CG, Director, Audio… Pick more than one if it’s shared.</small>
+        <small class="hint">The job it’s part of: CG, Director, Audio… Pick more than one if it’s shared. Where it sits goes under Where.</small>
       </div>
       <div class="field purpose"><span>Used as</span>
         ${uses.length ? `<div class="tag-picker">${uses.map((u) => `<button type="button" class="chip big" data-a="use" data-v="${esc(u)}" aria-pressed="${posKey(u) === posKey(draft.used_as)}">${esc(u)}</button>`).join('')}</div>` : ''}
@@ -790,6 +826,26 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <button type="button" class="btn" data-a="add-use">Set</button></div>
         <small class="hint">What this one is used as${ty?.category ? `, among ${esc(ty.category.toLowerCase())}s` : ''}. Tap again to clear.</small>
       </div>`;
+  }
+
+  /** Area: the part of the room it's in. One, picked from what's in use or typed in. */
+  function areaField() {
+    const areas = knownAreas(s);
+    if (draft.area && !areas.some((a) => posKey(a) === posKey(draft.area))) areas.push(draft.area);
+    return `<div class="field purpose area-field"><span>Area</span>
+        <div class="tag-picker">${areas.map((a) => `<button type="button" class="chip big" data-a="area" data-v="${esc(a)}" aria-pressed="${posKey(a) === posKey(draft.area)}">${esc(a)}</button>`).join('')}</div>
+        <div class="inline-add purpose-add"><input id="f-newarea" maxlength="40" placeholder="Another area…" aria-label="Another area" enterkeyhint="done">
+          <button type="button" class="btn" data-a="add-area">Set</button></div>
+        <small class="hint">The part of the room it’s in. Tap again to clear.</small>
+      </div>`;
+  }
+
+  function setArea(v) {
+    collect();
+    const name = canonical(knownAreas(s), v);
+    draft.area = posKey(draft.area) === posKey(name) ? '' : name;
+    dirty = true;
+    renderEdit();
   }
 
   function addPosition() {
@@ -995,6 +1051,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     if (typedPos) { const name = canonical(knownPositions(s), typedPos); if (!draft.positions.some((x) => posKey(x) === posKey(name))) draft.positions.push(name); }
     const typedUse = $('#f-newuse', sheet.el)?.value.trim();
     if (typedUse) draft.used_as = canonical(knownUses(s, s.ix.type.get(draft.type_id)?.category), typedUse);
+    const typedArea = $('#f-newarea', sheet.el)?.value.trim();
+    if (typedArea) draft.area = canonical(knownAreas(s), typedArea);
     const err = (m, sel) => { renderEdit(m); if (sel) $(sel, sheet.el)?.focus(); };
     if (!draft.type_id) return err('Pick a model, or choose “New model…” to add one.', '#f-type');
     if (!draft.departments.length) return err('Pick at least one department: Audio, Video, Lighting or Network.');
@@ -1065,7 +1123,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         status: draft.status, notes: draft.notes,
         projection: isProjectorType(s.ix.type.get(draft.type_id)) ? draft.projection || '' : '', // only projectors have one
         position_id: positionsIn(s, draft.room_id).some((p) => p.id === draft.position_id) ? draft.position_id : '',
-        positions: draft.positions, used_as: draft.used_as || '',
+        positions: draft.positions, used_as: draft.used_as || '', area: draft.area || '',
       },
       ips,
       credentials,
@@ -1096,7 +1154,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       const n = await ctx.store.addDevices({
         device: { type_id: draft.type_id, campus_id: draft.campus_id, room_id: draft.room_id || '', location: draft.location,
           departments: draft.departments, status: 'active', notes: '', projection: isProjectorType(ty) ? draft.projection || '' : '',
-          positions: draft.positions, used_as: draft.used_as || '' },
+          positions: draft.positions, used_as: draft.used_as || '', area: draft.area || '' },
         names,
       });
       busy = false; dirty = false;

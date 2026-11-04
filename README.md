@@ -166,34 +166,45 @@ Center 1–3, Midstage Batten Left and Right, Upstage Batten Center, Left and Ri
 
 ## Gear: where things are, and what's missing (staff)
 
-Gear filters run Department → Location → Room → Spot → Position → Category → Used as → Brand,
-each narrowing the ones after it. Department (Audio, Video, Lighting, Network; called
+Gear filters run Department → Location → Room → Area / spot → Operator position → Category →
+Used as → Brand, each narrowing the ones after it. Department (Audio, Video, Lighting, Network; called
 "section" before) comes first because most people look in their own: pick Audio and
 Location, Room and Category only offer what audio has. "Lighting, North Auditorium,
 Hazer" or "Lighting, Simpsonville, Lighting Storage, Fixture" is a few taps each. Picking a room with all locations showing picks that room everywhere (every
 "Worship Center"). With one location picked, every room there is listed, even an empty one.
 
-- **Spot** is where in the room: FOH rack, Stage rack, CG, House left… (the item's "Spot in
-  the room"). It shows once a location or room is picked: Five Forks › Worship Center ›
-  FOH rack is just what's in that rack. With All locations and a room picked, "FOH rack"
-  is every Worship Center's FOH rack. Spots match regardless of capitals; "No spot" lists
-  what doesn't have one.
-- **Position** is what an item makes possible: CG, Director, Switcher, Audio, Lighting,
-  Camera… An item can be in more than one. Position CG shows everything behind CG at every
-  location: the Mac minis, their screens, keyboards, UltraStudios, Stream Decks and the
-  stage displays. Add Category Computer and it's every CG Mac mini; leave Position on All
-  and it's every Mac mini, CG or not. "No position" lists what isn't tagged yet.
+Where something is and what it's for are kept apart:
+
+- **Where it is**: Location (the campus) › Room › **Area** (the part of the room: Front of
+  house, Stage, Backstage, House…) › **Spot** (the exact place in that area: FOH rack,
+  Backstage rack, Cam 1…). Area and Spot are both on the item; a spot that's already in the
+  room brings its area along when you type it. Things that move around (a pastor's headset,
+  handheld mics) can have neither.
+- **Area / spot filter** shows once a location or room is picked. Areas hold their spots:
+  pick Backstage for everything backstage, or Backstage rack for just that rack. With All
+  locations and a room picked, "FOH rack" is every Worship Center's FOH rack. Names match
+  regardless of capitals; "No area or spot" lists the rest.
+- **Operator position** is the job an item serves: CG, Director, Switcher, Audio, Lighting,
+  Camera… It's a job, not a place. An item can serve more than one. Operator position CG
+  shows everything behind CG at every location: the Mac minis, their screens, keyboards,
+  UltraStudios, Stream Decks and the stage displays. Add Category Computer and it's every
+  CG Mac mini; leave it on All and it's every Mac mini, CG or not. "No position" lists what
+  isn't tagged yet.
 - **Used as** is what this one is within its kind: a Display used as a Stage display,
   Computer monitor, Confidence monitor or LED wall. It shows once something in the list
-  has one. Position CG + Category Display + Used as Stage display = every CG stage display.
-- Search finds both, so "cg stage display" works too. In the item editor they're chips
-  under Departments; a new one is typed in once and then offered everywhere, spelled the same.
+  has one. Operator position CG + Category Display + Used as Stage display = every CG stage display.
+- Search finds all of them, so "cg stage display" or "rack" works too. In the item editor
+  operator position and used as are chips under Departments, and area and spot are under
+  Where; a new one is typed in once and then offered everywhere, spelled the same.
 
-- **By location**: with All locations showing, Items is split into a block per location
-  (in the Location list's order), A–Z inside each, so any filter (all encoders, say) reads
-  Anderson, Five Forks, Harrison Bridge, Simpsonville… With one location picked it's one
-  A–Z list. Models stays grouped by category, never split by location: a model is one
-  entry with all its items, wherever they are.
+- **Items by place**: Items is a card per place, room › area › spot, in the rooms' order,
+  then front of house, stage, backstage, house and the rest, items A–Z in each. With a
+  room picked its name is left off the cards, so Five Forks › Worship Center reads
+  "Front of house › FOH rack", "Backstage › Backstage rack"… and searching "rack" there
+  leaves just the racks, still split. With All locations showing, the cards sit in a block
+  per location (in the Location list's order: Anderson, Five Forks, Harrison Bridge,
+  Simpsonville…). Models stays grouped by category, never split by location or place: a
+  model is one entry with all its items, wherever they are.
 - **Status** is a colored pill on every item; tap it to change: In use, Ready (works,
   not in use), Needs update (works, needs an upgrade or software update), Needs a check,
   Broken, In repair, Retired.
@@ -276,7 +287,7 @@ js/app.js                      sign-in, roles, the sidebar (NAV) and pages, shee
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
 js/views/network.js            the IP sheet
-js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, spot, position, category, used as and brand. Grid (models × locations or rooms) is built but not offered for now
+js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, area / spot, operator position, category, used as and brand; Items is a card per room › area › spot. Grid (models × locations or rooms) is built but not offered for now
 js/views/haze.js               Gear › Haze: hazers, tank checks, fluid bottles per location
 js/views/cameras.js            Gear › Cameras: camera positions and the gear on each
 js/views/systems.js            Logistics › Systems: gear that works together, with roles

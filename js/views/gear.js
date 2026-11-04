@@ -6,13 +6,13 @@
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
-import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION, posKey } from './devices.js';
+import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION, posKey, byArea } from './devices.js';
 import { patchView } from './patch.js';
 import { rigView } from './rigging.js';
 import { takesPatch, patchOf, footprint, patchPoint, covers, assetTag, assetWords } from '../lighting.js';
 import { preparePhoto } from '../photo.js';
 import { ALL, dropdownHtml, wireDropdown, locationDropdown, wireFilterButton } from '../picker.js';
-import { roomOptions as buildRoomOptions, roomMatches, roomFilterLabel, optionValues as flatValues, roomWords, NO_ROOM } from '../rooms.js';
+import { roomOptions as buildRoomOptions, roomMatches, roomFilterLabel, optionValues as flatValues, roomWords, roomPath, NO_ROOM } from '../rooms.js';
 import { hazeView } from './haze.js';
 import { camerasView, camNumber } from './cameras.js';
 import { systemsView } from './systems.js';
@@ -20,7 +20,8 @@ import { systemsView } from './systems.js';
 const NO_BRAND = '__none';
 const NO_POS = '__nopos';  // Position filter: items with no position yet
 const NO_USE = '__nouse';  // Used as filter: items not set yet
-const NO_SPOT = '__nospot'; // Spot filter: items with no spot in the room
+const NO_SPOT = '__nospot'; // Area / spot filter: items with neither
+const AREA = 'a:';          // Area / spot filter: a whole area ('a:backstage'); a spot is 's:<area>|<spot>'
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
 const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', rig: 'Rigging', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
@@ -43,7 +44,7 @@ export function mount(el, ctx) {
     cat: lock.cat || (shared ? ctx.gearFilters.cat : ALL),
     brand: shared ? ctx.gearFilters.brand : ALL,
     room: (shared && ctx.gearFilters.room) || ALL, // a room name ("Storage" works across locations) or a room group
-    spot: (shared && ctx.gearFilters.spot) || ALL, // a spot in the room (FOH rack…), by its lowercase key
+    spot: (shared && ctx.gearFilters.spot) || ALL, // an area (Backstage) or a spot in one (Backstage rack)
     pos: (shared && ctx.gearFilters.pos) || ALL,   // a position (CG, Director…), by its lowercase key
     use: (shared && ctx.gearFilters.use) || ALL,   // what it's used as (Stage display…), lowercase key
     mode: storage(modeKey, tabs[0]),
@@ -90,8 +91,8 @@ export function mount(el, ctx) {
         ${dropdownHtml('g-dep', 'Department')}
         ${dropdownHtml('g-loc', 'Location', 'caps')}
         ${dropdownHtml('g-room', 'Room')}
-        ${dropdownHtml('g-spot', 'Spot')}
-        ${dropdownHtml('g-pos', 'Position')}
+        ${dropdownHtml('g-spot', 'Area / spot')}
+        ${dropdownHtml('g-pos', 'Operator position')}
         ${dropdownHtml('g-cat', 'Category')}
         ${dropdownHtml('g-use', 'Used as')}
         ${dropdownHtml('g-brand', 'Brand')}
@@ -100,7 +101,7 @@ export function mount(el, ctx) {
     <div id="g-results" class="results" aria-live="polite"></div>
     <button class="fab" data-act="add" aria-label="Add model">${icon('plus')}</button>`;
 
-  // Filters, in order: department, location, room, spot, position, category, used as, brand.
+  // Filters, in order: department, location, room, area / spot, operator position, category, used as, brand.
   // Each narrows the ones after it (most people look in their own department first).
   const itemMode = () => s.mode === 'models' || s.mode === 'patch' || s.mode === 'fixtures'; // filters choose from items, not models
   const unit = () => (s.mode === 'patch' || s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'rig' ? ['light', 'lights'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
@@ -133,17 +134,18 @@ export function mount(el, ctx) {
     set: (v) => { s.room = v; remember(); draw(); },
     options: () => roomOptions(),
   });
-  // Spot: where in the room (FOH rack, Stage display…). Shows once a location or room is picked.
+  // Area / spot: where in the room. Areas (Front of house, Backstage…) hold their spots
+  // (FOH rack, Backstage rack…). Shows once a location or room is picked.
   const spotDd = wireDropdown($('#g-spot', el), {
-    label: 'Spot',
+    label: 'Area / spot',
     unit,
     get: () => s.spot,
     set: (v) => { s.spot = v; remember(); draw(); },
     options: () => spotOptions(),
   });
-  // Position: what an item makes possible (CG, Director…). One item can be in several.
+  // Operator position: the job an item serves (CG, Director…). One item can serve several.
   const posDd = wireDropdown($('#g-pos', el), {
-    label: 'Position',
+    label: 'Operator position',
     unit,
     get: () => s.pos,
     set: (v) => { s.pos = v; remember(); draw(); },
@@ -302,28 +304,52 @@ export function mount(el, ctx) {
     return s.pos === NO_POS ? !list.length : list.some((p) => posKey(p) === s.pos);
   }
   function inUse(d) { return s.use === ALL || (s.use === NO_USE ? !d.used_as : posKey(d.used_as) === s.use); }
-  function inSpot(d) { return s.spot === ALL || (s.spot === NO_SPOT ? !d.location?.trim() : posKey(d.location) === s.spot); }
+  function inSpot(d) {
+    if (s.spot === ALL) return true;
+    if (s.spot === NO_SPOT) return !d.area?.trim() && !d.location?.trim();
+    if (s.spot.startsWith(AREA)) return posKey(d.area) === s.spot.slice(AREA.length);
+    return spotValue(d) === s.spot;
+  }
+  function spotValue(d) { return `s:${posKey(d.area)}|${posKey(d.location)}`; }
   /** At the picked location, room and spot, in the picked position and used as the picked use.
    *  `skip` leaves one out ('use'), for the filters that come before it. */
   function inPlace(d, skip) { return inCampus(d) && inRoom(d) && inSpot(d) && inPos(d) && (skip === 'use' || inUse(d)); }
   /** A brand-pill choice that fits the Used as filter: the item, or for a model, one of its items. */
   function useOk(x) { return s.use === ALL || (itemMode() ? inUse(x) : unitsHere(x.id).length > 0); }
 
-  /** Spot pill: the spots in the picked room (or location), with counts; then "No spot".
-   *  Spots go by name, so "FOH rack" across every Worship Center works too. */
+  /** Area / spot pill: the areas in the picked room (or location) holding their spots, then
+   *  spots with no area, then "No area or spot". Both go by name, so "Backstage rack" with
+   *  every Worship Center picked is each one's backstage rack. */
   function spotOptions() {
     if (!s.data) return [{ value: ALL, label: 'All' }];
     const items = itemMode();
     const here = s.data.devices.filter((d) => inCampus(d) && inRoom(d) && itemInScope(d) && inDep(d.departments));
     const countOf = (list) => (items ? list.length : new Set(list.map((d) => d.type_id)).size);
-    const names = new Map();
-    for (const d of here) if (d.location?.trim() && !names.has(posKey(d.location))) names.set(posKey(d.location), d.location.trim());
-    const opts = [...names].sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true })).map(([k, label]) => ({ value: k, label, count: countOf(here.filter((d) => posKey(d.location) === k)) }));
-    const none = here.filter((d) => !d.location?.trim());
-    return [{ value: ALL, label: 'All', count: countOf(here) }, ...opts, ...(opts.length && none.length ? [{ value: NO_SPOT, label: 'No spot', hint: 'Nowhere in particular yet', count: countOf(none) }] : [])];
+    const areas = new Map(); // area key -> { label, list, spots: spot key -> { label, list } }
+    const loose = new Map(); // spots with no area
+    const none = [];
+    const bucket = (map, k, label, extra = {}) => { let e = map.get(k); if (!e) map.set(k, (e = { label, list: [], ...extra })); return e; };
+    for (const d of here) {
+      const a = d.area?.trim(), sp = d.location?.trim();
+      if (!a && !sp) { none.push(d); continue; }
+      if (!a) { bucket(loose, posKey(sp), sp).list.push(d); continue; }
+      const e = bucket(areas, posKey(a), a, { spots: new Map() });
+      e.list.push(d);
+      bucket(e.spots, posKey(sp), sp || 'No spot').list.push(d);
+    }
+    const bySpot = ([ka, a], [kb, b]) => (ka === '') - (kb === '') || a.label.localeCompare(b.label, undefined, { numeric: true });
+    const spotOpt = (ak) => ([sk, c]) => ({ value: `s:${ak}|${sk}`, label: c.label, count: countOf(c.list) });
+    const areaOpts = [...areas].sort((x, y) => byArea(x[1].label, y[1].label)).map(([ak, e]) => {
+      const kids = [...e.spots].sort(bySpot);
+      const only = kids.length === 1 && kids[0][0] === ''; // nothing but the area itself
+      return { value: AREA + ak, label: e.label, count: countOf(e.list), ...(only ? {} : { children: kids.map(spotOpt(ak)) }) };
+    });
+    const looseOpts = [...loose].sort(bySpot).map(spotOpt(''));
+    return [{ value: ALL, label: 'All', count: countOf(here) }, ...areaOpts, ...looseOpts,
+      ...(areaOpts.length + looseOpts.length && none.length ? [{ value: NO_SPOT, label: 'No area or spot', hint: 'Moves around, or not placed yet', count: countOf(none) }] : [])];
   }
 
-  /** Position pill: every position at the picked location, room and spot, with counts; then "No position". */
+  /** Operator position pill: every position at the picked location, room and spot, with counts; then "No position". */
   function posOptions() {
     if (!s.data) return [{ value: ALL, label: 'All' }];
     const items = itemMode();
@@ -426,7 +452,7 @@ export function mount(el, ctx) {
     return words([t.name, t.manufacturer, t.category, t.part_number, t.description, t.unknown ? 'unknown model' : null, ...t.departments.map((x) => ctx.dep[x]?.name || x),
       ...(t.ports || []).map((p) => `${p.name} ${p.signal || ''}`),
       ...new Set(units.flatMap((u) => campusWords(u.campus_id))), // "net-x simpsonville" finds it
-      ...new Set(units.flatMap((u) => [...(u.positions || []), u.used_as]))]); // "cg" finds the models CG runs on
+      ...new Set(units.flatMap((u) => [...(u.positions || []), u.used_as, u.area, u.location]))]); // "cg" finds the models CG runs on
   }
 
   function modelMatches(d) {
@@ -436,7 +462,7 @@ export function mount(el, ctx) {
     if (!s.q) return true;
     if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
-    return words([d.name, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id), s.ix.pos.get(d.position_id)?.name,
+    return words([d.name, d.area, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id), s.ix.pos.get(d.position_id)?.name,
       t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, PROJECTION[d.projection], ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d),
       ...(d.positions || []), d.used_as]);
   }
@@ -514,7 +540,7 @@ export function mount(el, ctx) {
     if (s.mode !== 'patch' && !valid(roomDd, s.room)) s.room = ALL;
     // Spot: once there's a location or room to look inside (the full list everywhere is too long to be useful).
     const spots = posless || (s.campus === ALL && s.room === ALL) ? [] : spotOptions();
-    if (spots.length < 2 || !spots.some((o) => o.value === s.spot)) s.spot = ALL;
+    if (spots.length < 2 || !flatValues(spots).includes(s.spot)) s.spot = ALL;
     $('#g-spot', el).hidden = spots.length < 2;
     if (posless) s.pos = ALL;
     else if (!valid(posDd, s.pos)) s.pos = ALL;
@@ -584,12 +610,44 @@ export function mount(el, ctx) {
     </section>`).join('') + elsewhere;
   }
 
-  /** A location's block in the Items list: its name big, a count, then its rows. */
-  function campusBlock(name, count, rows, muted = false) {
+  /** A location's block in the Items list: its name big, a count, then its places. */
+  function campusBlock(name, count, inner, muted = false) {
     return `<section class="campus-block gear-campus ${muted ? 'is-muted' : ''}">
       <h2 class="campus-h">${esc(name)}<small>${esc(count)}</small></h2>
-      <section class="net"><ul class="gear-list">${rows}</ul></section>
+      ${inner}
     </section>`;
+  }
+
+  /** Items in a card per place: room › area › spot, in the rooms' order, then the usual
+   *  area order (front of house, stage, backstage…), spots A–Z, items A–Z inside. With
+   *  one room picked its name is left off. One place with nothing to say: just the list. */
+  function placeCards(list) {
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    const oneRoom = s.room !== ALL && new Set(list.map((d) => d.room_id || '')).size === 1;
+    const groups = new Map();
+    for (const d of list) {
+      const r = d.room_id ? s.ix.room.get(d.room_id) : null;
+      const k = `${r?.id || ''}|${posKey(d.area)}|${posKey(d.location)}`;
+      let g = groups.get(k);
+      if (!g) groups.set(k, (g = { room: r, area: d.area?.trim() || '', spot: d.location?.trim() || '', list: [] }));
+      g.list.push(d);
+    }
+    const roomOrder = (r) => (r ? r.sort_order ?? 999 : Infinity);
+    const cards = [...groups.values()].sort((a, b) => (roomOrder(a.room) - roomOrder(b.room)) || (a.room?.name || '').localeCompare(b.room?.name || '')
+      || (!a.area && !a.spot ? -1 : 0) - (!b.area && !b.spot ? -1 : 0) // the room itself first, then its areas
+      || (!a.area) - (!b.area) || byArea(a.area, b.area)
+      || (!!a.spot) - (!!b.spot) || a.spot.localeCompare(b.spot, undefined, { numeric: true }));
+    const path = (g) => [oneRoom ? null : g.room ? roomPath(g.room, s.ix.room) : 'No room', g.area || null, g.spot ? spotText({ ...g.list[0], location: g.spot }) : null].filter(Boolean);
+    if (cards.length === 1 && !path(cards[0]).length) {
+      return `<section class="net"><ul class="gear-list">${cards[0].list.sort(byName).map((d) => modelRow(d, false, true)).join('')}</ul></section>`;
+    }
+    return cards.map((g) => {
+      const parts = path(g);
+      return `<section class="net place-card">
+        <header class="net-head"><div class="net-title"><h3 class="place-path">${parts.length ? parts.map((x) => `<span>${esc(x)}</span>`).join('<i aria-hidden="true">›</i>') : '<span>No area or spot</span>'}</h3><span class="count">${g.list.length}</span></div></header>
+        <ul class="gear-list">${g.list.sort(byName).map((d) => modelRow(d, false, true)).join('')}</ul>
+      </section>`;
+    }).join('');
   }
 
   function typeRow(t) {
@@ -718,25 +776,25 @@ export function mount(el, ctx) {
       box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No item matches “${esc(s.q)}”` : 'No item matches these filters'}${s.campus !== 'all' || s.room !== ALL ? ` at ${esc(placeName())}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
       return;
     }
-    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
     if (s.campus !== ALL) {
-      box.innerHTML = `${todoNote()}<section class="net"><ul class="gear-list">${models.sort(byName).map((d) => modelRow(d)).join('')}</ul></section>`;
+      box.innerHTML = todoNote() + placeCards(models);
       return;
     }
-    // All locations: one block per location, in the Location list's order, items A–Z in each.
+    // All locations: one block per location, in the Location list's order, its places inside.
     const known = new Set(ctx.campuses.map((c) => c.id));
     const blocks = [...ctx.campuses.map((c) => ({ name: c.short_name, list: models.filter((d) => d.campus_id === c.id) })),
       { name: 'Other locations', list: models.filter((d) => !known.has(d.campus_id)) }]
       .filter((b) => b.list.length)
-      .map((b) => campusBlock(b.name, plural(b.list.length, 'item'), b.list.sort(byName).map((d) => modelRow(d, false)).join('')));
+      .map((b) => campusBlock(b.name, plural(b.list.length, 'item'), placeCards(b.list)));
     box.innerHTML = todoNote() + blocks.join('');
   }
 
-  /** An item's row. showCampus: say its location (not needed under a location's heading). */
-  function modelRow(d, showCampus = s.campus === 'all') {
+  /** An item's row. showCampus: say its location (not needed under a location's heading).
+   *  placed: under a room › area › spot heading, so those aren't repeated. */
+  function modelRow(d, showCampus = s.campus === 'all', placed = false) {
     const t = typeOf(d);
     const ip = (s.ix.ipsByDev.get(d.id) || []).find((i) => i._addr);
-    const where = [showCampus ? campusName(d.campus_id) : null, s.ix.room.get(d.room_id)?.name, spotText(d), PROJECTION[d.projection]].filter(Boolean).join(' · ');
+    const where = [showCampus ? campusName(d.campus_id) : null, ...(placed ? [] : [s.ix.room.get(d.room_id)?.name, d.area, spotText(d)]), PROJECTION[d.projection]].filter(Boolean).join(' · ');
     const sub = [t?.name, where].filter(Boolean).join(' · ');
     return `<li class="gear-row model-row ${d.status !== 'active' ? `is-${d.status}` : ''}">
       <button class="row-hit" data-model="${d.id}" aria-label="Open ${esc(d.name)}"></button>

@@ -84,7 +84,7 @@ function buildExample() {
     const { manufacturer, model, category, networked, ...rest } = d;
     devices.push({ id, type_id: typeFor(d), campus_id: 'c-' + code, room_id: roomName ? room(code, roomName) : null,
       serial_number: null, firmware: null, location: null, status: 'active', asset_no: null,
-      fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, projection: null, position_id: null, positions: [], used_as: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
+      fixture_id: null, patch_universe: null, patch_address: null, dmx_channels: null, notes: null, projection: null, position_id: null, positions: [], used_as: null, area: null, created_at: ago(60 * 24 * 2), updated_at: ago(60 * 24 * 2), created_by: 'p-me', updated_by: 'p-me', ...rest });
     addr.forEach((a, i) => ips.push({ id: uid(), device_id: id, campus_id: 'c-' + code, network_id: a.net ? 'n-' + code + '-' + a.net : null,
       label: a.label || null, ip: a.ip || null, gateway: a.gw || null, mac: a.mac || null, hostname: null,
       mode: a.mode || 'static', notes: null, sort_order: i }));
@@ -229,6 +229,14 @@ function buildExample() {
   screen('HB', 'Hog screen 1', 'Dell', 'P2418HT', 'FOH', ['Lighting'], 'Computer monitor');
   screen('HB', 'Hog screen 2', 'Dell', 'P2418HT', 'FOH', ['Lighting'], 'Computer monitor');
   screen('AND', 'Confidence monitor', 'Samsung', 'BE55T-H', 'Downstage', [], 'Confidence monitor');
+  // Areas of the room: the spots that say where they are get their area.
+  const AREAS = [[/^foh( |$)/i, 'Front of house'], [/^backstage/i, 'Backstage'],
+    [/^(stage|upstage|downstage|front of stage)/i, 'Stage'], [/^amp room/i, 'Backstage']];
+  for (const x of devices) {
+    const hit = x.location && AREAS.find(([re]) => re.test(x.location));
+    if (hit) x.area = hit[1];
+    if (x.area && ['foh', 'stage', 'backstage'].includes(x.location.toLowerCase())) x.location = null; // the spot just named the area
+  }
 
   // A little history so the device screen shows how it works.
   activity.push(
@@ -396,7 +404,8 @@ export function createDemoStore() {
       const fields = { type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(d.name) || type.name, departments: tags,
         serial_number: blank(d.serial_number), firmware: blank(d.firmware), location: blank(d.location), status: d.status || 'active', notes: blank(d.notes),
         ...('projection' in d ? { projection: blank(d.projection) } : {}), ...('position_id' in d ? { position_id: d.position_id || null } : {}),
-        ...('positions' in d ? { positions: cleanPositions(d.positions) } : {}), ...('used_as' in d ? { used_as: blank(d.used_as) } : {}) };
+        ...('positions' in d ? { positions: cleanPositions(d.positions) } : {}), ...('used_as' in d ? { used_as: blank(d.used_as) } : {}),
+        ...('area' in d ? { area: blank(d.area) } : {}) };
       let dev = d.id ? db.devices.find((x) => x.id === d.id) : null;
       if (d.id && !dev) throw new Error('That item was deleted by someone else.');
       if (dev && dev.type_id !== type.id) {
@@ -413,7 +422,7 @@ export function createDemoStore() {
         Object.assign(dev, next, { updated_at: now(), updated_by: me.id });
         if (Object.keys(ch).length) log('updated', 'devices', dev, ch);
       } else {
-        dev = { id: uid(), position_id: null, positions: [], used_as: null, ...fields, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
+        dev = { id: uid(), position_id: null, positions: [], used_as: null, area: null, ...fields, ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])), created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
         number(dev, null, payload.numbers || {});
         hangCheck(dev, null);
         db.devices.push(dev);
@@ -525,7 +534,7 @@ export function createDemoStore() {
         const dev = { id: uid(), type_id: type.id, campus_id: d.campus_id, room_id: d.room_id || null, name: blank(n) || type.name,
           departments: tags.length ? tags : [...type.departments], serial_number: null, firmware: null, location: blank(d.location),
           status: d.status || 'active', notes: blank(d.notes), projection: blank(d.projection), position_id: null,
-          positions: cleanPositions(d.positions), used_as: blank(d.used_as), ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
+          positions: cleanPositions(d.positions), used_as: blank(d.used_as), area: blank(d.area), ...Object.fromEntries(NUMBER_KEYS.map((k) => [k, null])),
           created_at: now(), updated_at: now(), created_by: me.id, updated_by: me.id };
         number(dev, null);
         db.devices.push(dev);
