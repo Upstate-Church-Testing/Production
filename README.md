@@ -267,7 +267,7 @@ Where something is and what it's for are kept apart:
   brand and model ("Atomos Ninja V") with its photo, what it is and its asset # under
   that; body first, then lens, matte box, monitor, converter, rig, battery, tripod.
 - **Systems** (Logistics › Systems): gear that works together wherever it sits, like the Clear-Com intercom
-  (main station in Broadcast, packs on every camera), each piece with what it does.
+  (main station in A Control, packs on every camera), each piece with what it does.
 
 ## Software (staff)
 

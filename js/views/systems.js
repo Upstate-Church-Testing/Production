@@ -1,5 +1,5 @@
 // Systems: items that work together wherever each one sits, like a Clear-Com
-// intercom (main station in Broadcast, belt packs on every camera) or a video
+// intercom (main station in A Control, belt packs on every camera) or a video
 // switching system. Each member can say what it does ("Main station").
 
 import { esc, icon, $, $$ } from '../util.js';
@@ -137,7 +137,7 @@ export function systemsView(host) {
               <button type="button" class="icon-btn" data-rm="${m.id}" aria-label="Take ${esc(d.name)} out">${icon('close')}</button></li>`).join('')}</ul>` : '<p class="fine">Nothing yet. Search below to add items.</p>'}
           </div>
           <div class="field"><span>Add items</span>
-            <div class="search">${icon('search')}<input id="sy-q" type="search" value="${esc(q)}" placeholder="Search ${esc(host.campusName(sys.campus_id))}: RS-701, Broadcast, Cam 3…" autocomplete="off"></div>
+            <div class="search">${icon('search')}<input id="sy-q" type="search" value="${esc(q)}" placeholder="Search ${esc(host.campusName(sys.campus_id))}: RS-701, A Control, Cam 3…" autocomplete="off"></div>
             ${words.length ? (pool.length ? `<ul class="sys-pool">${pool.map((d) => `<li><button type="button" data-add="${d.id}">${icon('plus')}<span><b>${esc(d.name)}</b><small>${esc([host.typeOf(d)?.manufacturer, host.roomName(d.room_id), d.location].filter(Boolean).join(' · '))}</small></span></button></li>`).join('')}</ul>` : '<p class="fine">Nothing else matches.</p>') : ''}
           </div>
         </form>

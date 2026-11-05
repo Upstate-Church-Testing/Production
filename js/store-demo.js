@@ -194,9 +194,9 @@ function buildExample() {
   cam('RS-701 1', 'RS-701', 'Clear-Com', 'Intercom', 'Cam 3');
   cam('CC-400 1', 'CC-400', 'Clear-Com', 'Intercom', 'Cam 3');
   cam('RS-601 1', 'RS-601', 'Clear-Com', 'Intercom', 'Cam 1');
-  cam('MS-702', 'MS-702', 'Clear-Com', 'Intercom', 'Main rack', 'Broadcast');
-  cam('RS-701 2', 'RS-701', 'Clear-Com', 'Intercom', 'Director', 'Broadcast');
-  cam('ATEM 2 M/E Production Studio 4K', 'ATEM 2 M/E Production Studio 4K', 'Blackmagic', 'Switcher', 'Main rack', 'Broadcast', 'update');
+  cam('MS-702', 'MS-702', 'Clear-Com', 'Intercom', 'Main rack', 'A Control');
+  cam('RS-701 2', 'RS-701', 'Clear-Com', 'Intercom', 'Director', 'A Control');
+  cam('ATEM 2 M/E Production Studio 4K', 'ATEM 2 M/E Production Studio 4K', 'Blackmagic', 'Switcher', 'Main rack', 'A Control', 'update');
 
   // Rigging: battens and trusses front to back, and what hangs on each (by the item's spot here).
   const rig = (code, roomName, names, hang = {}) => {
@@ -926,7 +926,7 @@ export function createDemoStore() {
         check('GCC', 'Amhaze Stadium 2X IP', 100, 88),
         check('SVL', 'HZ-350', 20, 2),
       ].filter((c) => c.device_id),
-      systems: [{ id: 'sys-1', campus_id: 'c-SVL', name: 'Clear-Com intercom', notes: 'Two-channel, all wired. The MS-702 main station in Broadcast runs to the director spot and every camera.' }],
+      systems: [{ id: 'sys-1', campus_id: 'c-SVL', name: 'Clear-Com intercom', notes: 'Two-channel, all wired. The MS-702 main station in A Control runs to the director spot and every camera.' }],
       systemItems: db.devices.filter((d) => d.campus_id === 'c-SVL' && /^(MS-702|RS-|CC-)/.test(d.name))
         .map((d) => ({ id: uid(), system_id: 'sys-1', device_id: d.id, role: d.name === 'MS-702' ? 'Main station' : d.name.startsWith('RS-') ? 'Belt pack' : 'Headset' })),
     };
