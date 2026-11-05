@@ -44,6 +44,17 @@ service's flow and teams), **Scheduling** (the roster grid, once called Roster),
 each page opening on its own part; a jump from one to another (a plan on My schedule,
 a pill on Scheduling) goes to that page.
 
+**Sunday mornings | Wednesdays.** Scheduling shows one or the other, picked up top (the
+choice lasts while the app is open). Wednesdays are the student midweeks, Mauldin then
+Simpsonville: front of house only (CG, Lighting and Audio), every position on their FOH
+teams listed whether or not anyone's on it yet. Its rows are the size the Sunday grid
+(all locations) has on the same screen, so six rows take the space of about three
+Sunday locations instead of being stretched to the bottom. Its dates are the
+Wednesdays, with the same dimmed past and green line at the next one. A service is on
+Wednesdays when it keeps its audio op (`show_audio`) or is named Midweek or Wednesday;
+everything else on Scheduling is Sunday mornings. The toggle only shows when there's a
+midweek to show.
+
 One church-wide connection, so nobody connects their own Planning Center account
 and nobody's own Planning Center permissions matter here.
 
@@ -64,7 +75,7 @@ and nobody's own Planning Center permissions matter here.
 - Who sees a service is set per service in Settings: **Everyone** (volunteers and up),
   **Staff**, or **Off**. A campus's weekly services that have a production team start
   shared with everyone; everything else starts off. RLS enforces it. Audio positions
-  are never copied (see People below).
+  aren't copied (see People below), except on services marked `show_audio`.
 - **Scheduling** (beside each shared service in Settings) says whether it's on PCO ›
   Scheduling (`pco_service_types.on_roster`). Laurens, Union and Simpsonville's Traditional
   are off it; they stay in the Services list and My schedule.
@@ -91,6 +102,15 @@ roster, the open spots and People; a shared one ("Audio / CG") stays. People who
 only fill audio positions (from Planning Center's position assignments, kept in
 `pco_team_people.positions`) aren't listed. The rule is `hiddenPosition` in
 `js/pco.js` and `supabase/functions/pco/sync.ts`.
+
+The one exception is a service with `pco_service_types.show_audio` (set in the database;
+today Simpsonville Midweek and Mauldin Midweek, see
+`supabase/migrations/20261105010000_midweek_audio.sql`). Its shown teams keep their audio
+op: copied by the sync and webhooks (`audioTeams` in `sync.ts`), shown on Wednesdays and
+in that service's teams, and staff can schedule an open Audio spot from the grid. Audio
+stays off Sunday mornings. The midweeks' FOH teams aren't shared with any Sunday
+service, so keeping audio per team doesn't reach Sundays; if a team were ever on both,
+it would.
 
 ## Meetings (staff)
 

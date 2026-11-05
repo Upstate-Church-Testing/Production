@@ -61,6 +61,10 @@ export function mount(el, ctx) {
           ${isStaff ? '<button type="button" role="tab" data-smode="people">People</button>' : ''}
           <button type="button" role="tab" data-smode="mine">My schedule</button>
         </div>
+        <div class="seg ros-week" role="tablist" aria-label="Which services" id="s-week" hidden>
+          <button type="button" role="tab" data-week="sun">Sunday mornings</button>
+          <button type="button" role="tab" data-week="mid">Wednesdays</button>
+        </div>
         <div class="ros-head" id="s-rhead" hidden>${dropdownHtml('s-rloc', 'Location', 'caps slim')}</div>
         <p class="tally" id="s-tally" aria-live="polite"></p>
       </div>
@@ -107,9 +111,10 @@ export function mount(el, ctx) {
   el.addEventListener('input', (e) => { if (nav.mode === 'people') people.input(e); });
   el.addEventListener('click', (e) => {
     if (nav.mode === 'people' && people.click(e)) return;
-    const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro]');
+    const t = e.target.closest('[data-act], [data-smode], [data-week], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro]');
     if (!t) return;
     if (t.dataset.smode) { setMode(t.dataset.smode); return; }
+    if (t.dataset.week) { if (nav.week !== t.dataset.week) { nav.week = t.dataset.week; draw(); } return; }
     if (t.dataset.rp) { openPill(t.dataset.rp); return; }
     if (t.dataset.ro) { openOpen(t.dataset.ro); return; }
     if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -133,7 +138,8 @@ export function mount(el, ctx) {
     else if (table === 'volunteers') loadPeople();
   }, 300));
   const clockTimer = setInterval(drawHead, 30000); // keeps "updated 3 min ago" honest
-  const onResize = debounce(() => { if (nav.mode === 'roster') fitRoster(); }, 120);
+  // Wednesdays take their size from the Sunday grid, so a resize works both out again.
+  const onResize = debounce(() => { if (nav.mode === 'roster') { if (model()?.week === 'mid') draw(); else fitRoster(); } }, 120);
   window.addEventListener('resize', onResize);
 
   load();
@@ -250,11 +256,15 @@ export function mount(el, ctx) {
       const first = p.times.find((x) => x.kind === 'service' && x.starts_at);
       return Date.parse(first?.starts_at || p.sort_date);
     };
+    // No audio, except on services an admin marked to keep their audio op (the midweeks).
+    const keepAudio = (typeId) => !!typeById.get(typeId)?.show_audio;
+    const shows = (typeId, position) => keepAudio(typeId) || !hiddenPosition(position);
     const plans = d.plans.filter((p) => typeById.has(p.service_type_id))
-      .map((p) => ({ ...p, needed: (p.needed || []).filter((n) => !hiddenPosition(n.position)), _day: c.day(p.sort_date), _start: start(p) }))
+      .map((p) => ({ ...p, needed: (p.needed || []).filter((n) => shows(p.service_type_id, n.position)), _day: c.day(p.sort_date), _start: start(p) }))
       .sort((a, b) => a._start - b._start || (typeById.get(a.service_type_id).sequence ?? 99) - (typeById.get(b.service_type_id).sequence ?? 99));
+    const planType = new Map(plans.map((p) => [p.id, p.service_type_id]));
     const people = new Map();
-    for (const p of d.people) if (!hiddenPosition(p.position)) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]); // no audio
+    for (const p of d.people) if (shows(planType.get(p.plan_id), p.position)) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]);
     // Planning Center is copied from some weeks back, so what already happened is here too.
     // Past is before today (a service day counts as coming up until the day is over).
     const today = c.day(Date.now());
@@ -264,11 +274,21 @@ export function mount(el, ctx) {
     const type = (p) => typeById.get(p.service_type_id);
     const plansAt = (campusId) => plans.filter((p) => type(p).campus_id === campusId);
     const places = ctx.campuses.filter((cp) => plansAt(cp.id).length);
-    // Services › Roster: shared services an admin hasn't taken off it (Settings › Planning Center).
-    const onRoster = plans.filter((p) => type(p).on_roster !== false);
+    // PCO › Scheduling: shared services an admin hasn't taken off it (Settings › Planning Center),
+    // Sunday mornings or Wednesdays (the midweeks: kept audio, or named for it). One at a time.
+    const midweek = (t) => !!t && (!!t.show_audio || /mid\s*-?\s*week|wednesday/i.test(t.name));
+    const weekOf = (t) => (midweek(t) ? 'mid' : 'sun');
+    const rosterAll = plans.filter((p) => type(p).on_roster !== false);
+    const weeks = new Set(rosterAll.map((p) => weekOf(type(p))));
+    const week = weeks.has(nav.week || 'sun') ? nav.week || 'sun' : weeks.has('sun') ? 'sun' : 'mid';
+    const rosterIn = (w) => rosterAll.filter((p) => weekOf(type(p)) === w);
+    const onRoster = rosterIn(week);
     const rosterAt = (campusId) => onRoster.filter((p) => type(p).campus_id === campusId);
     const rosterPlaces = ctx.campuses.filter((cp) => rosterAt(cp.id).length);
-    return { c, today, types, typeById, teams, plans, upcoming, people, me, mine, type, plansAt, places, onRoster, rosterAt, rosterPlaces };
+    // The services on each, even ones with nothing copied yet (Wednesdays shows every position).
+    const rosterTypes = (w) => types.filter((t) => t.on_roster !== false && weekOf(t) === w);
+    return { c, today, types, typeById, teams, plans, upcoming, people, me, mine, type, plansAt, places,
+      week, weeks, rosterIn, rosterTypes, onRoster, rosterAt, rosterPlaces };
   }
 
   // ---------------------------------------------------------- drawing ---
@@ -300,6 +320,9 @@ export function mount(el, ctx) {
     el.classList.toggle('is-people', nav.mode === 'people');
     $('#s-rhead', el).hidden = !rosterMode;
     $('#s-rkey', el).hidden = !rosterMode;
+    const wk = $('#s-week', el);
+    wk.hidden = !rosterMode || m.weeks.size < 2; // only once there's a midweek to show
+    wk.querySelectorAll('[data-week]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.week === m?.week)));
     rloc.update();
     $('#s-bar', el).hidden = !connected || !m?.plans.length || nav.mode === 'mine' || rosterMode;
     drawHead();
@@ -331,14 +354,23 @@ export function mount(el, ctx) {
     if (nav.mode === 'mine') { box.innerHTML = mySchedule(m); return; }
     if (nav.mode === 'roster') {
       // Planning Center refreshes redraw the grid every few seconds: stay where you were.
+      const view = `${m.week}|${rosterCampus(m)}`;
       const was = $('.ros-wrap', box);
-      const keep = was && nav.rosAt === rosterCampus(m) ? { left: was.scrollLeft, top: was.scrollTop } : null;
-      box.innerHTML = roster(m);
-      fitRoster();
+      const keep = was && nav.rosAt === view ? { left: was.scrollLeft, top: was.scrollTop } : null;
+      // Wednesdays is a few rows: draw them the size they are on Sunday mornings (every
+      // location), not blown up to fill the screen. Sundays is laid out first to find that
+      // size, then replaced before anything is painted.
+      let size = null;
+      if (m.week === 'mid') {
+        if (m.rosterIn('sun').length) { box.innerHTML = roster(m, 'sun', ALL); size = fitRoster(); }
+        size = size || { z: null, extra: 0 };
+      }
+      box.innerHTML = roster(m, m.week, rosterCampus(m));
+      fitRoster(size);
       const wrap = $('.ros-wrap', box);
       if (wrap) {
         if (keep) { wrap.scrollLeft = keep.left; wrap.scrollTop = keep.top; } else scrollToNext(wrap);
-        nav.rosAt = rosterCampus(m);
+        nav.rosAt = view;
       }
       return;
     }
@@ -528,9 +560,8 @@ export function mount(el, ctx) {
   // any of them, requested if any still needs an answer, confirmed only when every
   // one is. The grid is scaled to fit the screen top to bottom; only dates scroll.
 
-  function rosterData(m) {
-    const where = rosterCampus(m);
-    const scope = where === ALL ? m.onRoster : m.rosterAt(where);
+  function rosterData(m, week, where) {
+    const scope = m.rosterIn(week).filter((p) => where === ALL || m.type(p).campus_id === where);
     const teamOf = new Map(m.teams.map((t) => [t.id, t]));
     const days = [...new Set(scope.map((p) => p._day))].sort();
     const campusAt = (id) => { const i = ctx.campuses.findIndex((c) => c.id === id); return i < 0 ? 999 : i; };
@@ -543,16 +574,30 @@ export function mount(el, ctx) {
       (t.positions || []).forEach((x, i) => { const pk = `${k}|${teamKey(x.name)}`; if (!posRank.has(pk)) posRank.set(pk, i); });
     }
     const rows = new Map();
-    const cellFor = (p, team, position) => {
-      const campusId = m.type(p).campus_id || '';
+    const rowFor = (campusId, team, position) => {
       const tk = teamKey(team.name);
       const pk = teamKey(position || team.name);
       const key = `${campusId}|${tk}|${pk}`;
       let row = rows.get(key);
       if (!row) {
+        // Audio (kept on the midweeks) goes after the team's other positions.
         rows.set(key, row = { key, campusId, team: team.name, position: position || team.name, cells: new Map(),
-          at: [campusAt(campusId), teamRank.get(tk) ?? 99, posRank.get(`${tk}|${pk}`) ?? 500] });
+          at: [campusAt(campusId), teamRank.get(tk) ?? 99, hiddenPosition(position) ? 1 : 0, posRank.get(`${tk}|${pk}`) ?? 500] });
       }
+      return row;
+    };
+    // Wednesdays: every position on the midweeks' shown teams gets a row, filled or not
+    // (Sundays only lists positions someone is on, or that are open).
+    if (week === 'mid') {
+      for (const t of m.rosterTypes('mid')) {
+        if (!t.campus_id || (where !== ALL && t.campus_id !== where)) continue;
+        for (const team of m.teams.filter((x) => teamServices(x).includes(t.id))) {
+          for (const x of team.positions || []) if (x.name) rowFor(t.campus_id, team, x.name);
+        }
+      }
+    }
+    const cellFor = (p, team, position) => {
+      const row = rowFor(m.type(p).campus_id || '', team, position);
       let cell = row.cells.get(p._day);
       if (!cell) row.cells.set(p._day, cell = { people: new Map(), openBy: new Map(), openTeam: new Map() });
       return cell;
@@ -588,7 +633,7 @@ export function mount(el, ctx) {
         cell.open = Math.max(0, ...cell.openBy.values());
       }
     }
-    const list = [...rows.values()].sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1] || a.at[2] - b.at[2] || a.position.localeCompare(b.position));
+    const list = [...rows.values()].sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1] || a.at[2] - b.at[2] || a.at[3] - b.at[3] || a.position.localeCompare(b.position));
     // Show the team only where a location has the same position on two teams ("Audio").
     const seen = new Map();
     for (const r of list) { const k = `${r.campusId}|${teamKey(r.position)}`; seen.set(k, (seen.get(k) || 0) + 1); }
@@ -609,11 +654,10 @@ export function mount(el, ctx) {
     return k && k.toLowerCase() !== String(p.title || '').replace(/[^A-Za-z]/g, '').toLowerCase() ? k[0].toUpperCase() : '';
   }
 
-  function roster(m) {
-    const { days, rows } = rosterData(m);
+  function roster(m, week, where) {
+    const { days, rows } = rosterData(m, week, where);
     pills = new Map();
     opens = new Map();
-    const where = rosterCampus(m);
     const campus = where === ALL ? null : ctx.campusById.get(where);
     const letters = new Set();
     if (!rows.length) {
@@ -725,17 +769,20 @@ export function mount(el, ctx) {
     wrap.scrollLeft += next.getBoundingClientRect().left - edge.getBoundingClientRect().right;
   }
 
-  /** Scales the roster so every row fits on the screen; only the dates scroll sideways. */
-  function fitRoster() {
+  /** Scales the roster so every row fits on the screen; only the dates scroll sideways.
+   *  Returns the size it settled on ({ z: zoom, extra: px added to each row }). Given one,
+   *  it uses that instead (Wednesdays at the Sunday size); given { z: null }, it fits
+   *  without making rows taller. */
+  function fitRoster(size = null) {
     const wrap = $('.ros-wrap', el);
     const table = wrap && $('.ros', wrap);
-    if (!wrap || !table) return;
+    if (!wrap || !table) return null;
     const rows = $$('tbody tr', table);
     table.style.zoom = '';
     wrap.style.height = '';
     rows.forEach((tr) => { tr.style.height = ''; });
     const natural = table.offsetHeight;
-    if (!natural) return;
+    if (!natural) return null;
     const top = wrap.getBoundingClientRect().top + window.scrollY;
     const tabs = document.querySelector('.nav')?.getBoundingClientRect();
     const below = tabs && tabs.top > window.innerHeight / 2 ? window.innerHeight - tabs.top + 8 : 0; // the phone tab bar
@@ -749,6 +796,17 @@ export function mount(el, ctx) {
       wrap.style.height = `${Math.min(room, Math.ceil(h) + 2 + bar)}px`;
       return { h, space: room - 2 - bar };
     };
+    let natRows = null; // each row's own height, measured before any is made taller
+    const grow = (zz, extra) => {
+      natRows ??= rows.map((tr) => tr.getBoundingClientRect().height / zz);
+      rows.forEach((tr, k) => { tr.style.height = `${(natRows[k] + extra).toFixed(2)}px`; });
+      return apply(zz);
+    };
+    if (size?.z) { // a size worked out elsewhere: use it as it is
+      apply(size.z);
+      if (size.extra > 0) grow(size.z, size.extra);
+      return size;
+    }
     // Text and borders snap to pixels, so height doesn't follow zoom smoothly (a step down
     // can drop a lot, a step up add a lot). Measure, and close in on the biggest zoom that fits.
     let z = clamp((room - 2) / natural);
@@ -776,16 +834,15 @@ export function mount(el, ctx) {
     // make the rows taller so the grid still reaches the bottom of the screen.
     const zz = Number(table.style.zoom) || 1;
     let { h, space } = apply(zz);
-    if (zz < MAX - 0.001 || h >= space - 4 || !rows.length) return;
-    const natRows = rows.map((tr) => tr.getBoundingClientRect().height / zz);
-    const grow = (extra) => { rows.forEach((tr, k) => { tr.style.height = `${(natRows[k] + extra).toFixed(2)}px`; }); return apply(zz); };
+    if (size || zz < MAX - 0.001 || h >= space - 4 || !rows.length) return { z: zz, extra: 0 };
     let extra = (space - h) / zz / rows.length;
     for (let i = 0; i < 3; i++) {
-      ({ h, space } = grow(extra));
+      ({ h, space } = grow(zz, extra));
       if (h <= space + 0.5 && h > space - 4) break;
       extra += (space - h) / zz / rows.length;
     }
-    if (h > space + 0.5) grow(extra - (h - space) / zz / rows.length - 0.5);
+    if (h > space + 0.5) { extra -= (h - space) / zz / rows.length + 0.5; grow(zz, extra); }
+    return { z: zz, extra };
   }
 
   /** One person's day on one position: each service and their answer to it. */

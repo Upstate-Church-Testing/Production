@@ -20,6 +20,9 @@ const SERVICES = [
   ['st-gvl-m', 'Greenville - Modern', ['04 UC Greenville'], 'c-GVL', 'staff', ['11:00'], '08:00'],
   ['st-svl-x', 'Simpsonville - Christmas Eve', ['09 UC Simpsonville', '02 Christmas Eve'], 'c-SVL', 'hidden', ['16:00'], '13:00'],
   ['st-svl-r', 'Reset (Wednesday Nights)', ['09 UC Simpsonville'], 'c-SVL', 'hidden', ['18:30'], '17:00'],
+  // Like the real student midweeks: FOH only, and they keep their audio op (show_audio).
+  ['st-svl-w', 'Simpsonville Midweek', ['11 Students'], 'c-SVL', 'everyone', ['19:00'], '17:30'],
+  ['st-mau-w', 'Mauldin Midweek', ['11 Students'], 'c-MAU', 'everyone', ['19:00'], '17:30'],
   ['st-hb-k', 'UC:HB Upstate Kids Preschool', ['13 Upstate Kids'], 'c-HB', 'hidden', ['09:30'], '08:30'],
   ['st-ya', 'Young Adults Worship', ['12 Young Adults'], null, 'hidden', ['19:00'], '17:30'],
 ];
@@ -43,15 +46,16 @@ function build(meId) {
   const daysToSunday = (7 - base.getUTCDay()) % 7 || 7;
 
   SERVICES.forEach(([id, title, path, campus, access, times, call], i) => {
-    types.push({ id, name: title, path, campus_id: campus, campus_set: false, access, access_set: false, on_roster: id !== 'st-svl-t', sequence: i, teams_synced_at: new Date().toISOString() });
-    const tb = { id: `${id}-b`, service_type_id: id, name: 'Broadcast', shown: true, sequence: 1, positions: BROADCAST.map((p, k) => ({ id: `${id}-b${k}`, name: p, sequence: k })) };
+    const midweek = /Midweek/.test(title);
+    types.push({ id, name: title, path, campus_id: campus, campus_set: false, access, access_set: midweek, on_roster: id !== 'st-svl-t', show_audio: midweek, sequence: i, teams_synced_at: new Date().toISOString() });
+    const tb = { id: `${id}-b`, service_type_id: id, name: 'Broadcast', shown: !midweek, sequence: 1, positions: midweek ? [] : BROADCAST.map((p, k) => ({ id: `${id}-b${k}`, name: p, sequence: k })) };
     const tf = { id: `${id}-f`, service_type_id: id, name: 'FOH', shown: true, sequence: 2, positions: FOH.map((p, k) => ({ id: `${id}-f${k}`, name: p, sequence: k })) };
     const tw = { id: `${id}-w`, service_type_id: id, name: 'Worship Team', shown: false, sequence: 3, positions: [] };
     const tu = { id: `${id}-u`, service_type_id: id, name: 'Ushers', shown: false, sequence: 4, positions: [] };
     teams.push(tb, tf, tw, tu);
     if (id === 'st-hb-k' || id === 'st-ya') return;
     for (let w = -4; w < 4; w++) { // like the real copy: some weeks back as well as ahead
-      const isWed = id === 'st-svl-r';
+      const isWed = id === 'st-svl-r' || midweek;
       const day = new Date(base.getTime() + (daysToSunday + w * 7 - (isWed ? 4 : 0)) * 864e5);
       if (id === 'st-svl-x' && w !== 0) continue;
       const pid = `${id}-p${w}`;
@@ -65,7 +69,7 @@ function build(meId) {
       const plan = plans[plans.length - 1];
       // Like the real schedule: one person covers a position for every service at a
       // location that day (Traditional has its own crew), and answers each one separately.
-      const crew = id === 'st-svl-t' ? 'trad' : campus;
+      const crew = id === 'st-svl-t' ? 'trad' : midweek ? `${campus}-mid` : campus;
       const fill = (team, roles, gaps) => roles.forEach((pos, k) => {
         if (gaps.includes(k)) { plan.needed.push({ team_id: team.id, position: pos, quantity: 1 }); return; }
         const seed = [...`${crew}|${team.name}|${pos}|${w}`].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
@@ -80,7 +84,7 @@ function build(meId) {
       });
       const broadcast = ['st-svl-m', 'st-svl-v'].includes(id); // like the real thing: only Simpsonville's main room has a broadcast
       if (broadcast) fill(tb, BROADCAST, w === 0 ? [5] : w === 1 ? [3, 6] : [2, 4, 5, 6]);
-      fill(tf, FOH, w >= 2 ? [1] : []);
+      fill(tf, FOH, midweek ? (w === 1 ? [0] : w >= 2 ? [2] : []) : w >= 2 ? [1] : []);
     }
   });
   return { types, teams, plans, people };
@@ -150,7 +154,9 @@ export function createPcoDemo({ wait, clone, me, changed }) {
     }
     const plans = picks.map((x) => db.plans.find((p) => p.id === x.plan_id)).filter(Boolean);
     if (!plans.length) throw new Error('Pick at least one service.');
-    if (/^\s*(audio|sound)\b/i.test(position || '')) throw new Error('Audio isn’t scheduled from here.');
+    // Audio only on services that keep their audio op (the midweeks), like the server.
+    const keepsAudio = (planId) => db.types.find((t) => t.id === db.plans.find((p) => p.id === planId)?.service_type_id)?.show_audio;
+    if (/^\s*(audio|sound)\b/i.test(position || '') && !picks.every((x) => keepsAudio(x.plan_id))) throw new Error('Audio isn’t scheduled from here.');
     const { people: vlist, members: mem } = volunteerData();
     if (action === 'schedule') {
       const name = vlist.find((v) => v.pco_person_id === person_id)?.name || 'Someone';
@@ -172,7 +178,7 @@ export function createPcoDemo({ wait, clone, me, changed }) {
     const sameDay = db.plans.filter((p) => p.sort_date.slice(0, 10) === day).map((p) => p.id);
     const list = [...ids].map((pid) => {
       const v = vlist.find((x) => x.pco_person_id === pid);
-      const positions = [...new Set(mem.filter((x) => x.person_id === pid).flatMap((x) => x.positions))].filter((x) => !/^\s*(audio|sound)\b/i.test(x)).sort();
+      const positions = [...new Set(mem.filter((x) => x.person_id === pid).flatMap((x) => x.positions))].filter((x) => x === position || !/^\s*(audio|sound)\b/i.test(x)).sort();
       const hsh = hash(pid + day);
       const start = new Date(plans[0].sort_date);
       const blockouts = hsh % 7 === 0 ? [{ starts_at: new Date(start.getTime() - 12 * 36e5).toISOString(), ends_at: new Date(start.getTime() + 12 * 36e5).toISOString(), reason: hsh % 2 ? 'Out of town' : null, blocks: true }]

@@ -1880,6 +1880,9 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .view-services.is-roster .mode-seg button { padding: 6px 13px; font-size: 13px; }
 .view-services.is-roster #s-meta, .view-services.is-roster #s-tally { display: none; }
 .view-services.is-roster .results { gap: 0; padding-top: 2px; padding-bottom: 0; }
+/* Sunday mornings | Wednesdays: the same height as the location picker beside it. */
+.ros-week { padding: 3px; flex: none; }
+.ros-week button { padding: 7px 14px; font-size: 13px; }
 .ros-head { display: flex; align-items: center; flex: 0 1 280px; min-width: 0; }
 .ros-head[hidden] { display: none; }
 .dd.slim { min-height: 38px; padding: 2px 4px 2px 14px; border-radius: 14px; flex: 1 1 auto; min-width: 0; }

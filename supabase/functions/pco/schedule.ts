@@ -19,6 +19,8 @@ export type ScheduleDb = Pick<Db, 'savePeople' | 'updatePlan' | 'pulse'> & {
   plans(ids: string[]): Promise<(PlanRow & { access: string })[]>;
   teams(ids: string[]): Promise<TeamRow[]>;
   shownTeamIds(): Promise<string[]>;
+  /** Shown teams that keep their audio op (services marked show_audio). */
+  audioTeamIds(): Promise<string[]>;
   members(teamIds: string[]): Promise<{ team_id: string; person_id: string; positions: string[] }[]>;
   volunteers(personIds: string[]): Promise<{ pco_person_id: string; name: string; photo: string | null; lanyard: string | null }[]>;
   planPerson(id: string): Promise<{ id: string; plan_id: string; team_id: string; person_id: string | null; name: string; position: string | null; invite_pending: boolean } | null>;
@@ -45,8 +47,11 @@ const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T12:00:00
 async function resolve(db: ScheduleDb, picks: Spot[], position: string) {
   if (!Array.isArray(picks) || !picks.length || picks.length > 8) throw new Refused('Pick at least one service.');
   if (!position || typeof position !== 'string' || position.length > 120) throw new Refused('Which position?');
-  if (hiddenPosition(position)) throw new Refused('Audio isn’t scheduled from here.');
   for (const p of picks) if (!ID.test(String(p?.plan_id)) || !ID.test(String(p?.team_id))) throw new Refused('That service isn’t in the app.');
+  if (hiddenPosition(position)) { // audio only where the service keeps its audio op (the midweeks)
+    const keep = new Set(await db.audioTeamIds());
+    if (!picks.every((p) => keep.has(String(p.team_id)))) throw new Refused('Audio isn’t scheduled from here.');
+  }
   const plans = new Map((await db.plans(picks.map((p) => String(p.plan_id)))).map((p) => [p.id, p]));
   const teams = new Map((await db.teams(picks.map((p) => String(p.team_id)))).map((t) => [t.id, t]));
   return picks.map((p) => {
@@ -193,7 +198,7 @@ export async function schedule({ pco, db, picks, position, person_id, by, stamp 
   }
   // Show the change right away instead of waiting for the next sync.
   for (const { plan } of resolved.filter((r) => done.some((d) => d.plan_id === r.plan.id))) {
-    try { await refreshRoster({ pco, db, plan, shownTeams: shown, stamp }); } catch { /* the sync catches up */ }
+    try { await refreshRoster({ pco, db, plan, shownTeams: shown, keepAudio: new Set(await db.audioTeamIds()), stamp }); } catch { /* the sync catches up */ }
   }
   if (done.length) await db.pulse(stamp);
   if (failure) {
@@ -220,7 +225,7 @@ export async function unschedule({ pco, db, plan_person_id, by, stamp }:
   }
   await pco.send('DELETE', path);
   await db.log({ by, action: 'remove', plan_id: plan.id, plan_person_id: row.id, person_id: row.person_id, person_name: row.name, team_id: row.team_id, position: row.position });
-  try { await refreshRoster({ pco, db, plan, shownTeams: new Set(await db.shownTeamIds()), stamp }); } catch { /* the sync catches up */ }
+  try { await refreshRoster({ pco, db, plan, shownTeams: new Set(await db.shownTeamIds()), keepAudio: new Set(await db.audioTeamIds()), stamp }); } catch { /* the sync catches up */ }
   await db.pulse(stamp);
   return { removed: row.id };
 }

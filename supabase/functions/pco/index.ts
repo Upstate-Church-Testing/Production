@@ -8,16 +8,20 @@
 // POST { action } with the signed-in person's token, or the cron token:
 //   connect     admin  { app_id, secret }  check it with Planning Center, keep it, start syncing
 //   disconnect  admin                       forget the token and the copied rosters
-//   sync        staff, or the 30-second schedule
+//   sync        staff Refresh (reads everything; waits its turn if a run is going), or the 10-second schedule
 //   candidates  staff  { picks, position }             who could fill an open spot, with blockouts and that day's schedules
 //   schedule    staff  { picks, position, person_id }  put them on; invite prepared, not sent
 //   unschedule  staff  { plan_person_id }              take them back off before their invite goes out
+//   webhooks    admin                       have Planning Center send roster changes here (see hook.ts)
+//
+// POST ?hook=1 is Planning Center itself, signed with a webhook secret.
 
 import { createClient } from 'npm:@supabase/supabase-js@2.49.8';
 import { pcoClient, PcoError } from './pco.ts';
 import { runSync } from './sync.ts';
 import { dbAdapter, scheduleDb } from './db.ts';
 import { candidates, schedule, unschedule, Refused } from './schedule.ts';
+import { authentic, ensureWebhooks, plansIn, refreshPlans } from './hook.ts';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -27,6 +31,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+const HOOK_URL = `${SB_URL}/functions/v1/pco?hook=1`; // where Planning Center sends roster changes
 const SYNC_BUDGET_MS = 110_000; // stop starting new requests after this; the next run picks up the rest
 const DAY = 864e5;
 
@@ -44,6 +49,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return reply({ error: 'Use POST.' }, 405);
   const sb = createClient(SB_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  if (new URL(req.url).searchParams.has('hook')) return webhook(req, sb);
   let body: any = {};
   try { body = await req.json(); } catch { /* no body */ }
   try {
@@ -52,6 +58,12 @@ Deno.serve(async (req) => {
       case 'connect': need(who, 'admin'); return reply(await connect(sb, who, body));
       case 'disconnect': need(who, 'admin'); return reply(await disconnect(sb));
       case 'sync': need(who, 'staff'); return reply(await startSync(sb, who));
+      case 'webhooks': {
+        need(who, 'admin');
+        const creds = await credentials(sb);
+        if (!creds?.app_id || !creds?.secret) throw new Problem(400, 'Planning Center isn’t connected.');
+        return reply(await ensureWebhooks({ pco: pcoClient({ appId: creds.app_id, secret: creds.secret }), sb, url: HOOK_URL }));
+      }
       case 'candidates': case 'schedule': case 'unschedule': {
         need(who, 'staff');
         const creds = await credentials(sb);
@@ -71,6 +83,33 @@ Deno.serve(async (req) => {
     return reply({ error: (e as Error).message || 'Something went wrong.' }, status);
   }
 });
+
+// ------------------------------------------------------------------ webhook --
+
+// A roster change from Planning Center. Answer right away (anything but 200 makes
+// it retry) and read that plan again in the background.
+async function webhook(req: Request, sb: any) {
+  const raw = await req.text();
+  try {
+    if (!(await authentic(sb, raw, req.headers.get('x-pco-webhooks-authenticity')))) return reply({ error: 'Not allowed.' }, 401);
+    const got = Date.now();
+    const job = (async () => {
+      const planIds = await plansIn(sb, JSON.parse(raw));
+      if (!planIds.length) return;
+      const creds = await credentials(sb);
+      if (!creds?.app_id || !creds?.secret) return;
+      const pco = pcoClient({ appId: creds.app_id, secret: creds.secret });
+      const out = await refreshPlans({ pco, db: scheduleDb(sb), planIds });
+      console.log(JSON.stringify({ pco_hook: { plans: planIds, ...out, ms: Date.now() - got } }));
+    })().catch((e) => console.error('pco webhook failed', e));
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt?.waitUntil) rt.waitUntil(job); else await job;
+    return reply({ ok: true });
+  } catch (e) {
+    console.error('pco webhook error', e);
+    return reply({ error: 'Something went wrong.' }, 500);
+  }
+}
 
 async function caller(req: Request, sb: any): Promise<Who> {
   const cron = req.headers.get('x-pco-cron');
@@ -149,19 +188,28 @@ async function startSync(sb: any, who: Who, force?: { fullTeams: boolean; allRos
   const creds = await credentials(sb);
   if (!creds?.app_id || !creds?.secret) throw new Problem(400, 'Planning Center isn’t connected.');
 
+  // Someone tapping Refresh wants everything read again: teams, positions, members and every
+  // roster. The 10-second schedule often holds the lock, so the wish is written down first;
+  // whichever run gets the lock next does the full read (the app shows "Updating…" until then).
+  if (who.kind === 'user') {
+    const { error: wantError } = await sb.from('pco_connection').update({ refresh_wanted_at: new Date().toISOString() }).eq('id', true);
+    if (wantError) throw new Error(`Database: ${wantError.message}`);
+  }
+  const forced = force ?? (who.kind === 'user' || creds.refresh_wanted_at ? { fullTeams: true, allRosters: true } : null);
+
   // One sync at a time. A sync that died more than 4 minutes ago doesn't count.
   const stale = new Date(Date.now() - 4 * 60_000).toISOString();
   const { data: got, error } = await sb.from('pco_connection')
-    .update({ sync_started_at: new Date().toISOString(), sync_by_user: who.kind === 'user' })
+    .update({ sync_started_at: new Date().toISOString(), sync_by_user: !!forced })
     .eq('id', true)
     .or(`sync_started_at.is.null,sync_started_at.lt.${stale}`)
     .select('id');
   if (error) throw new Error(`Database: ${error.message}`);
-  if (!got?.length) return { started: false, already: true };
+  if (!got?.length) return { started: false, already: true, queued: who.kind === 'user' };
 
   const dailyDue = !creds.last_full_sync_at || Date.now() - Date.parse(creds.last_full_sync_at) > DAY;
-  // The schedule runs every 30 seconds and reads only what changed; someone tapping Refresh reads every roster.
-  const opts = force ?? { fullTeams: dailyDue, allRosters: who.kind === 'user' };
+  // The schedule runs every 10 seconds and reads only what changed (and teams every few minutes).
+  const opts = forced ?? { fullTeams: dailyDue, allRosters: false };
   const job = runAndRecord(sb, creds, opts);
   // Answer now; the sync carries on in the background.
   const rt = (globalThis as any).EdgeRuntime;
@@ -175,7 +223,8 @@ async function runAndRecord(sb: any, creds: any, opts: { fullTeams: boolean; all
   let error: string | null = null;
   try {
     const pco = pcoClient({ appId: creds.app_id, secret: creds.secret });
-    result = await runSync({ pco, db: dbAdapter(sb), weeksAhead: creds.weeks_ahead || 6, ...opts, deadline: started + SYNC_BUDGET_MS });
+    const range = creds.range_start && creds.range_end ? { start: creds.range_start, end: creds.range_end } : null;
+    result = await runSync({ pco, db: dbAdapter(sb), range, weeksAhead: creds.weeks_ahead || 6, ...opts, deadline: started + SYNC_BUDGET_MS });
   } catch (e) {
     error = (e as Error).message || String(e);
     console.error('pco sync failed', e);
@@ -189,7 +238,12 @@ async function runAndRecord(sb: any, creds: any, opts: { fullTeams: boolean; all
   }
   const { error: saveError } = await sb.from('pco_connection').update(patch).eq('id', true);
   if (saveError) console.error('pco sync status not saved', saveError.message);
-  // Every 30 seconds is a lot of log; keep the runs that did something.
+  if (opts.allRosters) { // the Refresh someone asked for is done (one asked for during this run still counts)
+    const { error: doneError } = await sb.from('pco_connection').update({ refresh_wanted_at: null })
+      .eq('id', true).lte('refresh_wanted_at', new Date(started).toISOString());
+    if (doneError) console.error('pco refresh flag not cleared', doneError.message);
+  }
+  // Every 10 seconds is a lot of log; keep the runs that did something.
   if (error || opts.fullTeams || opts.allRosters || result?.changed || result?.partial) {
     console.log(JSON.stringify({ pco_sync: { ...opts, ms: Date.now() - started, error, ...result } }));
   }

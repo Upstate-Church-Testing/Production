@@ -1,7 +1,7 @@
 // The sync's reads and writes, done with the service role (it can see and
 // write the Planning Center tables; the app can only read what RLS allows).
 
-import type { Db } from './sync.ts';
+import { audioTeams, type Db } from './sync.ts';
 import type { ScheduleDb } from './schedule.ts';
 
 const CHUNK = 500;
@@ -28,9 +28,9 @@ export function dbAdapter(sb: any): Db {
 
   return {
     campuses: () => selectAll('campuses', 'id, short_name, code'),
-    serviceTypes: () => selectAll('pco_service_types', 'id, access, access_set, campus_id, campus_set, teams_synced_at'),
+    serviceTypes: () => selectAll('pco_service_types', 'id, name, access, access_set, campus_id, campus_set, teams_synced_at, synced_at, show_audio'),
     teams: () => selectAll('pco_teams', 'id, service_type_id, service_type_ids, name, shown, positions'),
-    plans: () => selectAll('pco_plans', 'id, service_type_id, synced_at, needed, pco_updated_at'),
+    plans: () => selectAll('pco_plans', 'id, service_type_id, sort_date, synced_at, needed, pco_updated_at'),
 
     saveServiceTypes: (rows) => upsert('pco_service_types', rows),
     async removeServiceTypesExcept(ids) {
@@ -47,8 +47,8 @@ export function dbAdapter(sb: any): Db {
       if (typeIds.length) ok(await sb.from('pco_plans').delete().in('service_type_id', typeIds));
     },
     savePlans: (rows) => upsert('pco_plans', rows),
-    async removePlansExcept(typeId, keepIds) {
-      let q = sb.from('pco_plans').delete().eq('service_type_id', typeId);
+    async removePlansExcept(typeId, keepIds, from, before) {
+      let q = sb.from('pco_plans').delete().eq('service_type_id', typeId).gte('sort_date', from).lt('sort_date', before);
       if (keepIds.length) q = q.not('id', 'in', list(keepIds));
       ok(await q);
     },
@@ -80,6 +80,8 @@ export function dbAdapter(sb: any): Db {
     async saveTeamPeople(teamId, rows, at) {
       const unique = [...new Map(rows.map((r) => [r.person_id, r])).values()];
       const ids = unique.map((r) => r.person_id);
+      const sig = (list: { person_id: string; positions: string[] }[]) => list.map((r) => `${r.person_id}:${[...(r.positions || [])].sort().join(',')}`).sort().join('|');
+      const before = ok(await sb.from('pco_team_people').select('person_id, positions').eq('team_id', teamId));
       for (let i = 0; i < unique.length; i += CHUNK) {
         ok(await sb.from('pco_team_people').upsert(unique.slice(i, i + CHUNK).map((r) => ({ team_id: teamId, person_id: r.person_id, positions: r.positions, synced_at: at })), { onConflict: 'team_id,person_id' }));
       }
@@ -87,6 +89,7 @@ export function dbAdapter(sb: any): Db {
       if (ids.length) q = q.not('person_id', 'in', list(ids));
       ok(await q);
       ok(await sb.from('pco_teams').update({ people_synced_at: at }).eq('id', teamId));
+      return sig(before) !== sig(unique);
     },
     async pulse(at) {
       ok(await sb.from('pco_live').upsert({ id: true, changed_at: at }, { onConflict: 'id' }));
@@ -121,6 +124,12 @@ export function scheduleDb(sb: any): ScheduleDb {
     },
     async shownTeamIds() {
       return ok(await sb.from('pco_teams').select('id').eq('shown', true)).map((r: any) => r.id);
+    },
+    async audioTeamIds() {
+      const types = ok(await sb.from('pco_service_types').select('id').eq('show_audio', true)).map((r: any) => String(r.id));
+      if (!types.length) return [];
+      const teams = ok(await sb.from('pco_teams').select('id, service_type_id, service_type_ids, shown').eq('shown', true));
+      return [...audioTeams(teams, new Set(types))];
     },
     async members(teamIds) {
       return ok(await sb.from('pco_team_people').select('team_id, person_id, positions').in('team_id', teamIds));
