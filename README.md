@@ -250,7 +250,9 @@ Where something is and what it's for are kept apart:
   Hazers are lighting items in the "Hazer" category: they keep a patch but don't show
   under "Fixture".
 - **Cameras**: each location's camera positions (Cam 1…N), in service or out of
-  commission, with the gear on each one (any item whose Spot is "Cam 3").
+  commission, with the gear on each one (any item whose Spot is "Cam 3"): each piece by
+  brand and model ("Atomos Ninja V") with its photo, what it is and its asset # under
+  that; body first, then lens, matte box, monitor, converter, rig, battery, tripod.
 - **Systems** (Logistics › Systems): gear that works together wherever it sits, like the Clear-Com intercom
   (main station in Broadcast, packs on every camera), each piece with what it does.
 

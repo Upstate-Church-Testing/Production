@@ -7,6 +7,8 @@
 
 import { esc, icon, $ } from '../util.js';
 import { statusPill } from './devices.js';
+import { typeThumb } from './types.js';
+import { assetTag } from '../lighting.js';
 import { ALL } from '../picker.js';
 
 /** "Cam 3", "Camera 3", "cam03", "Cam #3" → 3; anything else → null. */
@@ -16,7 +18,7 @@ export function camNumber(spot) {
 }
 
 // Body first, then what hangs off it.
-const ORDER = ['camera', 'lens', 'monitor', 'camera rig', 'battery', 'tripod', 'camera support'];
+const ORDER = ['camera', 'lens', 'matte box', 'monitor', 'converter', 'camera rig', 'battery', 'tripod', 'camera support'];
 const rank = (t) => { const i = ORDER.indexOf((t?.category || '').toLowerCase()); return i < 0 ? ORDER.length : i; };
 
 export function camerasView(host) {
@@ -86,9 +88,14 @@ export function camerasView(host) {
       </header>
       ${p.note ? `<p class="cam-note">${esc(p.note)}</p>` : ''}
       ${p.parts.length ? `<ul>${p.parts.map((d) => {
+        // Each piece by its brand and model ("Atomos Ninja V") with its photo; what it is and its asset # under that.
         const t = host.typeOf(d);
+        const name = t && !t.unknown ? [t.manufacturer, t.name].filter(Boolean).join(' ') : d.name;
+        const sub = [t?.category, assetTag(d.asset_no)].filter(Boolean).join(' · ');
         return `<li><button type="button" data-model="${d.id}">
-          <small>${esc(t?.manufacturer || t?.category || '')}</small><span>${esc(d.name)}</span>${d.status !== 'active' ? statusPill(d.status) : ''}</button></li>`;
+          ${typeThumb(ctx, t, 'sm')}
+          <span class="cam-part"><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>
+          ${d.status !== 'active' ? statusPill(d.status) : ''}</button></li>`;
       }).join('')}</ul>` : '<p class="cam-empty">No gear on this camera</p>'}
     </article>`;
   }
