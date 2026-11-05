@@ -117,8 +117,8 @@ function buildExample() {
   dev('SVL', W, { name: 'Videohub 40x40', departments: ['video'], category: 'Router', manufacturer: 'Blackmagic', model: 'Videohub 40x40 12G', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.201/24', gw: '10.50.10.101' }]);
   dev('SVL', W, { name: 'Switcher', departments: ['video'], category: 'Switcher', manufacturer: 'Blackmagic', model: 'ATEM 2 M/E Production Studio 4K', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.202/24' }]);
   dev('SVL', W, { name: 'Switcher Panel', departments: ['video'], category: 'Control Panel', manufacturer: 'Blackmagic', location: 'A-Control Desk' }, [{ net: 'ctl', ip: '10.50.10.205/24', gw: '10.50.10.101' }]);
-  dev('SVL', W, { name: 'Director’s Mac', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'A-Control Desk' }, [{ net: 'ctl', ip: '10.50.10.217/24', gw: '10.50.10.101' }]);
-  dev('SVL', W, { name: 'CG1', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'FOH Desk', notes: 'ProPresenter' },
+  const dirMac = dev('SVL', W, { name: 'Director’s Mac', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'A-Control Desk', firmware: 'macOS Sequoia 15.6', positions: ['Director'] }, [{ net: 'ctl', ip: '10.50.10.217/24', gw: '10.50.10.101' }]);
+  const cg1 = dev('SVL', W, { name: 'CG1', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'FOH Desk', firmware: 'macOS Tahoe 26.1', positions: ['CG'] },
     [{ net: 'ctl', ip: '10.50.10.234/24', gw: '10.50.10.101', label: 'Production' }, { net: 'house', ip: '10.60.20.79/24', label: 'House', mode: 'dhcp' }]);
   dev('SVL', W, { name: 'FOH Console', departments: ['audio'], category: 'Console', manufacturer: 'Yamaha', model: 'QL5', location: 'FOH' }, [{ net: 'dante', ip: '192.168.50.35/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Stage Box', departments: ['audio'], category: 'Stagebox', manufacturer: 'Yamaha', model: 'Rio3224-D2', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.32/24', label: 'Dante Primary' }]);
@@ -238,6 +238,24 @@ function buildExample() {
     if (x.area && ['foh', 'stage', 'backstage'].includes(x.location.toLowerCase())) x.location = null; // the spot just named the area
   }
 
+  // CG computers at other locations, and what runs on them (Gear › Software).
+  const cgFF = dev('FF', W, { name: 'Mac mini (CG)', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini (M2, 2023)', location: 'FOH desk', firmware: 'macOS Tahoe 26.0.1', positions: ['CG'], notes: '16 GB memory.' });
+  const cgHB = dev('HB', W, { name: 'Mac mini (CG)', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini (M4, 2024)', location: 'CG', firmware: 'macOS Tahoe 26.0.1', positions: ['CG'], notes: '16 GB memory.' });
+  const cgAND = dev('AND', W, { name: 'Mac mini (CG)', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini (M2 Pro, 2023)', location: 'CG', firmware: 'macOS Tahoe 26.0', positions: ['CG'] });
+  dev('HB', W, { name: 'Lighting computer', departments: ['lighting'], category: 'Computer', manufacturer: 'Lenovo', model: 'ThinkCentre M75q-1', location: 'FOH', positions: ['Lighting'] });
+  const software = [
+    { id: 'sw-pp', name: 'ProPresenter', maker: 'Renewed Vision', logo: 'propresenter.svg', notes: null },
+    { id: 'sw-comp', name: 'Companion', maker: 'Bitfocus', logo: 'companion.png', notes: null },
+    { id: 'sw-dv', name: 'Desktop Video', maker: 'Blackmagic Design', logo: 'blackmagic.svg', notes: null },
+  ].map((x) => ({ ...x, created_at: ago(60 * 24), updated_at: ago(60 * 24) }));
+  const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const installs = [
+    ['sw-pp', cgFF, '22', '369098928', day(0), 'Testing at Five Forks only this Sunday. Not on the other locations yet.'],
+    ['sw-pp', cgHB, '21.4', null, day(2), null], ['sw-pp', cg1, '21.4', null, day(8), null], ['sw-pp', cgAND, '21.4', null, day(1), null],
+    ['sw-dv', cgFF, '15.0', null, day(1), null], ['sw-dv', cgHB, '15.0', null, day(2), 'SDI and HDMI out at 1080i59.94.'], ['sw-dv', cg1, '14.3', null, day(8), null],
+    ['sw-comp', cg1, '3.3.1', null, day(8), null], ['sw-comp', dirMac, '3.3.1', null, day(8), null],
+  ].map(([software_id, device_id, version, build, seen_on, notes]) => ({ id: uid(), software_id, device_id, version, build, seen_on, notes, created_at: ago(60 * 24), updated_at: ago(60 * 24) }));
+
   // A little history so the device screen shows how it works.
   activity.push(
     { id: 1, at: ago(26), actor_id: 'p-bethany', action: 'updated', entity: 'devices', entity_id: cat, device_id: cat, campus_id: 'c-SVL', label: 'Catwalk Gateway', changes: { firmware: ['B1.0 V3.4', 'B1.0 V3.7'] } },
@@ -265,7 +283,7 @@ function buildExample() {
   numberAll(devices, rooms, types);
   types.forEach((t) => delete t.key);
 
-  return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts, positions };
+  return { rooms, networks, devices, ips, creds, activity, types, typePorts, devPorts, positions, software, installs };
 }
 
 /** One asset # per item, UCP-000001 up, by location and room; fixtures named for their model (like the database). */
@@ -390,8 +408,58 @@ export function createDemoStore() {
 
     async networkData() {
       await wait(160);
-      return clone({ rooms: db.rooms, networks: db.networks, devices: db.devices, ips: db.ips, positions: db.positions,
+      return clone({ rooms: db.rooms, networks: db.networks, devices: db.devices, ips: db.ips, positions: db.positions, software: db.software, installs: db.installs,
         types: db.types.map((t) => ({ ...t, ports: db.typePorts.filter((p) => p.type_id === t.id) })) });
+    },
+
+    // ---- Software (like the database: names unique in any case; a title once per computer).
+    async saveSoftware(row) {
+      await wait(120);
+      const name = blank(row.name);
+      if (!name) throw new Error('Give the software a name.');
+      if (db.software.some((x) => x.id !== row.id && x.name.toLowerCase() === name.toLowerCase())) throw new Error(`There’s already software called ${name}.`);
+      const fields = { name, maker: blank(row.maker), logo: blank(row.logo), notes: blank(row.notes) };
+      let cur = row.id ? db.software.find((x) => x.id === row.id) : null;
+      if (cur) { const ch = diff(cur, fields, Object.keys(fields)); Object.assign(cur, fields, { updated_at: now() }); if (Object.keys(ch).length) log('updated', 'software', cur, ch); }
+      else { cur = { id: uid(), ...fields, created_at: now(), updated_at: now() }; db.software.push(cur); log('created', 'software', cur, { name }); }
+      changed('software');
+      return cur.id;
+    },
+    async deleteSoftware(id) {
+      await wait(120);
+      const cur = db.software.find((x) => x.id === id);
+      db.installs = db.installs.filter((x) => x.software_id !== id);
+      db.software = db.software.filter((x) => x.id !== id);
+      if (cur) log('deleted', 'software', cur, {});
+      changed('software');
+    },
+    async saveInstall(row) {
+      await wait(120);
+      const version = blank(row.version);
+      if (!version) throw new Error('Which version?');
+      const sw = db.software.find((x) => x.id === row.software_id);
+      if (!sw) throw new Error('Pick the software.');
+      if (db.installs.some((x) => x.id !== row.id && x.software_id === row.software_id && x.device_id === row.device_id)) throw new Error(`${sw.name} is already on this item.`);
+      const fields = { software_id: row.software_id, device_id: row.device_id, version, build: blank(row.build), seen_on: row.seen_on || null, notes: blank(row.notes) };
+      let cur = row.id ? db.installs.find((x) => x.id === row.id) : null;
+      if (cur) {
+        const ch = diff(cur, fields, ['version', 'build', 'seen_on', 'notes']);
+        Object.assign(cur, fields, { updated_at: now() });
+        if (Object.keys(ch).length) log('updated', 'software_installs', { ...cur, name: sw.name }, ch);
+      } else {
+        cur = { id: uid(), ...fields, created_at: now(), updated_at: now() };
+        db.installs.push(cur);
+        log('created', 'software_installs', { ...cur, name: sw.name }, { version });
+      }
+      changed('software_installs');
+      return cur.id;
+    },
+    async deleteInstall(id) {
+      await wait(120);
+      const cur = db.installs.find((x) => x.id === id);
+      db.installs = db.installs.filter((x) => x.id !== id);
+      if (cur) log('deleted', 'software_installs', { ...cur, name: db.software.find((x) => x.id === cur.software_id)?.name || 'Software' }, {});
+      changed('software_installs');
     },
 
     async saveDevice(payload) {
@@ -483,6 +551,7 @@ export function createDemoStore() {
       db.ips = db.ips.filter((i) => i.device_id !== id);
       db.creds = db.creds.filter((c) => c.device_id !== id);
       db.devPorts = db.devPorts.filter((x) => x.device_id !== id);
+      db.installs = db.installs.filter((x) => x.device_id !== id);
       log('deleted', 'devices', dev, { name: dev.name });
       changed('devices');
     },

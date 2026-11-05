@@ -72,7 +72,7 @@ export async function createSupabaseStore(url, key) {
     },
 
     async networkData() {
-      const [rooms, networks, devices, ips, types, positions] = await Promise.all([
+      const [rooms, networks, devices, ips, types, positions, software, installs] = await Promise.all([
         all(() => sb.from('rooms').select('*').order('sort_order').order('name')),
         all(() => sb.from('networks').select('*').order('sort_order').order('name')),
         all(() => sb.from('devices').select('*').order('name')),
@@ -80,8 +80,32 @@ export async function createSupabaseStore(url, key) {
         all(() => sb.from('device_types').select('*, ports:device_type_ports(*)').order('name')),
         // Rigging positions; an app open before they existed still loads the rest.
         all(() => sb.from('rig_positions').select('*').order('sort_order').order('name')).catch(() => []),
+        // Software on each computer (Gear › Software); likewise optional.
+        all(() => sb.from('software').select('*').order('name')).catch(() => []),
+        all(() => sb.from('software_installs').select('*')).catch(() => []),
       ]);
-      return { rooms, networks, devices, ips, types, positions };
+      return { rooms, networks, devices, ips, types, positions, software, installs };
+    },
+
+    // ---- Software: titles (ProPresenter…) and the version on each computer.
+    /** Insert or update a title ({ id?, name, maker, logo, notes }); returns its id. */
+    async saveSoftware(row) {
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from('software').update(fields).eq('id', id)); return id; }
+      return ok(await sb.from('software').insert(fields).select('id').single()).id;
+    },
+    /** Takes a title away, and its versions with it. */
+    async deleteSoftware(id) {
+      ok(await sb.from('software').delete().eq('id', id));
+    },
+    /** A title on one computer ({ id?, software_id, device_id, version, build, seen_on, notes }); returns its id. */
+    async saveInstall(row) {
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from('software_installs').update(fields).eq('id', id)); return id; }
+      return ok(await sb.from('software_installs').insert(fields).select('id').single()).id;
+    },
+    async deleteInstall(id) {
+      ok(await sb.from('software_installs').delete().eq('id', id));
     },
 
     // ---- Rigging: a room's battens and trusses, and what hangs on each.
@@ -346,7 +370,7 @@ export async function createSupabaseStore(url, key) {
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
-      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'rig_positions', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers']) {
+      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'rig_positions', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers', 'software', 'software_installs']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
       }
       for (const table of ['meetings', 'meeting_notes', 'meeting_questions', 'meeting_answers']) {

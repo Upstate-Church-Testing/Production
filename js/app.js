@@ -1,5 +1,5 @@
 // App shell: picks the data source, handles accounts, draws the sidebar and
-// hosts each page (All gear, Audio, Video, Lighting, Network, Logistics, Settings).
+// hosts each page (Gear, Software, Audio, Video, Lighting, Network, Logistics, Settings).
 
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, APP_NAME, ORG_NAME } from './config.js';
 import { esc, icon, $, $$, storage, store as save } from './util.js';
@@ -18,19 +18,21 @@ const ROLE_ORDER = ['pending', 'volunteer', 'contractor', 'staff', 'admin'];
 export const roleAtLeast = (role, min) => ROLE_ORDER.indexOf(role) >= ROLE_ORDER.indexOf(min);
 export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunteer', contractor: 'Contractor', staff: 'Staff', admin: 'Admin' };
 
-// The sidebar. Each group is a page of its own (All gear, Audio…) with pages
+// The sidebar. Each group is a page of its own (Gear, Audio…) with pages
 // under it in a dropdown, or just a folder of pages (PCO, Logistics). The id is the
 // address (#fixtures). Gear pages are the Gear view opened on one section,
 // category or tab: `scope` says which, and the Section/Category filters it
 // locks are hidden there. Pages show for anyone at or above `minRole`.
 // Grid is built (gear.js drawGrid) but not offered for now: Models and Items only.
-const GEAR_TABS = ['types', 'models'];
+// Software is the Gear view over computers: what runs on them and which version (and a tab on every gear page).
+const GEAR_TABS = ['types', 'models', 'software'];
 const NAV = [
-  { id: 'gear', label: 'All gear', short: 'Gear', icon: 'box', minRole: 'staff', view: GearView, title: 'All gear',
+  { id: 'gear', label: 'Gear', short: 'Gear', icon: 'box', minRole: 'staff', view: GearView, title: 'Gear',
     scope: null, // the whole Gear view, filters and all
     children: [
       { id: 'cables', label: 'Cables', minRole: 'staff', view: CablesView },
     ] },
+  { id: 'software', label: 'Software', icon: 'app', minRole: 'staff', view: GearView, title: 'Software', scope: { modes: ['software'] } },
   { id: 'audio', label: 'Audio', menuLabel: 'All audio', icon: 'sound', minRole: 'staff', view: GearView,
     scope: { dep: 'audio', modes: GEAR_TABS } },
   { id: 'video', label: 'Video', menuLabel: 'All video', icon: 'video', minRole: 'staff', view: GearView,

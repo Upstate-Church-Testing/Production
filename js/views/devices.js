@@ -11,6 +11,7 @@ import {
 import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb, CATEGORIES } from './types.js';
 import { wireDropdown } from '../picker.js';
 import { roomSelectHtml, groupChoices, roomPath } from '../rooms.js';
+import { osOf, runsSoftware, installsByDevice, logoHtml, familyLogo, asOf, today, versionText } from '../software.js';
 import {
   takesPatch, parsePatch, fmtPatch, patchOf, footprint, rigKey, rigProblems, problemText, nextFreeAddress, isProblem, MAX_UNIVERSE,
   assetTag, parseAsset, itemLabel, isFixtureType, ASSET_MAX,
@@ -32,13 +33,14 @@ export const PROJECTION = { front: 'Front projection', rear: 'Rear projection' }
 export const isProjectorType = (t) => /projector/i.test(String(t?.category || ''));
 export const FIELD = {
   name: 'Name', departments: 'Departments', category: 'Category', manufacturer: 'Brand', model: 'Model',
-  serial_number: 'Serial', firmware: 'Firmware', location: 'Spot', room_id: 'Room', campus_id: 'Location',
+  serial_number: 'Serial', firmware: 'Firmware / OS', location: 'Spot', room_id: 'Room', campus_id: 'Location',
   status: 'Status', notes: 'Notes', ip: 'IP', gateway: 'Gateway', mac: 'MAC', label: 'Label', network_id: 'Network',
   mode: 'Mode', username: 'Username', password: 'Password', hostname: 'Hostname', type_id: 'Model',
   connected_to: 'Connected to', assignment: 'Assignment',
   asset_no: 'Asset #', stage_no: 'Stage #', fixture_id: 'Fixture ID', patch_universe: 'Universe', patch_address: 'Address',
   dmx_channels: 'DMX channels', patch: 'Patch ID', projection: 'Projection', position_id: 'Hung on',
   positions: 'Operator position', used_as: 'Used as', area: 'Area',
+  version: 'Version', build: 'Build', seen_on: 'As of',
 };
 // What an item is for. Operator position: the jobs it serves (CG, Director, Audio…),
 // one or more. Used as: what this one is, within its kind (a Display used as a Stage
@@ -106,6 +108,7 @@ export function buildIndex(d) {
     room: new Map(d.rooms.map((x) => [x.id, x])),
     pos: new Map((d.positions || []).map((x) => [x.id, x])),
     type: new Map(d.types.map((x) => [x.id, { ...x, ports: sortPorts(x.ports) }])),
+    installs: installsByDevice(d), // device id -> its software, each with its title (sw)
     ipsByDev: new Map(),
     conflicts: new Map(),
   };
@@ -176,6 +179,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   let dirty = false;
   let busy = false;
   let confirmDelete = false;
+  let swForm = null; // the Software form open on this item: { id (null when adding), software_id, version… }
 
   const sheet = ctx.openSheet({
     label: dev ? dev.name : 'New item',
@@ -194,7 +198,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       const fresh = s.ix.dev.get(id);
       if (!fresh) { if (mode === 'view') { sheet.close(true); ctx.toast('That item was deleted'); } return; }
       dev = fresh;
-      if (mode === 'view') renderView();
+      if (mode === 'view') { swRead(); renderView(); } // keep what's typed in the Software form
     },
   };
   host.setOpen(tracker);
@@ -252,6 +256,13 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     else if (a === 'unknown-cancel') { collect(); unknownPick = false; renderEdit(); }
     else if (a === 'qty-' || a === 'qty+') { collect(); draft.qty = clampQty(draft.qty + (a === 'qty+' ? 1 : -1)); renderEdit(); }
     else if (a === 'open-type') { const tid = dev.type_id; host.setOpen(null); sheet.close(true); ctx.openType(tid); }
+    else if (a === 'sw-add') swStart(null);
+    else if (a === 'sw-edit') swStart(t.dataset.id);
+    else if (a === 'sw-pick') { swRead(); swForm.software_id = t.dataset.id; swForm.error = ''; renderView(); $(t.dataset.id === 'new' ? '#sw-name' : '#sw-version', sheet.el)?.focus(); }
+    else if (a === 'sw-cancel') { swForm = null; renderView(); }
+    else if (a === 'sw-save') swSave();
+    else if (a === 'sw-rm') { swRead(); swForm.confirm = true; renderView(); }
+    else if (a === 'sw-rm-yes') swRemove();
     else if (a === 'delete') { confirmDelete = true; renderView(); }
     else if (a === 'delete-no') { confirmDelete = false; renderView(); }
     else if (a === 'delete-yes') remove();
@@ -309,6 +320,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const by = (pid, name) => ctx.people.get(pid)?.full_name || name || 'Someone';
     const ty = s.ix.type.get(dev.type_id);
     const patchable = takesPatch(dev, ty);
+    const computer = runsSoftware(dev, ty);
+    const installed = s.ix.installs.get(dev.id) || [];
     sheet.render(`
       <header class="sh-head">
         <div class="sh-top">${tagDots(dev.departments)}
@@ -342,10 +355,11 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
             ${kv('Model #', ty?.part_number, true)}
             <div><dt>Serial</dt><dd class="${dev.serial_number ? 'mono' : 'muted'}">${dev.serial_number ? esc(dev.serial_number) : `<button class="btn link" data-a="edit" data-f="f-serial_number">Add serial</button>`}</dd></div>
             ${patchable ? '' : kv('Asset #', assetTag(dev.asset_no), true)}
-            ${kv('Firmware', dev.firmware, true)}
+            ${computer && osOf(dev) ? '' : kv(computer ? 'Firmware / OS' : 'Firmware', dev.firmware, true)}
           </dl>
           ${dev.notes ? `<p class="notes">${esc(dev.notes)}</p>` : ''}
         </section>
+        ${computer || installed.length ? softwareBlock(installed) : ''}
         ${ty?.ports.length ? `<section class="block">
           <h3>Ports</h3>
           <div id="ports"><p class="muted">Loading…</p></div>
@@ -382,6 +396,104 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     loadHistory();
     if (ty?.ports.length) loadPorts(ty);
     wireStatus();
+  }
+
+  /** Software: the OS (from Firmware / OS) and each title with its version. Tap one to change
+   *  it, or add one; it saves right away, like the status. */
+  function softwareBlock(list) {
+    const os = osOf(dev);
+    const editing = swForm && !swForm.id ? null : swForm;
+    const rowHtml = (i) => (editing?.id === i.id ? swFormHtml(i) : `<li><button class="sw-item" data-a="sw-edit" data-id="${i.id}">
+        ${logoHtml(i.sw.name, i.sw.logo, 'sm')}
+        <span class="sw-item-text"><b>${esc(i.sw.name)}</b><small>${esc([i.sw.maker, i.seen_on ? `as of ${asOf(i.seen_on)}` : null].filter(Boolean).join(' · '))}</small>${i.notes ? `<small class="sw-item-note">${esc(i.notes)}</small>` : ''}</span>
+        <span class="sw-item-ver mono">${esc(i.version)}${i.build ? `<small>${esc(i.build)}</small>` : ''}</span>${icon('edit')}
+      </button></li>`);
+    return `<section class="block sw-block">
+      <h3>Software</h3>
+      <ul class="sw-items">
+        <li><button class="sw-item" data-a="edit" data-f="f-firmware">
+          ${os ? logoHtml(os.family, familyLogo(os.family), 'sm') : '<span class="sw-logo sm is-initials" aria-hidden="true">OS</span>'}
+          <span class="sw-item-text"><b>${esc(os ? os.family : 'Operating system')}</b><small>${os ? 'Operating system · from Firmware / OS' : 'Not written down yet'}</small></span>
+          <span class="sw-item-ver mono">${os ? esc(os.label) : '<em>Add</em>'}</span>${icon('edit')}
+        </button></li>
+        ${list.map(rowHtml).join('')}
+        ${swForm && !swForm.id ? swFormHtml(null) : ''}
+      </ul>
+      ${swForm ? '' : `<button class="btn" data-a="sw-add">${icon('plus')}Add software</button>`}
+    </section>`;
+  }
+
+  /** The little form for one title on this item: which software (when adding), version, build, as of, notes. */
+  function swFormHtml(cur) {
+    const f = swForm;
+    const have = new Set((s.ix.installs.get(dev.id) || []).map((i) => i.software_id));
+    const titles = (s.data.software || []).filter((x) => !have.has(x.id)).sort((a, b) => a.name.localeCompare(b.name));
+    return `<li class="sw-form">
+      ${cur ? `<p class="sw-form-title">${logoHtml(cur.sw.name, cur.sw.logo, 'sm')}<b>${esc(cur.sw.name)}</b></p>` : `
+        <div class="chips">${titles.map((x) => `<button type="button" class="chip sw-pick" data-a="sw-pick" data-id="${x.id}" aria-pressed="${f.software_id === x.id}">${logoHtml(x.name, x.logo, 'xs')}${esc(x.name)}</button>`).join('')}
+          <button type="button" class="chip" data-a="sw-pick" data-id="new" aria-pressed="${f.software_id === 'new'}">${icon('plus')}New software</button></div>
+        ${f.software_id === 'new' ? `<div class="form-row two">
+          <label class="field"><span>Name</span><input id="sw-name" value="${esc(f.name)}" placeholder="vMix" autocomplete="off"></label>
+          <label class="field"><span>Maker</span><input id="sw-maker" value="${esc(f.maker)}" placeholder="StudioCoast" autocomplete="off"></label></div>` : ''}`}
+      <div class="form-row three">
+        <label class="field"><span>Version</span><input id="sw-version" class="mono" value="${esc(f.version)}" placeholder="21.4" autocomplete="off"></label>
+        <label class="field"><span>Build <small>optional</small></span><input id="sw-build" class="mono" value="${esc(f.build)}" autocomplete="off"></label>
+        <label class="field"><span>As of</span><input id="sw-seen_on" type="date" value="${esc(f.seen_on)}"></label>
+      </div>
+      <label class="field"><span>Notes <small>optional</small></span><input id="sw-notes" value="${esc(f.notes)}" placeholder="Testing this week" autocomplete="off"></label>
+      ${f.error ? `<p class="form-msg bad">${esc(f.error)}</p>` : ''}
+      <div class="sw-form-actions">
+        ${cur ? (f.confirm ? `<button type="button" class="btn danger small" data-a="sw-rm-yes">Remove ${esc(cur.sw.name)}</button>` : `<button type="button" class="btn ghost danger-text small" data-a="sw-rm">${icon('trash')}Remove</button>`) : ''}
+        <span class="spacer"></span>
+        <button type="button" class="btn small" data-a="sw-cancel">Cancel</button>
+        <button type="button" class="btn primary small" data-a="sw-save" ${f.busy ? 'disabled' : ''}>${f.busy ? 'Saving…' : 'Save'}</button>
+      </div>
+    </li>`;
+  }
+
+  function swRead() {
+    if (!swForm) return;
+    for (const k of ['name', 'maker', 'version', 'build', 'seen_on', 'notes']) { const x = $(`#sw-${k}`, sheet.el); if (x) swForm[k] = x.value.trim(); }
+  }
+
+  function swStart(id) {
+    const cur = id ? (s.ix.installs.get(dev.id) || []).find((i) => i.id === id) : null;
+    swForm = cur
+      ? { id: cur.id, software_id: cur.software_id, version: cur.version, build: cur.build || '', seen_on: cur.seen_on || today(), notes: cur.notes || '' }
+      : { id: null, software_id: null, name: '', maker: '', version: '', build: '', seen_on: today(), notes: '' };
+    renderView();
+    $('#sw-version', sheet.el)?.focus();
+  }
+
+  async function swSave() {
+    swRead();
+    const f = swForm;
+    f.error = !f.software_id ? 'Pick the software.' : f.software_id === 'new' && !f.name ? 'Give the new software a name.' : !f.version ? 'Which version?' : '';
+    if (f.error) return renderView();
+    f.busy = true; renderView();
+    try {
+      let swId = f.software_id;
+      if (swId === 'new') swId = await ctx.store.saveSoftware({ name: f.name, maker: f.maker || null, logo: null, notes: null });
+      await ctx.store.saveInstall({ id: f.id || undefined, software_id: swId, device_id: dev.id, version: f.version, build: f.build || null, seen_on: f.seen_on || null, notes: f.notes || null });
+      const name = (s.data.software || []).find((x) => x.id === swId)?.name || f.name;
+      swForm = null;
+      ctx.toast(`${dev.name}: ${name} ${f.version}`);
+      await host.load(true);
+      renderView();
+    } catch (e) {
+      f.busy = false; f.error = e.message; renderView();
+    }
+  }
+
+  async function swRemove() {
+    const f = swForm;
+    try {
+      await ctx.store.deleteInstall(f.id);
+      swForm = null;
+      ctx.toast('Removed');
+      await host.load(true);
+      renderView();
+    } catch (e) { f.error = e.message; renderView(); }
   }
 
   /** The status pill: pick one and it saves right away. */
@@ -482,7 +594,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
 
   function histItem(a) {
     const who = ctx.people.get(a.actor_id)?.full_name || a.actor_name || 'Someone';
-    const thing = { devices: '', device_ips: 'IP ', device_credentials: 'login ', networks: 'network ', device_ports: 'port ' }[a.entity] ?? '';
+    const thing = { devices: '', device_ips: 'IP ', device_credentials: 'login ', networks: 'network ', device_ports: 'port ', software_installs: '' }[a.entity] ?? '';
     let what;
     if (a.entity === 'devices') what = a.action === 'created' ? 'added this item' : a.action === 'deleted' ? 'deleted this item' : 'changed';
     else what = `${a.action === 'created' ? 'added' : a.action === 'deleted' ? 'removed' : 'changed'} ${thing}<b>${esc(a.label || '')}</b>`;
@@ -674,7 +786,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <div class="grid2">
             <label class="field"><span>Serial number</span><input id="f-serial_number" class="mono" value="${esc(draft.serial_number)}" autocapitalize="characters" spellcheck="false" placeholder="From the label on the unit"></label>
             <div class="field"><span>Model number</span><p class="ro-box mono">${ty?.part_number ? esc(ty.part_number) : '<i>Not set on the model</i>'}</p><small class="hint">Comes from the model, the same for every one.</small></div>
-            <label class="field"><span>Firmware / software</span><input id="f-firmware" class="mono" value="${esc(draft.firmware)}"></label>
+            <label class="field"><span>Firmware / OS</span><input id="f-firmware" class="mono" value="${esc(draft.firmware)}" placeholder="${runsSoftware(draft, s.ix.type.get(draft.type_id)) ? 'macOS Tahoe 26.1' : ''}"></label>
             <label class="field"><span>Status</span><select id="f-status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === draft.status ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
           </div>
           <label class="field"><span>Notes</span><textarea id="f-notes" rows="3" placeholder="Anything the next person should know">${esc(draft.notes)}</textarea></label>
@@ -1158,7 +1270,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         names,
       });
       busy = false; dirty = false;
-      ctx.toast(ty?.networked === false && ctx.page?.id === 'network' ? `Added ${n} ${ty.name}. They're listed under All gear.` : `Added ${n} ${ty?.name || 'items'}`);
+      ctx.toast(ty?.networked === false && ctx.page?.id === 'network' ? `Added ${n} ${ty.name}. They're listed under Gear.` : `Added ${n} ${ty?.name || 'items'}`);
       host.setOpen(null);
       sheet.close(true);
       load(true);

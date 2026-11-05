@@ -166,6 +166,8 @@ const paths = {
   video: '<rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="m15.5 10.5 5.5-3.2v9.4l-5.5-3.2z"/>',
   filter: '<path d="M4 6.5h16M7 12h10M10 17.5h4"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  app: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9h17"/><circle cx="6.5" cy="6.8" r=".5"/><circle cx="8.6" cy="6.8" r=".5"/><path d="m9.5 13.5-2 1.75 2 1.75M14.5 13.5l2 1.75-2 1.75"/>',
+  compare: '<rect x="3.5" y="4.5" width="7" height="15" rx="1.5"/><rect x="13.5" y="4.5" width="7" height="15" rx="1.5"/><path d="M6 9h2M6 12h2M16 9h2M16 12h2"/>',
   clipboard: '<path d="M9 4.5H6.5A1.5 1.5 0 0 0 5 6v13.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H15"/><rect x="9" y="3" width="6" height="3.2" rx="1"/><path d="M8.5 11h7M8.5 15h5"/>',
 };
 

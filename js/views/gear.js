@@ -16,6 +16,9 @@ import { roomOptions as buildRoomOptions, roomMatches, roomFilterLabel, optionVa
 import { hazeView } from './haze.js';
 import { camerasView, camNumber } from './cameras.js';
 import { systemsView } from './systems.js';
+import { softwareView, SW_ALL } from './software.js';
+import { openCompare, COMPARE_MAX } from './compare.js';
+import { runsSoftware } from '../software.js';
 
 const NO_BRAND = '__none';
 const NO_POS = '__nopos';  // Position filter: items with no position yet
@@ -24,19 +27,20 @@ const NO_SPOT = '__nospot'; // Area / spot filter: items with neither
 const AREA = 'a:';          // Area / spot filter: a whole area ('a:backstage'); a spot is 's:<area>|<spot>'
 const OWN_VIEWS = ['haze', 'cameras', 'systems']; // modes that draw their own page and skip most filters
 const UNKNOWN_PILL = '<span class="st st-check st-unknown"><i></i>Model unknown</span>';
-const MODE_LABEL = { types: 'Models', models: 'Items', fixtures: 'List', grid: 'Grid', patch: 'Patch', rig: 'Rigging', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
-const ALL_GEAR_TABS = ['types', 'models']; // Grid is built but not offered for now; Systems is its own page under Logistics
+const MODE_LABEL = { types: 'Models', models: 'Items', software: 'Software', fixtures: 'List', grid: 'Grid', patch: 'Patch', rig: 'Rigging', haze: 'Haze', cameras: 'Cameras', systems: 'Systems' };
+const ALL_GEAR_TABS = ['types', 'models', 'software']; // Grid is built but not offered for now; Systems is its own page under Logistics
 
 export function mount(el, ctx) {
   let alive = true; // false once the person leaves this section
-  // Which Gear page this is. All gear has every filter; Audio, Lighting, Fixtures…
+  // Which Gear page this is. Gear has every filter; Audio, Lighting, Fixtures…
   // lock the section (and category) and hide those filters; Hazers and Cameras are one tab.
-  const page = ctx.page || { id: 'gear', title: 'All gear' };
+  // Software (its own page, and a tab beside Models and Items) is the same filters over computers.
+  const page = ctx.page || { id: 'gear', title: 'Gear' };
   const scope = page.scope || {};
   const lock = { dep: scope.dep || null, cat: scope.cat || null };
   const base = { dep: lock.dep || ALL, cat: lock.cat || ALL }; // what "Clear" goes back to
   const tabs = scope.modes || ALL_GEAR_TABS;
-  const shared = !page.scope; // only All gear keeps its filters while the app is open
+  const shared = !page.scope; // only Gear keeps its filters while the app is open
   const modeKey = shared ? 'ucp.gearmode' : `ucp.gearmode.${page.id}`;
   const s = {
     q: '',
@@ -47,6 +51,7 @@ export function mount(el, ctx) {
     spot: (shared && ctx.gearFilters.spot) || ALL, // an area (Backstage) or a spot in one (Backstage rack)
     pos: (shared && ctx.gearFilters.pos) || ALL,   // a position (CG, Director…), by its lowercase key
     use: (shared && ctx.gearFilters.use) || ALL,   // what it's used as (Stage display…), lowercase key
+    sw: SW_ALL,                   // Software: one OS or title ('os:macOS', 'sw:<id>'), or all of an kind ('kind:os')
     mode: storage(modeKey, tabs[0]),
     gridRooms: storage('ucp.gridrooms', false), // grid: one column per room instead of per location
     campus: ctx.campus,           // shared with Network and Statistics; All on every launch
@@ -93,6 +98,7 @@ export function mount(el, ctx) {
         ${dropdownHtml('g-room', 'Room')}
         ${dropdownHtml('g-spot', 'Area / spot')}
         ${dropdownHtml('g-pos', 'Operator position')}
+        ${dropdownHtml('g-sw', 'Software')}
         ${dropdownHtml('g-cat', 'Category')}
         ${dropdownHtml('g-use', 'Used as')}
         ${dropdownHtml('g-brand', 'Brand')}
@@ -103,9 +109,9 @@ export function mount(el, ctx) {
 
   // Filters, in order: department, location, room, area / spot, operator position, category, used as, brand.
   // Each narrows the ones after it (most people look in their own department first).
-  const itemMode = () => s.mode === 'models' || s.mode === 'patch' || s.mode === 'fixtures'; // filters choose from items, not models
+  const itemMode = () => s.mode === 'models' || s.mode === 'patch' || s.mode === 'fixtures' || s.mode === 'software'; // filters choose from items, not models
   const unit = () => (s.mode === 'patch' || s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'rig' ? ['light', 'lights'] : s.mode === 'haze' ? ['hazer', 'hazers'] : s.mode === 'cameras' ? ['camera', 'cameras']
-    : s.mode === 'systems' ? ['system', 'systems']
+    : s.mode === 'systems' ? ['system', 'systems'] : s.mode === 'software' ? ['computer', 'computers']
     : s.mode === 'models' ? ['item', 'items'] : ['model', 'models']);
   const loc = locationDropdown(ctx, $('#g-loc', el), {
     unit,
@@ -198,6 +204,14 @@ export function mount(el, ctx) {
       return [{ value: ALL, label: 'All', count: pool.length }, ...keys.map((k) => ({ value: k, label: k === NO_BRAND ? 'No brand' : names.get(k), count: m.get(k) }))];
     },
   });
+  // Software: one operating system or title (or all of either kind), on the computers the other filters picked.
+  const swDd = wireDropdown($('#g-sw', el), {
+    label: 'Software',
+    unit,
+    get: () => s.sw,
+    set: (v) => { s.sw = v; draw(); },
+    options: () => (s.data ? sw.options() : [{ value: SW_ALL, label: 'All' }]),
+  });
   const q = $('#g-q', el);
   q.addEventListener('input', debounce(() => { s.q = q.value.trim().toLowerCase(); draw(); }, 120));
   // Phones: one Filters button opens every filter (and Models | Items | Grid…) on a page of its own.
@@ -218,6 +232,13 @@ export function mount(el, ctx) {
     setTally: (html) => { $('#g-tally', el).innerHTML = html; },
     redraw: () => drawResults(),
   };
+  const sw = softwareView({
+    s, ctx, typeOf: (d) => typeOf(d), campusName: (id) => campusName(id), load: (quiet) => load(quiet),
+    computers: () => s.data.devices.filter((d) => inPlace(d) && itemInScope(d) && inDep(d.departments) && inCat(typeOf(d)) && inBrand(typeOf(d))),
+    words: (d) => itemWords(d, false).filter(Boolean), // the item itself; each card matches its own title and version
+    tally: (shown, total) => drawTally(shown, total),
+    filtering: () => filtering(),
+  });
   const haze = hazeView(views);
   const cams = camerasView(views);
   const syss = systemsView(views);
@@ -228,6 +249,7 @@ export function mount(el, ctx) {
     else if (s.mode === 'haze') haze.click(e);
     else if (s.mode === 'cameras') cams.click(e);
     else if (s.mode === 'systems') syss.click(e);
+    else if (s.mode === 'software') sw.click(e);
     else if (s.mode === 'fixtures') {
       const st = e.target.closest('[data-st]');
       if (st) { e.stopPropagation(); pickStatus(st); } // the pill changes status; the rest of the row opens the fixture
@@ -242,7 +264,8 @@ export function mount(el, ctx) {
     else if (t.dataset.model) openModel(t.dataset.model);
     else if (t.dataset.gmode) { setMode(t.dataset.gmode); patch.cancel(); draw(); }
     else if (t.dataset.type) openTypeSheet(t.dataset.type);
-    else if (t.dataset.act === 'add') itemMode() ? openModel(null, true) : newType();
+    else if (t.dataset.act === 'add') s.mode === 'software' ? sw.openSetVersion(null) : itemMode() ? openModel(null, true) : newType();
+    else if (t.dataset.act === 'compare') compareShown();
     else if (t.dataset.act === 'all-campuses') { s.campus = ctx.campus = ALL; s.room = ALL; s.spot = ALL; remember(); loc.update(); draw(); }
     else if (t.dataset.act === 'clear') clearFilters();
     else if (t.dataset.act === 'retry') load();
@@ -285,7 +308,7 @@ export function mount(el, ctx) {
 
   function clearFilters() {
     s.todo = false;
-    s.q = ''; q.value = ''; s.dep = base.dep; s.cat = base.cat; s.brand = ALL; s.room = ALL; s.spot = ALL; s.pos = ALL; s.use = ALL;
+    s.q = ''; q.value = ''; s.dep = base.dep; s.cat = base.cat; s.brand = ALL; s.room = ALL; s.spot = ALL; s.pos = ALL; s.use = ALL; s.sw = SW_ALL;
     remember();
     draw();
   }
@@ -417,7 +440,8 @@ export function mount(el, ctx) {
   /** On a section page (Audio, Fixtures…), whether a model or item belongs on the page at all. */
   function typeInScope(t) { return (!lock.dep || (t?.departments || []).includes(lock.dep)) && (!lock.cat || catOf(t) === lock.cat); }
   function itemInScope(d) {
-    return (s.mode === 'patch' || !lock.dep || d.departments.includes(lock.dep)) && (!lock.cat || catOf(typeOf(d)) === lock.cat);
+    return (s.mode === 'patch' || !lock.dep || d.departments.includes(lock.dep)) && (!lock.cat || catOf(typeOf(d)) === lock.cat)
+      && (s.mode !== 'software' || runsSoftware(d, typeOf(d)) || (s.ix.installs.get(d.id) || []).length > 0); // Software: computers only
   }
   function scopeTypes() { return lock.dep || lock.cat ? s.data.types.filter(typeInScope) : s.data.types; }
 
@@ -461,10 +485,15 @@ export function mount(el, ctx) {
     if (!inDep(d.departments) || !inCat(t) || !inBrand(t)) return false;
     if (!s.q) return true;
     if (covers(d, t, patchPoint(s.q))) return true; // "2.041" finds whatever is patched across that address
+    return words(itemWords(d));
+  }
+  /** Everything about an item that search looks at (its software and versions too: "propresenter 22"). */
+  function itemWords(d, withSoftware = true) {
+    const t = typeOf(d);
     const ips = (s.ix.ipsByDev.get(d.id) || []).map((i) => i._addr);
-    return words([d.name, d.area, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id), s.ix.pos.get(d.position_id)?.name,
+    return [d.name, d.area, d.location, d.serial_number, d.firmware, d.notes, ...roomWords(s.ix.room.get(d.room_id), s.ix.room), ...campusWords(d.campus_id), s.ix.pos.get(d.position_id)?.name,
       t?.name, t?.manufacturer, t?.category, t?.part_number, t?.unknown ? 'unknown model' : null, PROJECTION[d.projection], ...d.departments.map((x) => ctx.dep[x]?.name || x), ...ips, ...numberWords(d),
-      ...(d.positions || []), d.used_as]);
+      ...(d.positions || []), d.used_as, ...(withSoftware ? (s.ix.installs.get(d.id) || []).flatMap((i) => [i.sw.name, i.version, i.build]) : [])];
   }
 
   /** Fixture ID, patch, stage and asset numbers as searchable words: "401", "fid401", "2.041", "u2", "asset 17". */
@@ -488,7 +517,8 @@ export function mount(el, ctx) {
 
   function draw() {
     $$('[data-gmode]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.gmode === s.mode)));
-    const addLabel = itemMode() ? 'Add items' : 'Add model';
+    const software = s.mode === 'software'; // Software: the add button sets a version on computers
+    const addLabel = software ? 'Set a version' : itemMode() ? 'Add items' : 'Add model';
     const own = OWN_VIEWS.includes(s.mode); // Haze and Cameras have their own add buttons
     const rigging = s.mode === 'rig'; // Rigging: location, room tabs and search only; no adding gear there
     $('.add-desktop span', el).textContent = s.mode === 'fixtures' ? 'Add fixtures' : addLabel;
@@ -496,7 +526,8 @@ export function mount(el, ctx) {
     $('.fab', el).hidden = own || rigging;
     $('.fab', el).setAttribute('aria-label', addLabel);
     q.placeholder = matchMedia('(max-width: 699px)').matches // phones: short, beside the Filters button
-      ? (s.mode === 'fixtures' ? 'Search fixtures' : s.mode === 'patch' ? 'Search the patch' : rigging ? 'Search the rig' : s.mode === 'models' ? 'Search items' : 'Search models')
+      ? (s.mode === 'fixtures' ? 'Search fixtures' : s.mode === 'patch' ? 'Search the patch' : rigging ? 'Search the rig' : software ? 'Search software' : s.mode === 'models' ? 'Search items' : 'Search models')
+      : software ? 'Search software, version, computer or location'
       : rigging ? 'Search light, fixture ID, patch (2.041) or asset #'
       : s.mode === 'fixtures' ? 'Search model, fixture ID, patch ID (2.041) or asset # (UCP-000123)'
       : s.mode === 'patch' ? 'Search fixture, fixture ID or patch (2.041)'
@@ -506,6 +537,8 @@ export function mount(el, ctx) {
     el.classList.toggle('is-fixtures', s.mode === 'fixtures');
     el.classList.toggle('is-own', own);
     el.classList.toggle('is-rig', rigging);
+    el.classList.toggle('is-software', software);
+    $('#g-sw', el).hidden = !software;
     $('#g-dep', el).hidden = s.mode === 'patch' || own || rigging || !!lock.dep; // the patch sheet is lighting only
     $('#g-room', el).hidden = s.mode === 'patch' || own || rigging; // the patch sheet and rigging have their own room tabs
     $('#g-pos', el).hidden = s.mode === 'patch' || own || rigging || s.mode === 'fixtures';
@@ -526,7 +559,7 @@ export function mount(el, ctx) {
 
   /** The count up top: whatever is on screen right now. */
   function drawTally(shown, total) {
-    const unit = s.mode === 'fixtures' ? ['fixture', 'fixtures'] : itemMode() ? ['item', 'items'] : ['model', 'models'];
+    const unit = s.mode === 'fixtures' ? ['fixture', 'fixtures'] : s.mode === 'software' ? ['computer', 'computers'] : itemMode() ? ['item', 'items'] : ['model', 'models'];
     $('#g-tally', el).innerHTML = shown == null ? ''
       : `<b>${shown}</b><span>${shown === 1 ? unit[0] : unit[1]}</span>${filtering() && total !== shown ? `<small>of ${total} · <button class="btn link" data-act="clear">Clear</button></small>` : ''}`;
   }
@@ -549,7 +582,8 @@ export function mount(el, ctx) {
     if (uses.length < 2 || !uses.some((o) => o.value === s.use)) s.use = ALL;
     $('#g-use', el).hidden = uses.length < 2; // only when something here has a use
     if (!valid(brandDd, s.brand)) s.brand = ALL;
-    depDd.update(); loc.update(); roomDd.update(); spotDd.update(); posDd.update(); catDd.update(); useDd.update(); brandDd.update();
+    if (s.mode === 'software' && s.sw !== SW_ALL && !flatValues(sw.options()).includes(s.sw)) s.sw = SW_ALL;
+    depDd.update(); loc.update(); roomDd.update(); spotDd.update(); posDd.update(); catDd.update(); useDd.update(); brandDd.update(); swDd.update();
   }
   function optionValues(dd) {
     if (dd === roomDd) return flatValues(roomOptions());
@@ -562,7 +596,8 @@ export function mount(el, ctx) {
 
   function filtering() {
     if (s.mode === 'rig') return !!s.q;
-    return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || s.spot !== ALL || s.pos !== ALL || s.use !== ALL || (s.room !== ALL && s.mode !== 'patch'));
+    return !!(s.todo || s.q || s.dep !== base.dep || s.cat !== base.cat || s.brand !== ALL || s.spot !== ALL || s.pos !== ALL || s.use !== ALL || (s.room !== ALL && s.mode !== 'patch')
+      || (s.mode === 'software' && s.sw !== SW_ALL));
   }
 
   function drawResults() {
@@ -576,6 +611,7 @@ export function mount(el, ctx) {
     if (s.mode === 'haze') return haze.draw(box);
     if (s.mode === 'cameras') return cams.draw(box);
     if (s.mode === 'systems') return syss.draw(box);
+    if (s.mode === 'software') return sw.draw(box);
 
     const types = scopeTypes();
     if (!types.length) {
@@ -776,8 +812,9 @@ export function mount(el, ctx) {
       box.innerHTML = `<div class="empty"><h3>No matches</h3><p>${s.q ? `No item matches “${esc(s.q)}”` : 'No item matches these filters'}${s.campus !== 'all' || s.room !== ALL ? ` at ${esc(placeName())}` : ''}.</p><button class="btn" data-act="clear">Clear search and filters</button></div>`;
       return;
     }
+    const tools = compareTools(models);
     if (s.campus !== ALL) {
-      box.innerHTML = todoNote() + placeCards(models);
+      box.innerHTML = tools + todoNote() + placeCards(models);
       return;
     }
     // All locations: one block per location, in the Location list's order, its places inside.
@@ -786,7 +823,29 @@ export function mount(el, ctx) {
       { name: 'Other locations', list: models.filter((d) => !known.has(d.campus_id)) }]
       .filter((b) => b.list.length)
       .map((b) => campusBlock(b.name, plural(b.list.length, 'item'), placeCards(b.list)));
-    box.innerHTML = todoNote() + blocks.join('');
+    box.innerHTML = tools + todoNote() + blocks.join('');
+  }
+
+  /** Compare: offered once the list is down to a handful (every CG computer, one model's items). */
+  function compareTools(list) {
+    if (list.length < 2 || list.length > COMPARE_MAX) return '';
+    return `<div class="list-tools"><button class="btn small" data-act="compare">${icon('compare')}Compare these ${list.length}</button></div>`;
+  }
+  /** What's on screen, side by side: the Items list, or the computers on Software. */
+  function compareShown() {
+    let list;
+    let title;
+    if (s.mode === 'software') {
+      const ids = new Set($$('#g-results [data-model]', el).map((b) => b.dataset.model));
+      list = s.data.devices.filter((d) => ids.has(d.id));
+      title = 'Computers';
+    } else {
+      list = s.data.devices.filter((d) => inPlace(d) && itemInScope(d)).filter(modelMatches);
+      const kinds = new Set(list.map((d) => d.type_id));
+      title = kinds.size === 1 ? typeLabel(typeOf(list[0])) : 'Items';
+    }
+    if (list.length < 2) return;
+    openCompare(ctx, s, list.slice(0, COMPARE_MAX), { title, sub: placeName() === 'any location' ? 'Every location' : placeName(), openItem: (id) => openModel(id) });
   }
 
   /** An item's row. showCampus: say its location (not needed under a location's heading).
@@ -1006,7 +1065,7 @@ export function mount(el, ctx) {
               : '<p class="muted">No ports listed. Add them with Edit so each item can record what’s plugged in.</p>'}
           </section>
           <section class="block">
-            <h3>Items <span class="count">${units.length}</span></h3>
+            <h3>Items <span class="count">${units.length}</span>${units.length >= 2 && units.length <= COMPARE_MAX ? `<button class="btn small h3-act" data-g="compare">${icon('compare')}Compare</button>` : ''}</h3>
             ${units.length ? campusOrder.map((c) => `<div class="unit-group">
                 <p class="unit-campus">${esc(c.short_name)}</p>
                 <ul class="unit-list">${byCampus.get(c.id).map((u) => `<li><button class="unit" data-unit="${u.id}">
@@ -1063,6 +1122,7 @@ export function mount(el, ctx) {
           onCancel: () => { editing = null; render(); },
         });
       } else if (a === 'add-unit') { sheet.close(true); openType = null; openModel(null, true, { type_id: t.id }); }
+      else if (a === 'compare') { const units = unitsOf(t.id); sheet.close(true); openType = null; openCompare(ctx, s, units, { title: typeLabel(t), sub: 'Every location', openItem: (id) => openModel(id) }); }
       else if (a === 'known') {
         try { await ctx.store.setTypeUnknown(t.id, false); ctx.toast(`${t.name} is a known model now`); await load(true); }
         catch (err) { ctx.toast(err.message, 'bad'); }

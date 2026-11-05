@@ -254,6 +254,52 @@ Where something is and what it's for are kept apart:
 - **Systems** (Logistics › Systems): gear that works together wherever it sits, like the Clear-Com intercom
   (main station in Broadcast, packs on every camera), each piece with what it does.
 
+## Software (staff)
+
+**Software** in the sidebar (and a tab beside Models and Items on Gear and every
+department page) is the Gear view over the computers: computers and tablets, and
+anything with an operating system written in its Firmware / OS field. The filters are
+the same as Gear's (department, location, room, area / spot, operator position,
+category, used as, brand, search), plus **Software** to look at one operating system
+or title. On Gear the filters carry over, so Video › All locations › CG › Items, then
+the Software tab, is what runs on every CG computer.
+
+- **Operating systems** first: each computer's OS is read from its Firmware / OS field
+  ("macOS Tahoe 26.1"), so it's written in one place. macOS shows its release
+  (Tahoe, Sequoia…, worked out from the version when it isn't written) and how many
+  computers are on each ("Sequoia on 1 · Tahoe on 9"). Computers with no OS written
+  down are listed under **OS not written down**.
+- **Apps** after that: each title (ProPresenter, Companion, Desktop Video) with its logo, its
+  versions newest first and the computers on each one, with the date each version was
+  seen ("as of Nov 5") and any note ("Testing at Five Forks only this Sunday"). The card
+  says **All on 21.4** or **2 versions**.
+- **Set a version** (the button up top, or **Set version** on a title) puts one
+  version on several computers at once after an update round: pick the title (or add a
+  new one), the version, build and date, and tick the computers. It lists the computers
+  the page's filters picked, each with the version it has now.
+- On an item, **Software** lists its OS and each title with its version. Tap one to
+  change its version, build, date or note, or remove it; **Add software** adds one (a
+  new title too). Changes go in the item's history ("changed ProPresenter: Version
+  21.4 → 22").
+
+Tables: `software` (one row per title: name, maker, logo file) and `software_installs`
+(a title on one item: version, build, `seen_on`, notes; once per item). Logos are files
+in `icons/software/` (where each came from is in `icons/software/SOURCES.md`); a title
+without one shows its initials. Helpers (OS parsing, version order) are in `js/software.js`.
+
+## Compare (staff)
+
+**Compare** puts items side by side, a column each, a row per detail: model, status,
+area, spot, operator position, used as, OS / firmware, the version of each piece of
+software, notes, then serial, asset # and IP. A row that isn't the same everywhere gets
+a dot, and in it the values unlike the usual one (the most common filled-in value) are
+highlighted; a blank is "not set" and never the odd one out. When there's no usual
+value the whole row is tinted. **Only what's different** hides the rest. Tap an item's
+name to open it.
+
+It's offered on a model (**Items › Compare**: every item of that model), and on Items
+and Software once the list is down to 40 or fewer (**Compare these 8**).
+
 ## Cables (staff)
 
 Cables aren't tracked one by one. A **type** is a signal and two ends (DMX · XLR 5-pin
@@ -278,6 +324,7 @@ campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Win
             │         positions (what it makes possible: CG, Director, Audio…; several allowed), used_as (Stage display, Computer monitor…)
             ├── device_ips (IP + mask, gateway, MAC, network, label, static/DHCP)
             ├── device_ports (what's plugged into each of its type's ports, plus an assignment like "Universe 5")
+            ├── software_installs (a title on it at a version: build, as of, notes) ── software (title, maker, logo)
             └── device_credentials (staff only, loaded one device at a time)
 
 device_types     the shared catalog entry ("model" in the app): name, brand, model number, category, sections, specs, manual, photo, DMX modes,
@@ -329,7 +376,10 @@ js/views/patch.js              Gear › Patch: each room's patch by universe, th
 js/views/rigging.js            Lighting › Rigging: each room's positions front to back, what hangs on each, hang and edit sheets
 js/lighting.js                 patch parsing (1.333), footprints, overlap and duplicate checks
 js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)
-js/views/devices.js            the item panel and editor (shared by Network and Gear)
+js/views/devices.js            the item panel and editor (shared by Network and Gear), its Software list
+js/views/software.js           Gear › Software: each OS and title, its versions and the computers on each; Set a version
+js/views/compare.js            Compare: items side by side with what differs marked
+js/software.js                 software helpers: the OS from Firmware / OS, version order, logos
 js/views/types.js              the model editor (shared by Gear and the item editor)
 js/views/team.js               people and access
 js/views/stats.js              Statistics: gear and network numbers for one location or all of them
@@ -378,14 +428,15 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 
 ## Sidebar
 
-`NAV` in `js/app.js`: All gear (Cables), Audio, Video (Cameras), Lighting (Fixtures,
+`NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (Fixtures,
 Hazers, Patch, Rigging), Network (IP sheet), PCO (Services, Scheduling, People, My schedule) and Logistics (Meetings, Resi, Statistics, Systems, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
 860px) it's hidden: Tally at the top left slides it in as a panel, and picking a page
 or tapping beside it slides it away. Audio, Video, Lighting, Fixtures and the rest are the
 Gear view opened with a `scope`: the department (and category) it's locked to and its tabs.
-All gear and the department pages have two tabs, Models and Items.
+Gear and the department pages have three tabs, Models, Items and Software; the Software
+page is the Gear view on its one tab.
 
 **Filters on phones** (under 700px): Gear, Network and Cables show one **Filters** button
 beside the search instead of the row of dropdowns. It opens a full page with the view
