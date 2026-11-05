@@ -10,8 +10,21 @@ showing. New sections slot in without reworking what's here.
 | Piece | What it does |
 | --- | --- |
 | **Supabase** (Postgres) | Data, logins (email + password), live updates, permissions |
-| **Netlify** | Hosts the app at https://tally-upstate.netlify.app (church Netlify account). `netlify.toml` publishes only the app files. The old GitHub Pages address forwards there |
+| **GitHub Pages** | Hosts the app at https://upstate-church-testing.github.io/Production/ (publish: `python3 tools/stamp.py`, commit, push to `main`). Since Oct 28, 2026, while the church Netlify account is out of credits; https://tally-upstate.netlify.app still answers but is frozen at that day's version. `netlify.toml` (only the app files) and the redirect in `index.html` are kept for moving back |
 | Plain HTML/CSS/JS modules | No build step. Works in any browser and installs to a phone home screen |
+
+**Staying put while you look.** Pages only reload for changes to what they show: Gear,
+the IP sheet and Statistics listen to the gear tables (`GEAR_CHANGES` in `js/util.js`),
+not Planning Center, volunteers or people. A background reload that fails keeps what's on
+screen. An open panel isn't redrawn when nothing in it changed, and when it is (or a form
+opens in place) it keeps its scroll (`sheet.render(html, { keepScroll })`). A service's
+flow stays up while it's read again after a sync. A new version is taken at a quiet
+moment, not under someone looking at the page: on the way to another page, after 10
+minutes untouched, or on coming back after 30 minutes away; never while a panel, menu or
+the filters are open, something is being typed, or a video is full screen (the Resi page
+also holds its players still while one is full screen, since moving one reloads it).
+The database drops the sync's volunteer saves that only move `last_seen_at` (within 6
+hours), so they don't go out live to every open app.
 
 Both the Supabase URL and its publishable key are public by design. Nothing is
 readable without a signed-in, approved account; every table is locked with

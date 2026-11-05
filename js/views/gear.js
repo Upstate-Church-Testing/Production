@@ -4,7 +4,7 @@
 // Haze and Cameras are views over the same items: hazers with their fluid,
 // and camera builds (items whose Spot is "Cam 3").
 
-import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle } from '../util.js';
+import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle, GEAR_CHANGES, onlyFor } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION, posKey, byArea } from './devices.js';
 import { patchView } from './patch.js';
@@ -280,7 +280,7 @@ export function mount(el, ctx) {
     }
   });
 
-  const unsubscribe = ctx.store.subscribe(debounce(() => load(true), 350));
+  const unsubscribe = ctx.store.subscribe(onlyFor(GEAR_CHANGES, debounce(() => load(true), 350)));
   load();
   return { unmount: () => { alive = false; unsubscribe(); } };
 
@@ -298,7 +298,10 @@ export function mount(el, ctx) {
       s.data.types.forEach((t) => { t.ports = sortPorts(t.ports); });
       s.ix = buildIndex(s.data);
       s.error = null;
-    } catch (e) { s.error = e.message; }
+    } catch (e) {
+      if (quiet && s.data) return; // a background reload that failed: keep what's on screen (the next one catches up)
+      s.error = e.message;
+    }
     if (quiet && s.mode === 'patch' && patch.editing()) { openDev?.refresh(); return; } // keep what's being typed
     draw();
     openType?.refresh();
@@ -993,6 +996,7 @@ export function mount(el, ctx) {
     let confirmDelete = false;
     let photoBusy = false;
     let photoConfirm = false;
+    let drawn = null; // what's on screen, so a reload that changed nothing here doesn't redraw it
     const sheet = ctx.openSheet({
       label: typeLabel(t),
       beforeClose: () => { if (editing) { editing.cancel(); return false; } openType = null; return true; },
@@ -1003,7 +1007,7 @@ export function mount(el, ctx) {
         const fresh = s.data.types.find((x) => x.id === id);
         if (!fresh) { if (!editing) { sheet.close(true); ctx.toast('That model was deleted'); } return; }
         t = fresh;
-        if (!editing && !photoBusy) render();
+        if (!editing && !photoBusy && signature() !== drawn) render();
       },
     };
 
@@ -1020,7 +1024,11 @@ export function mount(el, ctx) {
         </div></div>`;
     }
 
+    function signature() { return JSON.stringify([t, unitsOf(t.id), confirmDelete, photoConfirm]); }
+
     function render() {
+      const was = drawn;
+      drawn = signature();
       const units = unitsOf(t.id);
       const byCampus = new Map();
       for (const u of units) { if (!byCampus.has(u.campus_id)) byCampus.set(u.campus_id, []); byCampus.get(u.campus_id).push(u); }
@@ -1084,7 +1092,7 @@ export function mount(el, ctx) {
           ${confirmDelete
             ? `<span class="confirm-text">Delete the ${esc(t.name)} model?</span><button class="btn" data-g="del-no">Keep it</button><button class="btn danger" data-g="del-yes">Delete</button>`
             : `${units.length ? '' : `<button class="btn ghost danger-text" data-g="del">${icon('trash')}Delete</button>`}<span class="spacer"></span><button class="btn primary" data-g="edit">${icon('edit')}Edit model</button>`}
-        </footer>`);
+        </footer>`, { keepScroll: was != null }); // redrawn in place: stay where you were
       $('#t-photo-in', sheet.el).addEventListener('change', (e) => setPhoto(e.target.files?.[0]));
     }
 
@@ -1116,6 +1124,7 @@ export function mount(el, ctx) {
         catch (err) { ctx.toast(err.message, 'bad'); }
       }
       else if (a === 'edit') {
+        drawn = null; // the editor takes the sheet; coming back starts at the top
         editing = typeEditor({
           ctx, sheet, type: t, types: s.data.types,
           onDone: async () => { editing = null; await load(true); render(); },

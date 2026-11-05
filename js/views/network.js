@@ -3,7 +3,7 @@
 
 import {
   esc, icon, $, $$, debounce, storage, store, ipToInt, intToIp, splitInet, prefixToMask, maskToPrefix,
-  parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText, pageTitle,
+  parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText, pageTitle, GEAR_CHANGES, onlyFor,
 } from '../util.js';
 import { typeEditor, typeLabel, sortPorts, portMeta } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet as openModelSheet, statusPill, kv } from './devices.js';
@@ -112,7 +112,7 @@ export function mount(el, ctx) {
     }
   });
 
-  const unsubscribe = ctx.store.subscribe(debounce(() => load(true), 350));
+  const unsubscribe = ctx.store.subscribe(onlyFor(GEAR_CHANGES, debounce(() => load(true), 350)));
   load();
   return { unmount: () => { alive = false; unsubscribe(); } };
 
@@ -127,6 +127,7 @@ export function mount(el, ctx) {
       s.ix = buildIndex(s.data);
       s.error = null;
     } catch (e) {
+      if (quiet && s.data) return; // a background reload that failed: keep what's on screen
       s.error = e.message;
     }
     draw();

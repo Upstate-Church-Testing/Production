@@ -420,6 +420,7 @@ function goWith(mod, pending) {
 function onHash() {
   if (!ctx.me || !$('#view')) return;
   if (/access_token|type=/.test(location.hash)) return;
+  if (updateReady && current && takeUpdate()) return; // going to another page: a good moment for the new version
   if (!railMQ.matches) setRail(false);
   const pages = visiblePages();
   const want = location.hash.replace('#', '');
@@ -583,7 +584,14 @@ export function openSheet({ label = 'Details', className = '', render, beforeClo
 
   const api = {
     el,
-    render(html) { el.innerHTML = html; },
+    /** keepScroll: the same screen drawn again (new data, a form opened in place), so its
+     *  scrolling parts stay where they were instead of jumping back to the top. */
+    render(html, { keepScroll = false } = {}) {
+      const boxes = () => [...el.querySelectorAll('.sh-body, [data-keep-scroll]')];
+      const at = keepScroll ? boxes().map((b) => b.scrollTop) : null;
+      el.innerHTML = html;
+      if (at) boxes().forEach((b, i) => { if (at[i]) b.scrollTop = at[i]; });
+    },
     async close(force = false) {
       if (!force && beforeClose && (await beforeClose()) === false) return;
       root.classList.add('leaving');
@@ -624,24 +632,56 @@ function applyTheme() {
 function setTheme(t) { save('ucp.theme', t); applyTheme(); }
 
 // -------------------------------------------------------- auto-updating --
-// Open copies notice a new version and reload themselves when nothing is
-// being edited.
+// Open copies notice a new version and take it at a quiet moment, never under
+// someone who's looking at the page: when they go to another page, when the app
+// has sat untouched for 10 minutes, or when they come back after half an hour
+// away. Not while a panel, menu or the filters are open, something is being typed,
+// or a video is full screen (reloading would knock it out of full screen, and the
+// browser window back to its old size).
+
+let updateReady = false;
+const QUIET_MS = 10 * 60 * 1000;
+const AWAY_MS = 30 * 60 * 1000;
+let lastTouch = Date.now();
+
+function busyForUpdate() {
+  return !!document.querySelector('.sheet-root, .dd-menu-root, .fp-root')
+    || !!(document.fullscreenElement || document.webkitFullscreenElement)
+    || !!document.activeElement?.matches?.('input, textarea, select, [contenteditable="true"]');
+}
+/** Reloads into the new version if one is waiting and nothing would be lost. */
+function takeUpdate() {
+  if (!updateReady || busyForUpdate()) return false;
+  location.reload();
+  return true;
+}
 
 function watchForUpdates() {
   if (ctx.store.mode !== 'live') return;
   let loaded = null;
+  let hiddenAt = null;
+  for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
+    window.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true });
+  }
   const check = async () => {
     try {
       const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
       if (!r.ok) return;
       const { v } = await r.json();
       if (loaded == null) loaded = v;
-      else if (v !== loaded && !document.querySelector('.sheet-root')) location.reload();
+      else if (v !== loaded) updateReady = true;
     } catch { /* offline */ }
+    if (updateReady && Date.now() - lastTouch > QUIET_MS) takeUpdate(); // left alone (a screen on the wall)
   };
   check();
   setInterval(check, 5 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && check());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    const away = hiddenAt && Date.now() - hiddenAt > AWAY_MS;
+    hiddenAt = null;
+    if (away && takeUpdate()) return; // back after a while: start fresh
+    check();
+  });
 }
 
 // ------------------------------------------------------------------ misc --

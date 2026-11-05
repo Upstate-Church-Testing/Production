@@ -37,6 +37,7 @@ export function mount(el, ctx) {
   let pills = new Map(); // roster pill id -> its person and services, for the detail sheet
   let opens = new Map(); // roster open-spot id -> its row, day and services (staff schedule from it)
   const flows = new Map(); // plan id -> its items, loaded when opened
+  const staleFlows = new Set(); // read again after a sync, while the old flow stays on screen
   const s = {
     status: undefined, // undefined while loading, null when Planning Center isn't connected
     data: null,
@@ -181,7 +182,7 @@ export function mount(el, ctx) {
       s.status = status;
       s.data = data;
       s.error = null;
-      flows.clear(); // a sync may have changed them
+      for (const id of flows.keys()) staleFlows.add(id); // a sync may have changed them: read again, showing the old one meanwhile
       if (me) ctx.me.pco_person_id = me.pco_person_id ?? null; // matched by email during a sync
     } catch (e) {
       if (!quiet || !s.data) s.error = e.message;
@@ -455,7 +456,7 @@ export function mount(el, ctx) {
     const sub = [p.title && !t.name.toLowerCase().includes(p.title.toLowerCase()) ? p.title : null, p.series_title].filter(Boolean).join(' · ');
     const times = [...p.times].filter((x) => x.starts_at).sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
     const items = flows.get(p.id);
-    if (items === undefined) loadFlow(p.id);
+    if (items === undefined || staleFlows.has(p.id)) loadFlow(p.id);
     const crewCount = roster.filter((r) => r.status !== 'D').length;
     const pane = nav.pane === 'team' ? 'team' : 'flow';
     return `<article class="svc-detail">
@@ -492,11 +493,15 @@ export function mount(el, ctx) {
   }
 
   async function loadFlow(planId) {
-    flows.set(planId, null); // loading
+    staleFlows.delete(planId);
+    const had = flows.get(planId);
+    if (had === undefined) flows.set(planId, null); // loading (the first time only; after that the old flow stays up)
     try {
-      const items = await ctx.store.pcoItems(planId);
-      flows.set(planId, items || []);
+      const items = (await ctx.store.pcoItems(planId)) || [];
+      if (Array.isArray(had) && JSON.stringify(had) === JSON.stringify(items)) return; // nothing new: leave the page as it is
+      flows.set(planId, items);
     } catch (e) {
+      if (Array.isArray(had)) return; // keep the flow that's showing
       flows.set(planId, { error: e.message });
     }
     if (alive && nav.plan === planId) draw();

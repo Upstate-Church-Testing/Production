@@ -180,6 +180,18 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   let busy = false;
   let confirmDelete = false;
   let swForm = null; // the Software form open on this item: { id (null when adding), software_id, version… }
+  // What's on screen. The same screen drawn again (new data, a chip tapped, a form opened in
+  // place) keeps its scroll; a background reload that changed nothing here doesn't redraw at all.
+  let shown = null;     // 'view' | 'edit' | 'loading' | 'type'
+  let drawnSig = null;  // the data the view was drawn from
+  let portsHtml = null; // the last ports and history, shown while they're read again
+  let histHtml = null;
+  const draw = (html, screen) => { sheet.render(html, { keepScroll: shown === screen }); shown = screen; };
+  const viewSig = () => {
+    const ty = s.ix.type.get(dev?.type_id);
+    return JSON.stringify([dev, s.ix.ipsByDev.get(dev?.id) || [], s.ix.installs.get(dev?.id) || [], ty || null,
+      s.ix.room.get(dev?.room_id)?.name || null, dev?.position_id ? s.ix.pos.get(dev.position_id)?.name || null : null]);
+  };
 
   const sheet = ctx.openSheet({
     label: dev ? dev.name : 'New item',
@@ -198,7 +210,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
       const fresh = s.ix.dev.get(id);
       if (!fresh) { if (mode === 'view') { sheet.close(true); ctx.toast('That item was deleted'); } return; }
       dev = fresh;
-      if (mode === 'view') { swRead(); renderView(); } // keep what's typed in the Software form
+      if (mode === 'view' && viewSig() !== drawnSig) { swRead(); renderView(); } // keep what's typed in the Software form
     },
   };
   host.setOpen(tracker);
@@ -322,7 +334,8 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const patchable = takesPatch(dev, ty);
     const computer = runsSoftware(dev, ty);
     const installed = s.ix.installs.get(dev.id) || [];
-    sheet.render(`
+    drawnSig = viewSig();
+    draw(`
       <header class="sh-head">
         <div class="sh-top">${tagDots(dev.departments)}
           <button type="button" class="st st-${esc(dev.status)} st-btn" id="d-status" aria-haspopup="listbox"><i></i><span class="dd-value"></span>${icon('down')}</button>
@@ -362,7 +375,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         ${computer || installed.length ? softwareBlock(installed) : ''}
         ${ty?.ports.length ? `<section class="block">
           <h3>Ports</h3>
-          <div id="ports"><p class="muted">Loading…</p></div>
+          <div id="ports">${portsHtml ?? '<p class="muted">Loading…</p>'}</div>
         </section>` : ''}
         ${ty ? `<section class="block type-block">
           <h3>Model</h3>
@@ -384,7 +397,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         </section>
         <section class="block">
           <h3>${icon('history')}History</h3>
-          <div id="hist"><p class="muted">Loading…</p></div>
+          <div id="hist">${histHtml ?? '<p class="muted">Loading…</p>'}</div>
         </section>
         <p class="stamp">Added by ${esc(by(dev.created_by, dev.created_by_name))} ${esc(timeAgo(dev.created_at))}${dev.updated_at && dev.updated_at !== dev.created_at ? ` · edited by ${esc(by(dev.updated_by, dev.updated_by_name))} ${esc(timeAgo(dev.updated_at))}` : ''}</p>
       </div>
@@ -392,7 +405,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
         ${confirmDelete
           ? `<span class="confirm-text">Delete ${esc(dev.name)} and its IPs?</span><button class="btn" data-a="delete-no">Keep it</button><button class="btn danger" data-a="delete-yes">Delete</button>`
           : `<button class="btn ghost danger-text" data-a="delete">${icon('trash')}Delete</button><span class="spacer"></span><button class="btn primary" data-a="edit">${icon('edit')}Edit</button>`}
-      </footer>`);
+      </footer>`, 'view');
     loadHistory();
     if (ty?.ports.length) loadPorts(ty);
     wireStatus();
@@ -543,7 +556,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     try {
       ports = await ctx.store.devicePorts(dev.id);
     } catch (e) {
-      const box = $('#ports', sheet.el); if (box) box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+      const box = $('#ports', sheet.el); if (box && portsHtml == null) box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
       return;
     }
     const box = $('#ports', sheet.el);
@@ -551,12 +564,13 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const byPort = new Map(ports.map((p) => [p.type_port_id, p]));
     const used = ty.ports.filter((p) => byPort.has(p.id));
     const empty = ty.ports.length - used.length;
-    box.innerHTML = `${used.length ? `<ul class="patch-list">${used.map((p) => {
+    const html = `${used.length ? `<ul class="patch-list">${used.map((p) => {
         const x = byPort.get(p.id);
         return `<li><span class="patch-port"><b>${esc(p.name)}</b><small>${esc(portMeta(p))}</small></span>
           <span class="patch-to">${esc(x.connected_to || '')}${x.assignment ? `<em>${esc(x.assignment)}</em>` : ''}${x.notes ? `<small>${esc(x.notes)}</small>` : ''}</span></li>`;
       }).join('')}</ul>` : ''}
       ${empty ? `<p class="muted">${used.length ? `${plural(empty, 'more port')} with nothing recorded.` : `Nothing recorded on its ${plural(ty.ports.length, 'port')} yet.`} <button class="btn link" data-a="edit">Record what’s plugged in</button></p>` : ''}`;
+    if (html !== portsHtml) { portsHtml = html; box.innerHTML = html; }
   }
 
   function ipCard(ip) {
@@ -580,15 +594,17 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
   }
 
   async function loadHistory() {
-    const box = $('#hist', sheet.el);
     try {
       const items = await ctx.store.history(dev.id);
-      if (!$('#hist', sheet.el)) return;
-      box.innerHTML = items.length
+      const box = $('#hist', sheet.el); // looked up again: the view may have been drawn again meanwhile
+      if (!box) return;
+      const html = items.length
         ? `<ol class="hist">${items.map(histItem).join('')}</ol>`
         : '<p class="muted">No changes recorded yet.</p>';
+      if (html !== histHtml) { histHtml = html; box.innerHTML = html; }
     } catch (e) {
-      box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+      const box = $('#hist', sheet.el);
+      if (box && histHtml == null) box.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
     }
   }
 
@@ -638,7 +654,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     mode = 'edit';
     dirty = false;
     if (dev) {
-      sheet.render(`<div class="sh-body"><p class="muted pad">Loading…</p></div>`);
+      draw(`<div class="sh-body"><p class="muted pad">Loading…</p></div>`, 'loading');
       try { [creds, ports] = await Promise.all([ctx.store.credentials(dev.id), ctx.store.devicePorts(dev.id)]); }
       catch (e) { ctx.toast(e.message, 'bad'); mode = 'view'; return renderView(); }
     } else {
@@ -697,6 +713,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const names = bulk ? bulkNames() : [];
     const locs = [...new Set(s.data.devices.filter((d) => d.campus_id === campusId && (!draft.area || posKey(d.area) === posKey(draft.area))).map((d) => d.location).filter(Boolean))].sort();
     const scroll = $('.sh-body', sheet.el)?.scrollTop || 0;
+    shown = 'edit';
     sheet.render(`
       <header class="sh-head">
         <div class="sh-top"><span class="eyebrow">${dev ? 'Edit item' : 'New item'}</span>
@@ -1104,6 +1121,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
 
   function startNewType() {
     mode = 'type';
+    shown = 'type';
     typeApi = typeEditor({
       ctx, sheet, types: [...s.ix.type.values()], defaults: { departments: [...draft.departments] },
       onDone: async (newId) => {

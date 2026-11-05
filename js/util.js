@@ -11,6 +11,14 @@ export function debounce(fn, ms) {
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
+/** The live changes (store.subscribe names) the gear, IP sheet and statistics are drawn from.
+ *  Everything else (Planning Center, volunteers, people, Resi, meetings, cables) changes often
+ *  and has nothing on those pages, so it shouldn't make them reload and redraw. */
+export const GEAR_CHANGES = new Set(['devices', 'device_ips', 'networks', 'rooms', 'rig_positions', 'device_types', 'device_type_ports',
+  'camera_builds', 'haze_fluids', 'haze_stock', 'haze_checks', 'systems', 'system_items', 'software', 'software_installs']);
+/** A subscribe callback that only runs for the named changes (or an unnamed "everything"). */
+export const onlyFor = (names, fn) => (table) => { if (!table || names.has(table)) fn(table); };
+
 export function storage(key, fallback) {
   try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; }
 }

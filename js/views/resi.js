@@ -70,6 +70,14 @@ export function mount(el, ctx) {
     else { clearInterval(timer); timer = null; }
   };
   document.addEventListener('visibilitychange', onVisible);
+  // While a player is full screen, tiles aren't moved or swapped (moving one reloads it,
+  // which drops it out of full screen and the browser window back to its old size).
+  // What changed meanwhile is drawn when it leaves full screen.
+  const fullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  let held = false;
+  const onFullscreen = () => { if (!fullscreen() && held) { held = false; sync(); } };
+  document.addEventListener('fullscreenchange', onFullscreen);
+  document.addEventListener('webkitfullscreenchange', onFullscreen);
   const unsubscribe = ctx.store.subscribe(debounce((table) => { if (!table || table === 'streams') load(true); }, 300));
   const clock = setInterval(drawHead, 15000); // keeps "checked 20 sec ago" and live times fresh
 
@@ -79,6 +87,8 @@ export function mount(el, ctx) {
       alive = false;
       clearInterval(timer); clearInterval(clock); ctrl?.abort();
       document.removeEventListener('visibilitychange', onVisible);
+      document.removeEventListener('fullscreenchange', onFullscreen);
+      document.removeEventListener('webkitfullscreenchange', onFullscreen);
       unsubscribe();
     },
   };
@@ -133,6 +143,7 @@ export function mount(el, ctx) {
 
   function sync() {
     if (!s.streams || !alive) return;
+    if (fullscreen()) { held = true; drawHead(); return; }
     if (s.streams.length && !s.checkedAt) return; // wait for the first check
     $('#r-loading', el).hidden = true;
     const list = sorted();

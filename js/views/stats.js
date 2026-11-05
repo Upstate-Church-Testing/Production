@@ -1,7 +1,7 @@
 // Statistics: the numbers behind Gear and Network for one location or all of them.
 // Tap a bar to see those items in Gear; tap a problem to see it on the Network sheet.
 
-import { esc, icon, $, debounce, plural } from '../util.js';
+import { esc, icon, $, debounce, plural, GEAR_CHANGES, onlyFor } from '../util.js';
 import { buildIndex } from './devices.js';
 import { brandKey } from './types.js';
 import { takesPatch, rigKey, usedChannels } from '../lighting.js';
@@ -47,16 +47,19 @@ export function mount(el, ctx) {
     ctx.openGear({ dep: kind === 'team' ? value : ALL, cat: kind === 'category' ? value : ALL, brand: kind === 'brand' ? value : ALL });
   });
 
-  const unsubscribe = ctx.store.subscribe(debounce(() => load(), 400));
+  const unsubscribe = ctx.store.subscribe(onlyFor(GEAR_CHANGES, debounce(() => load(true), 400)));
   load();
   return { unmount() { alive = false; unsubscribe(); } };
 
-  async function load() {
+  async function load(quiet = false) {
     try {
       s.data = await ctx.store.networkData();
       s.ix = buildIndex(s.data);
       s.error = null;
-    } catch (e) { s.error = e.message; }
+    } catch (e) {
+      if (quiet && s.data) return; // a background reload that failed: keep what's on screen
+      s.error = e.message;
+    }
     if (alive) draw();
   }
 
