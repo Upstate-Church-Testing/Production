@@ -5,7 +5,7 @@
 // and camera builds (items whose Spot is "Cam 3").
 
 import { esc, icon, $, $$, debounce, storage, store, splitInet, plural, timeAgo, copyText, pageTitle, GEAR_CHANGES, onlyFor } from '../util.js';
-import { typeEditor, typeLabel, sortPorts, DIRECTIONS, brandKey, typeThumb } from './types.js';
+import { typeEditor, typeLabel, sortPorts, brandKey, typeThumb, portGroups, portRuns, portMeta } from './types.js';
 import { buildIndex, ipHtml, tagDotsHtml, openDeviceSheet, statusPill, kv, STATUS, STATUS_HINT, PROJECTION, posKey, byArea } from './devices.js';
 import { patchView } from './patch.js';
 import { rigView } from './rigging.js';
@@ -1069,7 +1069,9 @@ export function mount(el, ctx) {
           ${t.specs?.length ? `<section class="block"><h3>Specs</h3><dl class="kv">${t.specs.map((sp) => `<div><dt>${esc(sp.label)}</dt><dd>${esc(sp.value)}</dd></div>`).join('')}</dl></section>` : ''}
           <section class="block">
             <h3>Ports <span class="count">${t.ports.length}</span></h3>
-            ${t.ports.length ? `<ul class="port-list">${t.ports.map((p) => `<li><b>${esc(p.name)}</b><span>${esc([p.signal, p.connector].filter(Boolean).join(' · '))}</span>${p.direction !== 'io' ? `<i class="dir dir-${p.direction}">${esc(DIRECTIONS[p.direction])}</i>` : ''}</li>`).join('')}</ul>`
+            ${t.ports.length ? `${portGroups(t.ports).map((g) => `<p class="port-group"><i class="dir dir-${g.dir}">${esc(g.label)}</i><span class="count">${g.ports.length}</span></p>
+              <ul class="port-list">${portRuns(g.ports).map((r) => `<li><b>${esc(r.name)}</b><span>${esc(portMeta(r.first, false))}${r.first.notes ? `<small>${esc(r.first.notes)}</small>` : ''}</span><i class="run">${r.ports.length > 1 ? `×${r.ports.length}` : ''}</i></li>`).join('')}</ul>`).join('')}
+              <p class="fine">The model’s ports, the same on every item. Open an item to see what’s plugged into each one.</p>`
               : '<p class="muted">No ports listed. Add them with Edit so each item can record what’s plugged in.</p>'}
           </section>
           <section class="block">

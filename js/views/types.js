@@ -13,6 +13,38 @@ export const SIGNALS = ['Ethernet', 'Dante', 'DMX', 'Art-Net / sACN', 'HDMI', 'S
 export const CONNECTORS = ['RJ45', 'etherCON', 'XLR3', 'XLR5', 'BNC', 'HDMI', 'Mini HDMI', 'DisplayPort', 'USB-C', 'USB-A',
   'TRS ¼"', 'TRS 3.5mm', 'Phoenix', 'powerCON', 'IEC', 'Edison', 'SFP', 'LC fiber', 'opticalCON', 'DB9', 'Other'];
 export const DIRECTIONS = { in: 'In', out: 'Out', io: 'In / Out' };
+/** Which side of the unit a port is on. Blank means not recorded. */
+export const FACES = { back: 'Back', front: 'Front', left: 'Left side', right: 'Right side', top: 'Top', bottom: 'Bottom' };
+/** Ports listed in three groups: inputs, outputs, and ports that carry both ways (network, USB…). */
+export const PORT_GROUPS = [['in', 'In'], ['out', 'Out'], ['io', 'In / Out']];
+
+/** [{ dir, label, ports }] for each group that has ports, in the model's own order. */
+export function portGroups(ports = []) {
+  const sorted = sortPorts(ports);
+  return PORT_GROUPS.map(([dir, label]) => ({ dir, label, ports: sorted.filter((p) => (p.direction || 'io') === dir) }))
+    .filter((g) => g.ports.length);
+}
+
+/**
+ * Folds a run of numbered ports that are alike ("SDI In 1" … "SDI In 40", same signal,
+ * connector, side and notes) into one entry, so 40 identical inputs read as one line.
+ * keep(p) can hold a port out of any run (an item's port with something recorded).
+ * Returns [{ name, ports, first }] where first is the run's first port.
+ */
+export function portRuns(ports, keep = () => false) {
+  const out = [];
+  const num = (p) => /^(.*?)(\d+)$/.exec(p.name);
+  const alike = (a, b) => ['signal', 'connector', 'face', 'notes', 'direction'].every((k) => (a[k] || '') === (b[k] || ''));
+  for (const p of ports) {
+    const m = num(p), last = out.at(-1);
+    if (m && last && !keep(p) && last.prefix === m[1] && Number(m[2]) === last.to + 1 && alike(last.first, p) && !keep(last.first)) {
+      last.to = Number(m[2]); last.ports.push(p);
+    } else out.push({ first: p, ports: [p], prefix: m ? m[1] : null, from: m ? Number(m[2]) : null, to: m ? Number(m[2]) : null });
+  }
+  return out.map((r) => ({ ...r, name: r.ports.length > 1 ? `${r.prefix}${r.from}–${r.to}` : r.first.name }));
+}
+
+const faceOptions = (cur) => `<option value="" ${cur ? '' : 'selected'}>Not recorded</option>${Object.entries(FACES).map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${v}</option>`).join('')}`;
 
 export const typeLabel = (t) => (t ? [t.manufacturer, t.name].filter(Boolean).join(' ') + (t.unknown ? ' (model unknown)' : '') : 'No model');
 export const sortPorts = (ports = []) => [...ports].sort((a, b) => a.sort_order - b.sort_order);
@@ -28,8 +60,8 @@ export function typeThumb(ctx, t, cls = '') {
     : `<span class="thumb is-empty ${cls}">${icon('box')}</span>`;
 }
 
-/** "Ethernet · RJ45 · In / Out" */
-export const portMeta = (p) => [p.signal, p.connector, p.direction !== 'io' ? DIRECTIONS[p.direction] : null].filter(Boolean).join(' · ');
+/** "SDI · BNC · In · Back"; withDir=false leaves the direction out where the group already says it. */
+export const portMeta = (p, withDir = true) => [p.signal, p.connector, withDir && p.direction !== 'io' ? DIRECTIONS[p.direction] : null, FACES[p.face]].filter(Boolean).join(' · ');
 
 /**
  * Renders the type editor into an open sheet. Calls onDone(typeId) after a
@@ -97,6 +129,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
               <label class="field"><span>Signal</span><input id="po-${i}-signal" value="${esc(p.signal || '')}" list="dl-t-sig"></label>
               <label class="field"><span>Connector</span><input id="po-${i}-connector" value="${esc(p.connector || '')}" list="dl-t-con"></label>
               <label class="field"><span>Direction</span><select id="po-${i}-direction">${Object.entries(DIRECTIONS).map(([k, v]) => `<option value="${k}" ${k === (p.direction || 'io') ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+              <label class="field"><span>Side</span><select id="po-${i}-face">${faceOptions(p.face)}</select></label>
             </div>
           </div>`).join('')}</div>
           ${bulk ? `<div class="bulk">
@@ -108,6 +141,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
               <label class="field"><span>Signal</span><input id="b-signal" value="DMX" list="dl-t-sig"></label>
               <label class="field"><span>Connector</span><input id="b-connector" value="XLR5" list="dl-t-con"></label>
               <label class="field"><span>Direction</span><select id="b-direction">${Object.entries(DIRECTIONS).map(([k, v]) => `<option value="${k}" ${k === 'out' ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+              <label class="field"><span>Side</span><select id="b-face">${faceOptions('back')}</select></label>
             </div>
             <div class="bulk-actions"><button type="button" class="btn" data-ta="bulk-cancel">Cancel</button><button type="button" class="btn primary" data-ta="bulk-add">Add ports</button></div>
           </div>` : `<div class="btn-row"><button type="button" class="btn" data-ta="add-port">${icon('plus')}Add a port</button><button type="button" class="btn" data-ta="bulk">${icon('plus')}Add several</button></div>`}
@@ -154,6 +188,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     d.specs.forEach((sp, i) => { sp.label = v(`sp-${i}-label`); sp.value = v(`sp-${i}-value`); });
     d.ports.forEach((p, i) => {
       p.name = v(`po-${i}-name`); p.signal = v(`po-${i}-signal`); p.connector = v(`po-${i}-connector`); p.direction = v(`po-${i}-direction`) || 'io';
+      p.face = v(`po-${i}-face`);
     });
   }
 
@@ -182,7 +217,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
           dmx_modes: parseModes(d.modesText), dmx_footprint: foot,
           specs: d.specs.filter((sp) => sp.label.trim() || sp.value.trim()).map((sp) => ({ label: sp.label.trim(), value: sp.value.trim() })),
         },
-        ports: ports.map((p) => ({ id: p.id || '', name: p.name.trim(), signal: p.signal, connector: p.connector, direction: p.direction || 'io', notes: p.notes || '' })),
+        ports: ports.map((p) => ({ id: p.id || '', name: p.name.trim(), signal: p.signal, connector: p.connector, direction: p.direction || 'io', face: p.face || '', notes: p.notes || '' })),
       });
       busy = false; dirty = false;
       detach();
@@ -200,7 +235,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     collect();
     const prefix = v('b-prefix');
     for (let n = from; n <= to; n++) {
-      d.ports.push({ id: '', name: `${prefix}${n}`, signal: v('b-signal'), connector: v('b-connector'), direction: v('b-direction') || 'io' });
+      d.ports.push({ id: '', name: `${prefix}${n}`, signal: v('b-signal'), connector: v('b-connector'), direction: v('b-direction') || 'io', face: v('b-face') });
     }
     bulk = false; dirty = true; render();
   }
@@ -226,7 +261,7 @@ export function typeEditor({ ctx, sheet, type = null, types = [], onDone, onCanc
     else if (a === 'tag') { collect(); const g = t.dataset.tag; d.departments = d.departments.includes(g) ? d.departments.filter((x) => x !== g) : [...d.departments, g]; dirty = true; render(); }
     else if (a === 'add-spec') { collect(); d.specs.push({ label: '', value: '' }); render(); $$('.spec-row input', sheet.el).at(-2)?.focus(); }
     else if (a === 'rm-spec') { collect(); d.specs.splice(+t.dataset.i, 1); dirty = true; render(); }
-    else if (a === 'add-port') { collect(); d.ports.push({ id: '', name: '', signal: '', connector: '', direction: 'io' }); render(); $$('.port-name', sheet.el).at(-1)?.focus(); }
+    else if (a === 'add-port') { collect(); d.ports.push({ id: '', name: '', signal: '', connector: '', direction: 'io', face: d.ports.at(-1)?.face || '' }); render(); $$('.port-name', sheet.el).at(-1)?.focus(); }
     else if (a === 'rm-port') { collect(); d.ports.splice(+t.dataset.i, 1); dirty = true; render(); }
     else if (a === 'bulk') { collect(); bulk = true; render(); $('#b-prefix', sheet.el)?.focus(); }
     else if (a === 'bulk-cancel') { collect(); bulk = false; render(); }

@@ -315,6 +315,32 @@ name to open it.
 It's offered on a model (**Items › Compare**: every item of that model), and on Items
 and Software once the list is down to 40 or fewer (**Compare these 8**).
 
+## Ports (staff)
+
+A **model** holds the port layout every item of it shares; an **item** records what's
+plugged into each of those ports. So two items only share a model when their ports are
+truly the same (an older look-alike with an extra port is its own model; see the
+Videohub 40x40 12G's notes).
+
+- **Three groups**: **In**, **Out** and **In / Out** (ports that carry both ways:
+  Ethernet, USB, Dante, GPI, card slots).
+- **Side**: where the connector is (Back, Front, Left side, Right side, Top, Bottom).
+  Network channels like a console's Dante In/Out 1–64 have no side: they ride on its
+  Dante ports.
+- **The model page** lists ports only: signal, connector, side and a note (what the
+  panel label says, phantom power, which input it shares…). A run of alike numbered ports
+  reads as one line ("SDI In 1–40 ×40").
+- **The item page** lists the same ports with what's recorded on each: **from** for an
+  input, **to** for an output, plus an assignment (a channel name, universe…). Ports with
+  nothing recorded fold into runs too. **Edit** › Ports records them, in the same groups.
+- Logged so far, from the makers' manuals, spec sheets and back-panel photos (sources
+  in each model's notes): Blackmagic **Videohub 40x40 12G**, **ATEM 2 M/E Production
+  Studio 4K**, Yamaha **QL5** (with Dante In/Out 1–64). The A Control QL5 has its Dante
+  input patch recorded as shown on the console.
+
+`device_type_ports` has `direction` (in / out / io) and `face` (the side, or blank);
+`save_device_type` keeps a port's side when an older copy of the editor saves without one.
+
 ## Cables (staff)
 
 Cables aren't tracked one by one. A **type** is a signal and two ends (DMX · XLR 5-pin
@@ -345,7 +371,8 @@ campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Win
 device_types     the shared catalog entry ("model" in the app): name, brand, model number, category, sections, specs, manual, photo, DMX modes,
                  unknown (a placeholder until the model is known), haze fluid and tank size (hazers)
                  (photos live in the public gear-photos storage bucket: <path>.jpg plus a <path>-t.jpg thumbnail)
-    └── device_type_ports (the port layout every unit of that type shares)
+    └── device_type_ports (the port layout every unit of that type shares: name, signal, connector,
+                           direction in / out / io, face = the side it's on, notes)
 
 departments      audio / video / lighting / network — the section tag on every item
 profiles         one per login: role, teams, home campus, matched Planning Center person

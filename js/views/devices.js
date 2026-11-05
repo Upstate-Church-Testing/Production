@@ -8,7 +8,11 @@ import {
   esc, icon, $, $$, debounce, storage, store, ipToInt, intToIp, splitInet, prefixToMask, maskToPrefix,
   parseCidr, inCidr, nextFreeIp, normMac, timeAgo, plural, copyText,
 } from '../util.js';
-import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb, CATEGORIES } from './types.js';
+import { typeEditor, typeLabel, sortPorts, portMeta, typeThumb, CATEGORIES, portGroups, portRuns } from './types.js';
+
+/** How an item's port reads: an input comes from somewhere, an output goes somewhere. */
+const WAY = { in: '<i class="way">from</i>', out: '<i class="way">to</i>', io: '' };
+const FROM_HINT = { in: 'Comes from…', out: 'Goes to…', io: 'Connected to…' };
 import { wireDropdown } from '../picker.js';
 import { roomSelectHtml, groupChoices, roomPath } from '../rooms.js';
 import { osOf, runsSoftware, installsByDevice, logoHtml, familyLogo, asOf, today, versionText } from '../software.js';
@@ -562,14 +566,17 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
     const box = $('#ports', sheet.el);
     if (!box) return;
     const byPort = new Map(ports.map((p) => [p.type_port_id, p]));
-    const used = ty.ports.filter((p) => byPort.has(p.id));
-    const empty = ty.ports.length - used.length;
-    const html = `${used.length ? `<ul class="patch-list">${used.map((p) => {
-        const x = byPort.get(p.id);
-        return `<li><span class="patch-port"><b>${esc(p.name)}</b><small>${esc(portMeta(p))}</small></span>
-          <span class="patch-to">${esc(x.connected_to || '')}${x.assignment ? `<em>${esc(x.assignment)}</em>` : ''}${x.notes ? `<small>${esc(x.notes)}</small>` : ''}</span></li>`;
-      }).join('')}</ul>` : ''}
-      ${empty ? `<p class="muted">${used.length ? `${plural(empty, 'more port')} with nothing recorded.` : `Nothing recorded on its ${plural(ty.ports.length, 'port')} yet.`} <button class="btn link" data-a="edit">Record what’s plugged in</button></p>` : ''}`;
+    const has = (p) => { const x = byPort.get(p.id); return !!(x && (x.connected_to || x.assignment || x.notes)); };
+    const used = ty.ports.filter(has).length;
+    const html = `${portGroups(ty.ports).map((g) => `<p class="port-group"><i class="dir dir-${g.dir}">${esc(g.label)}</i><span class="count">${g.ports.length}</span></p>
+      <ul class="patch-list">${portRuns(g.ports, has).map((r) => {
+        const x = byPort.get(r.first.id), rec = r.ports.length === 1 && has(r.first);
+        return `<li class="${rec ? '' : 'is-empty'}"><span class="patch-port"><b>${esc(r.name)}</b><small>${esc(portMeta(r.first, false))}</small></span>
+          <span class="patch-to">${rec
+            ? `${x.connected_to ? `<span>${WAY[g.dir]}${esc(x.connected_to)}</span>` : ''}${x.assignment ? `<em>${esc(x.assignment)}</em>` : ''}${x.notes ? `<small>${esc(x.notes)}</small>` : ''}`
+            : `<small>${r.ports.length > 1 ? 'Nothing recorded on these' : 'Nothing recorded'}</small>`}</span></li>`;
+      }).join('')}</ul>`).join('')}
+      <p class="muted">${used ? `${plural(used, 'port')} of ${ty.ports.length} recorded.` : `Nothing recorded on its ${plural(ty.ports.length, 'port')} yet.`} <button class="btn link" data-a="edit">Record what’s plugged in</button></p>`;
     if (html !== portsHtml) { portsHtml = html; box.innerHTML = html; }
   }
 
@@ -787,14 +794,15 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
 
         ${ty?.ports.length && !bulk ? `<fieldset class="group"><legend>Ports <span class="count">${ty.ports.length}</span></legend>
           <p class="fine">What’s plugged into each port on this one. Leave a port blank if nothing is.</p>
-          <div class="patch-edit">${ty.ports.map((p) => {
+          ${portGroups(ty.ports).map((g) => `<p class="port-group"><i class="dir dir-${g.dir}">${esc(g.label)}</i><span class="count">${g.ports.length}</span></p>
+          <div class="patch-edit">${g.ports.map((p) => {
             const x = draft.ports[p.id] || {};
             return `<div class="patch-row">
-              <span class="patch-port"><b>${esc(p.name)}</b><small>${esc(portMeta(p))}</small></span>
-              <input id="pp-${p.id}-to" value="${esc(x.connected_to || '')}" placeholder="Plugged into…" aria-label="${esc(p.name)}: plugged into">
+              <span class="patch-port"><b>${esc(p.name)}</b><small>${esc(portMeta(p, false))}</small></span>
+              <input id="pp-${p.id}-to" value="${esc(x.connected_to || '')}" placeholder="${FROM_HINT[g.dir]}" aria-label="${esc(p.name)}: ${FROM_HINT[g.dir].replace('…', '').toLowerCase()}">
               <input id="pp-${p.id}-as" value="${esc(x.assignment || '')}" placeholder="Universe, input, channel…" aria-label="${esc(p.name)}: assignment">
             </div>`;
-          }).join('')}</div>
+          }).join('')}</div>`).join('')}
         </fieldset>` : ''}
 
         ${bulk || takesPatch({ departments: draft.departments }, ty) ? '' : numbersFieldset(ty)}

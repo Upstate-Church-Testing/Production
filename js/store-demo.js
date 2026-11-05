@@ -45,6 +45,63 @@ function buildExample() {
     'KY-PZ100': [{ name: 'SDI Out', signal: 'SDI', connector: 'BNC', direction: 'out' }, { name: 'HDMI Out', signal: 'HDMI', connector: 'HDMI', direction: 'out' }, { name: 'LAN', signal: 'Ethernet', connector: 'RJ45' }],
     'Rio3224-D2': [{ name: 'Dante Primary', signal: 'Dante', connector: 'etherCON' }, { name: 'Dante Secondary', signal: 'Dante', connector: 'etherCON' }],
     'Pathport 8-port rack mount': [...nums('DMX ', 8, { signal: 'DMX', connector: 'XLR5', direction: 'out' }), { name: 'Ethernet', signal: 'Art-Net / sACN', connector: 'RJ45' }],
+    // The same layouts as the live database, from Blackmagic's specs and back-panel photos.
+    'Videohub 40x40 12G': [...nums('SDI In ', 40, { signal: 'SDI', connector: 'BNC', direction: 'in' }),
+      { name: 'Ref In', signal: 'Reference', connector: 'BNC', direction: 'in', notes: 'Tri-sync or black burst.' },
+      ...nums('Power ', 2, { signal: 'Power', connector: 'IEC', direction: 'in', notes: 'One of two internal power supplies, 100–240V AC.' }),
+      ...nums('SDI Out ', 40, { signal: 'SDI', connector: 'BNC', direction: 'out' }),
+      { name: 'Ref Out', signal: 'Reference', connector: 'BNC', direction: 'out', notes: 'Loop-through of Ref In.' },
+      { name: 'Ethernet', signal: 'Ethernet', connector: 'RJ45', notes: '10/100/1000. For Videohub Control and Videohub hardware panels.' },
+      { name: 'USB-C', signal: 'USB', connector: 'USB-C', notes: 'For Videohub Setup on a computer.' }],
+    'QL5': [...nums('Input ', 32, { signal: 'Analog audio', connector: 'XLR3', direction: 'in', notes: 'Balanced mic/line input, –62 to +10 dBu, with +48V phantom.' }),
+      ...nums('Dante In ', 64, { signal: 'Dante', connector: null, direction: 'in', face: null, notes: 'Dante network channel, carried on the Dante PRIMARY/SECONDARY ports.' }),
+      { name: 'Word Clock In', signal: 'Word clock', connector: 'BNC', direction: 'in', notes: 'Internal 75-ohm termination.' },
+      { name: 'MIDI In', signal: 'MIDI', connector: 'DIN 5', direction: 'in' },
+      { name: 'AC In', signal: 'Power', connector: 'IEC', direction: 'in', notes: '100–240V AC, 200 W. Locking (V-lock) power cord.' },
+      ...nums('Omni Out ', 16, { signal: 'Analog audio', connector: 'XLR3', direction: 'out', notes: 'Balanced, +4 dBu nominal.' }),
+      ...nums('Dante Out ', 64, { signal: 'Dante', connector: null, direction: 'out', face: null, notes: 'Dante network channel, carried on the Dante PRIMARY/SECONDARY ports.' }),
+      { name: 'Digital Out', signal: 'AES', connector: 'XLR3', direction: 'out', notes: 'AES/EBU. Mainly for the STEREO/MONO mix.' },
+      { name: 'Word Clock Out', signal: 'Word clock', connector: 'BNC', direction: 'out' },
+      { name: 'MIDI Out', signal: 'MIDI', connector: 'DIN 5', direction: 'out' },
+      { name: 'Phones', signal: 'Analog audio', connector: 'TRS ¼"', direction: 'out', face: 'front', notes: 'Headphones: the MONITOR OUT or CUE signal.' },
+      ...nums('Lamp ', 2, { signal: 'Power', connector: 'XLR4', direction: 'out', notes: '12V for a gooseneck lamp, like the Yamaha LA1L.' }),
+      { name: 'Dante Primary', signal: 'Dante', connector: 'etherCON', notes: '1000Base-T.' },
+      { name: 'Dante Secondary', signal: 'Dante', connector: 'etherCON', notes: '1000Base-T.' },
+      { name: 'Network', signal: 'Ethernet', connector: 'RJ45', notes: '10/100. For QL Editor on a computer and QL StageMix on an iPad.' },
+      { name: 'GPI', signal: 'GPIO', connector: 'DB15', notes: '5 in, 5 out.' },
+      ...nums('Slot ', 2, { signal: 'MY card', connector: 'MY slot', notes: 'Mini-YGDAI slot for a DSP or I/O card. The card’s own ports aren’t listed here.' }),
+      { name: 'USB', signal: 'USB', connector: 'USB-A', face: 'top', notes: 'USB 2.0 host for a flash drive: recording, playback and saving data.' }],
+    'ATEM 2 M/E Production Studio 4K': [
+      { name: 'SDI In 1', signal: 'SDI', connector: 'BNC', direction: 'in', notes: 'Input 1 is either this or HDMI In 1, picked in the switcher’s input settings.' },
+      ...nums('SDI In ', 20, { signal: 'SDI', connector: 'BNC', direction: 'in' }).slice(1),
+      { name: 'HDMI In 1', signal: 'HDMI', connector: 'HDMI', direction: 'in', notes: 'Shares input 1 with SDI In 1.' },
+      { name: 'Ref In', signal: 'Reference', connector: 'BNC', direction: 'in', notes: 'Tri-sync or black burst.' },
+      { name: 'Analog In Ch 1', signal: 'Analog audio', connector: 'XLR3', direction: 'in', notes: 'Balanced. Labeled ANALOG AUDIO IN CH 1.' },
+      { name: 'Analog In Ch 2', signal: 'Analog audio', connector: 'XLR3', direction: 'in', notes: 'Balanced. Labeled ANALOG AUDIO IN CH 2.' },
+      { name: 'Stereo In L', signal: 'Analog audio', connector: 'RCA', direction: 'in', notes: 'Unbalanced. Labeled STEREO IN L.' },
+      { name: 'Stereo In R', signal: 'Analog audio', connector: 'RCA', direction: 'in', notes: 'Unbalanced. Labeled STEREO IN R.' },
+      { name: 'Timecode In', signal: 'Timecode', connector: 'XLR3', direction: 'in', notes: 'SMPTE linear timecode.' },
+      { name: 'Talkback In', signal: 'Analog audio', connector: 'XLR3', direction: 'in', notes: 'Line level, balanced, for an existing talkback system.' },
+      ...nums('Power ', 2, { signal: 'Power', connector: 'IEC', direction: 'in', notes: 'One of two internal power supplies, 110–240V AC.' }),
+      ...nums('Program ', 2, { signal: 'SDI', connector: 'BNC', direction: 'out', notes: 'Program output.' }),
+      { name: 'Program M/E 2', signal: 'SDI', connector: 'BNC', direction: 'out', notes: 'M/E 2 program. Labeled M/E 2 under PROGRAM OUTPUTS.' },
+      { name: 'Program HD', signal: 'SDI', connector: 'BNC', direction: 'out', notes: 'Program down-converted to HD.' },
+      { name: 'Program HDMI', signal: 'HDMI', connector: 'HDMI', direction: 'out', notes: 'Program output.' },
+      { name: 'M/E 1 Preview', signal: 'SDI', connector: 'BNC', direction: 'out', notes: 'Labeled M/E 1 PVW.' },
+      ...nums('Aux ', 6, { signal: 'SDI', connector: 'BNC', direction: 'out' }),
+      { name: 'Multiview 1 SDI', signal: 'SDI', connector: 'BNC', direction: 'out', notes: 'HD multiview. Labeled HD 1 under MULTI-VIEW.' },
+      { name: 'Multiview 2 SDI', signal: 'SDI', connector: 'BNC', direction: 'out', notes: 'HD multiview. Labeled HD 2 under MULTI-VIEW.' },
+      { name: 'Multiview 1 HDMI', signal: 'HDMI', connector: 'HDMI', direction: 'out', notes: 'HD multiview. Labeled HD 1 under MULTI-VIEW.' },
+      { name: 'Multiview 2 HDMI', signal: 'HDMI', connector: 'HDMI', direction: 'out', notes: 'HD multiview. Labeled HD 2 under MULTI-VIEW.' },
+      { name: 'Analog Out Ch 1', signal: 'Analog audio', connector: 'XLR3', direction: 'out', notes: 'Program audio, balanced. Labeled ANALOG AUDIO OUT CH 1.' },
+      { name: 'Analog Out Ch 2', signal: 'Analog audio', connector: 'XLR3', direction: 'out', notes: 'Program audio, balanced. Labeled ANALOG AUDIO OUT CH 2.' },
+      { name: 'Monitor Out Ch 1', signal: 'Analog audio', connector: 'XLR3', direction: 'out', notes: 'For monitoring. Labeled MONITOR CH 1.' },
+      { name: 'Monitor Out Ch 2', signal: 'Analog audio', connector: 'XLR3', direction: 'out', notes: 'For monitoring. Labeled MONITOR CH 2.' },
+      { name: 'Timecode Out', signal: 'Timecode', connector: 'XLR3', direction: 'out', notes: 'SMPTE linear timecode, frame synchronized.' },
+      { name: 'Talkback Out', signal: 'Analog audio', connector: 'XLR3', direction: 'out', notes: 'Line level, balanced, for an existing talkback system.' },
+      { name: 'Control', signal: 'Ethernet', connector: 'RJ45', notes: '10/100/1000. For ATEM Software Control and ATEM hardware panels. Labeled CONTROL.' },
+      { name: 'USB 2.0', signal: 'USB', connector: 'USB-B', notes: 'For ATEM Setup: IP address and software updates.' },
+      { name: 'Remote', signal: 'RS-422', connector: 'DB9', notes: 'RS-422, for PTZ heads or GVG100 edit control. Labeled REMOTE.' }],
   };
   const SPECS = {
     'Hoglet 4': { description: 'Compact Hog 4 console wing; runs with a Hog 4 PC.', specs: [{ label: 'DMX outputs', value: '4 universes' }, { label: 'Network', value: 'HogNet, Art-Net, sACN' }] },
@@ -60,7 +117,7 @@ function buildExample() {
         departments: [...d.departments], description: SPECS[name]?.description || null, specs: SPECS[name]?.specs || [],
         manual_url: null, notes: null, photo_path: null, networked: d.networked !== false, dmx_modes: [], dmx_footprint: null, created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24 * 3), created_by: 'p-me', updated_by: 'p-me' };
       types.push(t);
-      (PORTS[name] || []).forEach((p, i) => typePorts.push({ id: uid(), type_id: t.id, connector: null, direction: 'io', notes: null, sort_order: i, ...p }));
+      (PORTS[name] || []).forEach((p, i) => typePorts.push({ id: uid(), type_id: t.id, connector: null, direction: 'io', face: 'back', notes: null, sort_order: i, ...p }));
     }
     return t.id;
   };
@@ -114,13 +171,13 @@ function buildExample() {
     if (c === 2) creds.push({ id: uid(), device_id: id, label: 'Web UI', username: 'jvc', password: 'example-only', notes: null, sort_order: 0 });
   }
   dev('SVL', W, { name: 'LED Processor', departments: ['video'], category: 'LED Processor', manufacturer: 'NovaStar', model: 'MX30', location: 'Stage Rack' }, [{ net: 'ctl', ip: '10.50.10.191/24', gw: '10.50.10.101' }]);
-  dev('SVL', W, { name: 'Videohub 40x40', departments: ['video'], category: 'Router', manufacturer: 'Blackmagic', model: 'Videohub 40x40 12G', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.201/24', gw: '10.50.10.101' }]);
+  const hub = dev('SVL', W, { name: 'Videohub 40x40', departments: ['video'], category: 'Router', manufacturer: 'Blackmagic', model: 'Videohub 40x40 12G', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.201/24', gw: '10.50.10.101' }]);
   dev('SVL', W, { name: 'Switcher', departments: ['video'], category: 'Switcher', manufacturer: 'Blackmagic', model: 'ATEM 2 M/E Production Studio 4K', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.202/24' }]);
   dev('SVL', W, { name: 'Switcher Panel', departments: ['video'], category: 'Control Panel', manufacturer: 'Blackmagic', location: 'A-Control Desk' }, [{ net: 'ctl', ip: '10.50.10.205/24', gw: '10.50.10.101' }]);
   const dirMac = dev('SVL', W, { name: 'Director’s Mac', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'A-Control Desk', firmware: 'macOS Sequoia 15.6', positions: ['Director'] }, [{ net: 'ctl', ip: '10.50.10.217/24', gw: '10.50.10.101' }]);
   const cg1 = dev('SVL', W, { name: 'CG1', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'FOH Desk', firmware: 'macOS Tahoe 26.1', positions: ['CG'] },
     [{ net: 'ctl', ip: '10.50.10.234/24', gw: '10.50.10.101', label: 'Production' }, { net: 'house', ip: '10.60.20.79/24', label: 'House', mode: 'dhcp' }]);
-  dev('SVL', W, { name: 'FOH Console', departments: ['audio'], category: 'Console', manufacturer: 'Yamaha', model: 'QL5', location: 'FOH' }, [{ net: 'dante', ip: '192.168.50.35/24', label: 'Dante Primary' }]);
+  const ql = dev('SVL', W, { name: 'FOH Console', departments: ['audio'], category: 'Console', manufacturer: 'Yamaha', model: 'QL5', location: 'FOH' }, [{ net: 'dante', ip: '192.168.50.35/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Stage Box', departments: ['audio'], category: 'Stagebox', manufacturer: 'Yamaha', model: 'Rio3224-D2', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.32/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Wireless Rx 1–4', departments: ['audio'], category: 'Wireless Receiver', manufacturer: 'Shure', model: 'ULXD4Q', location: 'FOH Rack' }, [{ net: 'dante', ip: '192.168.50.37/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Main L Amp', departments: ['audio'], category: 'Amplifier', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.20/24', label: 'Dante Primary' }]);
@@ -263,6 +320,13 @@ function buildExample() {
     { id: 3, at: ago(60 * 26), actor_id: null, actor_name: 'Claude', action: 'updated', entity: 'devices', entity_id: cat, device_id: cat, campus_id: 'c-SVL', label: 'Catwalk Gateway', changes: { location: [null, 'Catwalk'] } },
   );
 
+  patch(ql, 'Dante In 1', 'Y004-001', 'KICK IN');
+  patch(ql, 'Dante In 3', 'Y003-015', 'SNARE TO');
+  patch(ql, 'Dante In 37', '???-???');
+  patch(hub, 'SDI In 1', 'Camera 1');
+  patch(hub, 'SDI In 2', 'Camera 2');
+  patch(hub, 'SDI Out 12', 'Switcher SDI In 1');
+  patch(hub, 'Ethernet', 'FOH Switch');
   patch(stageGw, 'DMX 1', 'Stage left floor', 'Universe 5');
   patch(stageGw, 'DMX 2', 'Upstage truss', 'Universe 3');
   patch(stageGw, 'DMX 3', 'Midstage truss', 'Universe 4');
@@ -579,7 +643,7 @@ export function createDemoStore() {
       if ('ports' in payload) {
         const keep = new Set();
         (payload.ports || []).forEach((p, i) => {
-          const vals = { name: p.name.trim(), signal: blank(p.signal), connector: blank(p.connector), direction: p.direction || 'io', notes: blank(p.notes), sort_order: i };
+          const vals = { name: p.name.trim(), signal: blank(p.signal), connector: blank(p.connector), direction: p.direction || 'io', ...('face' in p ? { face: blank(p.face) } : {}), notes: blank(p.notes), sort_order: i };
           let cur = p.id && db.typePorts.find((x) => x.id === p.id && x.type_id === row.id);
           if (cur) Object.assign(cur, vals); else db.typePorts.push((cur = { id: uid(), type_id: row.id, ...vals }));
           keep.add(cur.id);
