@@ -24,12 +24,18 @@ Roles, lowest to highest: `pending` → `volunteer` → `contractor` → `staff`
 - **The first account created becomes admin.** Everyone after starts as *pending* and
   sees nothing until an admin approves them on the Team screen.
 - **Staff and admins** see the network sheet, device logins and change history.
-- **Volunteers** see Services and Resi, but no equipment or network data.
+- **Volunteers** see PCO (Services, Scheduling, My schedule) and Resi, but no equipment or network data.
   Service flows and training will be built for them later.
 - **Staff** set up each campus's Resi player in Settings.
 - **Admins** approve people, change roles and set each person's production teams.
 
-## Planning Center (Services tab)
+## Planning Center (PCO in the sidebar)
+
+PCO is a folder in the sidebar with four pages: **Services** (a location, a date, a
+service's flow and teams), **Scheduling** (the roster grid, once called Roster), **People**
+(staff only) and **My schedule**. They're one view underneath (`views/services.js`),
+each page opening on its own part; a jump from one to another (a plan on My schedule,
+a pill on Scheduling) goes to that page.
 
 One church-wide connection, so nobody connects their own Planning Center account
 and nobody's own Planning Center permissions matter here.
@@ -52,8 +58,8 @@ and nobody's own Planning Center permissions matter here.
   **Staff**, or **Off**. A campus's weekly services that have a production team start
   shared with everyone; everything else starts off. RLS enforces it. Audio positions
   are never copied (see People below).
-- **Roster** (beside each shared service in Settings) says whether it's on Services ›
-  Roster (`pco_service_types.on_roster`). Laurens, Union and Simpsonville's Traditional
+- **Scheduling** (beside each shared service in Settings) says whether it's on PCO ›
+  Scheduling (`pco_service_types.on_roster`). Laurens, Union and Simpsonville's Traditional
   are off it; they stay in the Services list and My schedule.
 - App accounts are matched to Planning Center people by email, so the Services tab can
   show "You're on 3 services" and a My schedule view.
@@ -62,7 +68,7 @@ and nobody's own Planning Center permissions matter here.
 
 ## People (production volunteers)
 
-Services › People (staff only) lists everyone on the production teams, whether or not
+PCO › People (staff only) lists everyone on the production teams, whether or not
 they have a login. Nobody signs in as these; they're records the staff keep.
 
 - Planning Center fills it: everyone on the shown teams of shared services (read every
@@ -96,9 +102,9 @@ iPad during the meeting:
 Everything updates live on every open screen. Tables: `meetings`, `meeting_notes`,
 `meeting_questions`, `meeting_answers` (answering closes a question in the database).
 
-## Scheduling from the roster (staff)
+## Scheduling from the grid (staff)
 
-Tap an **Open** spot on Services › Roster. The sheet asks Planning Center, live, about
+Tap an **Open** spot on PCO › Scheduling. The sheet asks Planning Center, live, about
 everyone on that team for that day:
 
 - who's set up for that position (and their schedule preference),
@@ -306,9 +312,9 @@ js/views/resi.js               Resi: what every campus's web player is showing
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on
 js/views/account.js            Settings: your profile, Planning Center, Resi players, theme, sign out
-js/views/services.js           Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its flow with run times and cues, times and production-team rosters; Roster (every location's positions × dates on one screen, one pill per person per day with a lettered dot per service, colored by their answer to every service that day); People; My schedule
-js/views/volunteers.js         Services › People: production volunteers, lanyards, tags, notes, add someone by hand
-js/views/schedule-sheet.js     Roster › Open: who could fill the spot (blockouts, declines, other spots that day), schedule, send-invite handoff, undo
+js/views/services.js           PCO's four pages (Services, Scheduling, People, My schedule; scope.mode picks). Services: pick a location, then a date, then the service (Vintage, Traditional, Modern…); its flow with run times and cues, times and production-team rosters; Roster (every location's positions × dates on one screen, one pill per person per day with a lettered dot per service, colored by their answer to every service that day); People; My schedule
+js/views/volunteers.js         PCO › People: production volunteers, lanyards, tags, notes, add someone by hand
+js/views/schedule-sheet.js     Scheduling › Open: who could fill the spot (blockouts, declines, other spots that day), schedule, send-invite handoff, undo
 js/views/meetings.js            Meetings: any meeting, questions & answers (who, when, where; history), notes
 js/views/pco-settings.js       Settings › Planning Center (connect, who sees which services, which teams show)
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
@@ -346,7 +352,7 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 ## Sidebar
 
 `NAV` in `js/app.js`: All gear (Cables), Audio, Video (Cameras), Lighting (Fixtures,
-Hazers, Patch, Rigging), Network (IP sheet) and Logistics (Services, Meetings, Resi, Statistics, Systems, Team),
+Hazers, Patch, Rigging), Network (IP sheet), PCO (Services, Scheduling, People, My schedule) and Logistics (Meetings, Resi, Statistics, Systems, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
 860px) it's hidden: Tally at the top left slides it in as a panel, and picking a page

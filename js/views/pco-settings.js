@@ -137,7 +137,7 @@ export function mountPcoSettings(box, ctx) {
         : `<p class="fine">${status.syncing ? 'Teams show up here after the first update.' : 'No teams found yet.'}</p>`}
 
       <h3 class="pc-h">Who sees each service</h3>
-      <p class="fine"><b>Everyone</b> includes volunteers. <b>Staff</b> is staff and admins. <b>Off</b> keeps it out of the app. <b>Roster</b> puts a shared service on Services › Roster; turn it off to keep a service in the list but off the grid.</p>
+      <p class="fine"><b>Everyone</b> includes volunteers. <b>Staff</b> is staff and admins. <b>Off</b> keeps it out of the app. <b>Scheduling</b> puts a shared service on PCO › Scheduling; turn it off to keep a service in the list but off the grid.</p>
       <div class="pc-groups">${order.map((g) => {
         const list = groups.get(g).sort((a, b) => (a.path.length - b.path.length) || (a.sequence ?? 99) - (b.sequence ?? 99) || a.name.localeCompare(b.name));
         const on = list.filter((t) => t.access !== 'hidden').length;
@@ -166,7 +166,7 @@ export function mountPcoSettings(box, ctx) {
 
   function rosterChip(t) {
     const on = t.on_roster !== false;
-    return `<button type="button" class="chip pc-roster" data-pc="roster" data-id="${esc(t.id)}" aria-pressed="${on}" title="${on ? 'On' : 'Off'} Services › Roster" ${t.access === 'hidden' ? 'hidden' : ''}>${on ? icon('check') : ''}Roster</button>`;
+    return `<button type="button" class="chip pc-roster" data-pc="roster" data-id="${esc(t.id)}" aria-pressed="${on}" title="${on ? 'On' : 'Off'} PCO › Scheduling" ${t.access === 'hidden' ? 'hidden' : ''}>${on ? icon('check') : ''}Scheduling</button>`;
   }
 
   // ----------------------------------------------------------- actions ---

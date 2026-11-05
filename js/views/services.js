@@ -1,12 +1,14 @@
 // Services: browse Planning Center by location, then date, then service
 // (Vintage, Traditional, Modern…), and see that service's flow (the order of
 // service, with run times and team notes), its times and who's on the
-// production teams. Roster is the whole schedule at a glance: every position
-// at every location, date by date, one pill per person. Planning Center is connected once for the whole church
+// production teams. Scheduling (the roster) is the whole schedule at a glance: every position
+// at every location, date by date, one pill per person. Each of these is its own page
+// under PCO in the sidebar (Services, Scheduling, People, My schedule): the page's
+// scope.mode says which. Planning Center is connected once for the whole church
 // (Settings › Planning Center); nobody signs in to it here. What each person
 // sees comes from their role in this app and the services an admin shares.
 
-import { esc, icon, $, $$, debounce, plural, timeAgo, initials } from '../util.js';
+import { esc, icon, $, $$, debounce, plural, timeAgo, initials, pageTitle } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, hiddenPosition, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
@@ -22,6 +24,16 @@ export function mount(el, ctx) {
   const isAdmin = ctx.me.role === 'admin';
   // Where you were (location, date, service) lasts while the app is open.
   const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null, pane: 'flow', at: 0, mode: 'services' });
+  // Which PCO page this is. With one, the page stays on its own view and a jump to
+  // another view (a plan from My schedule) goes to that page.
+  const fixed = ctx.page?.scope?.mode || null;
+  if (fixed) nav.mode = fixed;
+  const PAGE_FOR = { services: 'services', roster: 'scheduling', people: 'people', mine: 'my-schedule' };
+  /** Show another view: on its own page when this page is fixed to one. */
+  const setMode = (m) => {
+    if (fixed && m !== fixed) { nav.mode = m; ctx.go(PAGE_FOR[m]); return; }
+    nav.mode = m; draw(); window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   let pills = new Map(); // roster pill id -> its person and services, for the detail sheet
   let opens = new Map(); // roster open-spot id -> its row, day and services (staff schedule from it)
   const flows = new Map(); // plan id -> its items, loaded when opened
@@ -42,9 +54,10 @@ export function mount(el, ctx) {
   el.innerHTML = `
     <div class="page-head">
       <div class="mode-row">
+        ${fixed ? pageTitle(ctx.page) : ''}
         <div class="seg mode-seg" role="tablist" aria-label="Show" id="s-seg" hidden>
           <button type="button" role="tab" data-smode="services">Services</button>
-          <button type="button" role="tab" data-smode="roster">Roster</button>
+          <button type="button" role="tab" data-smode="roster">Scheduling</button>
           ${isStaff ? '<button type="button" role="tab" data-smode="people">People</button>' : ''}
           <button type="button" role="tab" data-smode="mine">My schedule</button>
         </div>
@@ -96,7 +109,7 @@ export function mount(el, ctx) {
     if (nav.mode === 'people' && people.click(e)) return;
     const t = e.target.closest('[data-act], [data-smode], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro]');
     if (!t) return;
-    if (t.dataset.smode) { nav.mode = t.dataset.smode; draw(); window.scrollTo({ top: 0 }); return; }
+    if (t.dataset.smode) { setMode(t.dataset.smode); return; }
     if (t.dataset.rp) { openPill(t.dataset.rp); return; }
     if (t.dataset.ro) { openOpen(t.dataset.ro); return; }
     if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
@@ -109,7 +122,7 @@ export function mount(el, ctx) {
     if (act === 'settings') ctx.openSettings('pco');
     else if (act === 'refresh') refresh();
     else if (act === 'retry') load();
-    else if (act === 'mine') { nav.mode = 'mine'; draw(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    else if (act === 'mine') setMode('mine');
     else if (act === 'all-places') pickCampus(ALL);
   });
 
@@ -137,7 +150,7 @@ export function mount(el, ctx) {
   function pickCampus(id) {
     s.campus = ctx.campus = id;
     s.picked = true;
-    if (nav.mode === 'mine') nav.mode = 'services';
+    if (nav.mode === 'mine' && !fixed) nav.mode = 'services';
     nav.date = null; nav.plan = null;
     draw();
   }
@@ -149,11 +162,9 @@ export function mount(el, ctx) {
     if (!p) return;
     s.campus = ctx.campus = m.type(p).campus_id || ALL;
     s.picked = true;
-    nav.mode = 'services';
     nav.date = clock(s.status?.time_zone).day(p.sort_date);
     nav.plan = p.id;
-    draw();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setMode('services');
   }
 
   // ------------------------------------------------------------- data ---
@@ -276,8 +287,8 @@ export function mount(el, ctx) {
     const m = model();
     const connected = !!s.status;
     const seg = $('#s-seg', el);
-    if (nav.mode === 'mine' && !m?.me) nav.mode = 'services';
-    seg.hidden = !connected || !m?.plans.length;
+    if (nav.mode === 'mine' && !m?.me && !fixed) nav.mode = 'services';
+    seg.hidden = !!fixed || !connected || !m?.plans.length; // a PCO page is one view: the sidebar picks
     seg.querySelector('[data-smode="mine"]').hidden = !m?.me;
     seg.querySelectorAll('[data-smode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.smode === nav.mode)));
     const rosterMode = nav.mode === 'roster' && connected && !!m?.plans.length;
@@ -309,6 +320,10 @@ export function mount(el, ctx) {
       return;
     }
 
+    if (nav.mode === 'mine' && !m.me) {
+      box.innerHTML = `<div class="empty"><h3>Your schedule isn’t linked yet</h3><p>Your account is matched to Planning Center by email. Once your Planning Center profile has the same email as this account, the services you’re on show up here.</p></div>`;
+      return;
+    }
     if (nav.mode === 'mine') { box.innerHTML = mySchedule(m); return; }
     if (nav.mode === 'roster') { box.innerHTML = roster(m); fitRoster(); return; }
     if (nav.mode === 'people') { people.draw(box); return; }

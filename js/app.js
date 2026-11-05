@@ -19,7 +19,7 @@ export const roleAtLeast = (role, min) => ROLE_ORDER.indexOf(role) >= ROLE_ORDER
 export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunteer', contractor: 'Contractor', staff: 'Staff', admin: 'Admin' };
 
 // The sidebar. Each group is a page of its own (All gear, Audio…) with pages
-// under it in a dropdown, or just a folder of pages (Logistics). The id is the
+// under it in a dropdown, or just a folder of pages (PCO, Logistics). The id is the
 // address (#fixtures). Gear pages are the Gear view opened on one section,
 // category or tab: `scope` says which, and the Section/Category filters it
 // locks are hidden there. Pages show for anyone at or above `minRole`.
@@ -53,9 +53,17 @@ const NAV = [
     children: [
       { id: 'network', label: 'IP sheet', minRole: 'staff', view: NetworkView },
     ] },
+  // PCO: Planning Center, one page per view of it. They all share the Services view;
+  // `scope.mode` says which one it opens on (the tabs it used to have are these pages).
+  { id: 'pco', label: 'PCO', icon: 'calendar', folder: true,
+    children: [
+      { id: 'services', label: 'Services', icon: 'calendar', minRole: 'volunteer', view: ServicesView, scope: { mode: 'services' } },
+      { id: 'scheduling', label: 'Scheduling', icon: 'list', minRole: 'volunteer', view: ServicesView, scope: { mode: 'roster' } },
+      { id: 'people', label: 'People', icon: 'team', minRole: 'staff', view: ServicesView, scope: { mode: 'people' } },
+      { id: 'my-schedule', label: 'My schedule', icon: 'me', minRole: 'volunteer', view: ServicesView, scope: { mode: 'mine' } },
+    ] },
   { id: 'logistics', label: 'Logistics', icon: 'clipboard', folder: true,
     children: [
-      { id: 'services', label: 'Services', icon: 'calendar', minRole: 'volunteer', view: ServicesView },
       { id: 'meetings', label: 'Meetings', icon: 'chat', minRole: 'staff', view: MeetingsView },
       { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
       { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
@@ -423,7 +431,7 @@ function onHash() {
   view.tabIndex = -1;
   $('#view').replaceWith(view);
   // Gear pages (Audio, Fixtures…) share the Gear view's look; each knows which page it is.
-  const viewId = page.view === GearView ? 'gear' : page.view === NetworkView ? 'network' : page.id;
+  const viewId = page.view === GearView ? 'gear' : page.view === NetworkView ? 'network' : page.view === ServicesView ? 'services' : page.id;
   view.className = `view view-${viewId} page-${page.id}`;
   ctx.page = { id: page.id, title: page.title || page.label, parent: page.parent, scope: page.scope || null };
   current = { id: page.id, el: view, instance: page.view.mount(view, ctx) };
