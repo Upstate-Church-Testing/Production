@@ -31,6 +31,13 @@ Roles, lowest to highest: `pending` → `volunteer` → `contractor` → `staff`
 
 ## Planning Center (PCO in the sidebar)
 
+Planning Center is copied from some weeks back as well as ahead (`pco_connection.weeks_back`,
+`months_ahead`), so services that already happened are in the app. They're dimmed
+everywhere they show: Scheduling opens scrolled to the next service with the past to the
+left of a green line, Services opens on the next date with past dates faded, and My
+schedule, "You're on", People's next service and the scheduling sheet's other days only
+count what's coming up. The grid keeps its place when Planning Center refreshes it.
+
 PCO is a folder in the sidebar with four pages: **Services** (a location, a date, a
 service's flow and teams), **Scheduling** (the roster grid, once called Roster), **People**
 (staff only) and **My schedule**. They're one view underneath (`views/services.js`),

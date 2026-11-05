@@ -48,7 +48,7 @@ export function peopleView(host) {
       if (!real) continue;
       for (const c of campusesOfTeam(t)) { x.campuses.add(c); x.teams.set(`${c}|${t.name}`, { campusId: c, team: t.name }); }
     }
-    for (const p of m.plans) {
+    for (const p of m.upcoming || m.plans) { // coming up: not what already happened
       for (const r of m.people.get(p.id) || []) {
         if (!r.person_id) continue;
         const x = at(r.person_id);

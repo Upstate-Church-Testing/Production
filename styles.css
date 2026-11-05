@@ -1533,6 +1533,8 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .svc-date:hover { border-color: var(--line-2); }
 .svc-date.is-on { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); }
 .svc-date.is-on small { color: var(--accent-ink); }
+.svc-date.is-past:not(.is-on) { opacity: 0.45; }
+.svc-date.is-past:not(.is-on):hover { opacity: 0.8; }
 
 /* step 3: which service that day */
 .svc-kinds { justify-self: start; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -1919,6 +1921,12 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .ros .ros-pos { padding: 0 10px; font: 600 12px/1.1 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ros td { padding: 1px 3px; vertical-align: middle; min-width: 144px; }
 .ros td.is-today { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+/* What already happened: dimmed, so the next service stands out. Coming up starts at a line. */
+.ros-day.is-past, .ros-day.is-past b { color: var(--faint); }
+.ros td.is-past .rp { opacity: 0.42; filter: saturate(0.3); }
+.ros td.is-past .rp:hover, .ros td.is-past .rp:focus-visible { opacity: 0.8; }
+.ros tfoot td.is-past .ros-tot { opacity: 0.45; }
+.ros .is-next { border-left: 2px solid var(--accent); }
 .ros-cell { display: flex; align-items: stretch; gap: 3px; min-width: 0; }
 .ros-cell > * { flex: 1 1 0; }
 .ros tfoot th, .ros tfoot td { position: sticky; bottom: 0; z-index: 2; background: var(--panel-2); height: 24px; padding: 0 4px; border-bottom: 0; box-shadow: 0 -1px 0 var(--line-2); }

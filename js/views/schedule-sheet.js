@@ -46,7 +46,7 @@ export function openScheduleSheet({ ctx, m, row, spots, h }) {
   // Who's on the roster on other days (from what the app already has), for "serving a lot lately".
   function otherDays(personId) {
     const days = new Set();
-    for (const p of m.plans) {
+    for (const p of m.upcoming || m.plans) { // other days coming up, not ones already past
       if (p._day === day) continue;
       if ((m.people.get(p.id) || []).some((x) => x.person_id === personId && x.status !== 'D')) days.add(p._day);
     }

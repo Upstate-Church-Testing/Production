@@ -255,8 +255,12 @@ export function mount(el, ctx) {
       .sort((a, b) => a._start - b._start || (typeById.get(a.service_type_id).sequence ?? 99) - (typeById.get(b.service_type_id).sequence ?? 99));
     const people = new Map();
     for (const p of d.people) if (!hiddenPosition(p.position)) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]); // no audio
+    // Planning Center is copied from some weeks back, so what already happened is here too.
+    // Past is before today (a service day counts as coming up until the day is over).
+    const today = c.day(Date.now());
+    const upcoming = plans.filter((p) => p._day >= today);
     const me = ctx.me.pco_person_id;
-    const mine = me ? plans.filter((p) => (people.get(p.id) || []).some((x) => x.person_id === me)) : [];
+    const mine = me ? upcoming.filter((p) => (people.get(p.id) || []).some((x) => x.person_id === me)) : [];
     const type = (p) => typeById.get(p.service_type_id);
     const plansAt = (campusId) => plans.filter((p) => type(p).campus_id === campusId);
     const places = ctx.campuses.filter((cp) => plansAt(cp.id).length);
@@ -264,7 +268,7 @@ export function mount(el, ctx) {
     const onRoster = plans.filter((p) => type(p).on_roster !== false);
     const rosterAt = (campusId) => onRoster.filter((p) => type(p).campus_id === campusId);
     const rosterPlaces = ctx.campuses.filter((cp) => rosterAt(cp.id).length);
-    return { c, types, typeById, teams, plans, people, me, mine, type, plansAt, places, onRoster, rosterAt, rosterPlaces };
+    return { c, today, types, typeById, teams, plans, upcoming, people, me, mine, type, plansAt, places, onRoster, rosterAt, rosterPlaces };
   }
 
   // ---------------------------------------------------------- drawing ---
@@ -325,11 +329,26 @@ export function mount(el, ctx) {
       return;
     }
     if (nav.mode === 'mine') { box.innerHTML = mySchedule(m); return; }
-    if (nav.mode === 'roster') { box.innerHTML = roster(m); fitRoster(); return; }
+    if (nav.mode === 'roster') {
+      // Planning Center refreshes redraw the grid every few seconds: stay where you were.
+      const was = $('.ros-wrap', box);
+      const keep = was && nav.rosAt === rosterCampus(m) ? { left: was.scrollLeft, top: was.scrollTop } : null;
+      box.innerHTML = roster(m);
+      fitRoster();
+      const wrap = $('.ros-wrap', box);
+      if (wrap) {
+        if (keep) { wrap.scrollLeft = keep.left; wrap.scrollTop = keep.top; } else scrollToNext(wrap);
+        nav.rosAt = rosterCampus(m);
+      }
+      return;
+    }
     if (nav.mode === 'people') { people.draw(box); return; }
     if (s.campus === ALL || !m.plansAt(s.campus).length) { box.innerHTML = (m.me ? youBanner(m) : '') + placePicker(m); return; }
     box.innerHTML = campusView(m);
-    $('.svc-dates .is-on', box)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    // On a phone the dates scroll sideways; keep the picked one in view without moving the page.
+    const strip = $('.svc-dates', box);
+    const onDate = $('.is-on', strip || box);
+    if (strip && onDate && strip.scrollWidth > strip.clientWidth) strip.scrollLeft = onDate.offsetLeft - (strip.clientWidth - onDate.offsetWidth) / 2;
   }
 
   // Step 1: pick a location.
@@ -353,7 +372,8 @@ export function mount(el, ctx) {
   function campusView(m) {
     const here = m.plansAt(s.campus);
     const days = [...new Set(here.map((p) => p._day))];
-    if (!days.includes(nav.date)) { nav.date = days[0]; nav.plan = null; }
+    // Opens on the next service; the ones that already happened stay to the left, dimmed.
+    if (!days.includes(nav.date)) { nav.date = days.find((d) => d >= m.today) || days[days.length - 1]; nav.plan = null; }
     const onDay = here.filter((p) => p._day === nav.date);
     if (!onDay.some((p) => p.id === nav.plan)) nav.plan = onDay[0]?.id || null;
     const plan = onDay.find((p) => p.id === nav.plan);
@@ -365,7 +385,7 @@ export function mount(el, ctx) {
       <div class="svc-dates" role="tablist" aria-label="Date">${days.map((d) => {
         const p = here.find((x) => x._day === d);
         const on = d === nav.date;
-        return `<button type="button" role="tab" class="svc-date ${on ? 'is-on' : ''}" data-date="${d}" aria-selected="${on}">
+        return `<button type="button" role="tab" class="svc-date ${on ? 'is-on' : ''} ${d < m.today ? 'is-past' : ''}" data-date="${d}" aria-selected="${on}" ${d < m.today ? 'title="Already happened"' : ''}>
           <small>${esc(m.c.weekday(p.sort_date).slice(0, 3))}</small><b>${esc(m.c.date(p.sort_date))}</b>
         </button>`;
       }).join('')}</div>
@@ -600,7 +620,9 @@ export function mount(el, ctx) {
       $('#s-rkey', el).innerHTML = '';
       return `<div class="empty"><h3>No one scheduled yet</h3><p>Nobody is on the shared teams${campus ? ` at ${esc(campus.short_name)}` : ''} in the next ${plural(s.status.weeks_ahead || 6, 'week')}.</p></div>`;
     }
-    const today = m.c.day(Date.now());
+    const today = m.today;
+    const next = days.find((d) => d >= today); // where coming up starts: a line down its left side
+    const when = (d) => `${d === today ? 'is-today' : d < today ? 'is-past' : ''}${d === next && next !== days[0] ? ' is-next' : ''}`; // past columns are dimmed
     const totals = days.map(() => ({ C: 0, U: 0, D: 0, open: 0 }));
     const groups = [];
     for (const row of rows) {
@@ -610,14 +632,14 @@ export function mount(el, ctx) {
     const body = groups.map((g) => g.rows.map((row, ri) => {
       const cells = days.map((d, i) => {
         const cell = row.cells.get(d);
-        if (!cell) return `<td class="${d === today ? 'is-today' : ''}"></td>`;
+        if (!cell) return `<td class="${when(d)}"></td>`;
         // Same order every week: whoever's on the first service comes first.
         const first = (pill) => pill.entries[0].plan._start;
         const people = [...cell.people.values()].sort((a, b) => first(a) - first(b) || String(a.name).localeCompare(String(b.name)));
         for (const pill of people) totals[i][pill.status]++;
         totals[i].open += cell.open;
         const many = people.length + cell.open > 1;
-        return `<td class="${d === today ? 'is-today' : ''}"><div class="ros-cell ${many ? 'is-many' : ''}">${people.map((pill) => pillHtml(m, row, d, pill, many, letters)).join('')}${
+        return `<td class="${when(d)}"><div class="ros-cell ${many ? 'is-many' : ''}">${people.map((pill) => pillHtml(m, row, d, pill, many, letters)).join('')}${
           openPills(row, d, cell)}</div></td>`;
       }).join('');
       const label = row.showTeam ? `${row.position} · ${row.team}` : row.position;
@@ -627,9 +649,9 @@ export function mount(el, ctx) {
     }).join('')).join('');
     const head = days.map((d) => {
       const p = m.plans.find((x) => x._day === d);
-      return `<th class="ros-day ${d === today ? 'is-today' : ''}" scope="col">${esc(d === today ? 'Today' : m.c.weekday(p.sort_date).slice(0, 3))} <b>${esc(m.c.date(p.sort_date))}</b></th>`;
+      return `<th class="ros-day ${when(d)}" scope="col" ${d < today ? 'title="Already happened"' : ''}>${esc(d === today ? 'Today' : m.c.weekday(p.sort_date).slice(0, 3))} <b>${esc(m.c.date(p.sort_date))}</b></th>`;
     }).join('');
-    const foot = totals.map((t) => `<td><span class="ros-tot">${[
+    const foot = totals.map((t, i) => `<td class="${when(days[i])}"><span class="ros-tot">${[
       t.C ? `<span class="st-C" title="Confirmed">${t.C}</span>` : '',
       t.U ? `<span class="st-U" title="Requested">${t.U}</span>` : '',
       t.D ? `<span class="st-D" title="Declined">${t.D}</span>` : '',
@@ -692,6 +714,15 @@ export function mount(el, ctx) {
     return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
       <span class="rp-dots">${dots}</span><b>${esc(shown)}</b>${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
     </button>`;
+  }
+
+  /** First look at the grid: the next service (today, or the next date) is the first column
+   *  beside the positions, with what already happened to the left of it. */
+  function scrollToNext(wrap) {
+    const next = $('thead .ros-day:not(.is-past)', wrap);
+    const edge = $$('thead .ros-corner', wrap).pop();
+    if (!next || !edge) return;
+    wrap.scrollLeft += next.getBoundingClientRect().left - edge.getBoundingClientRect().right;
   }
 
   /** Scales the roster so every row fits on the screen; only the dates scroll sideways. */
@@ -842,7 +873,7 @@ export function mount(el, ctx) {
     for (const p of m.mine) for (const r of m.people.get(p.id) || []) if (r.person_id === m.me) rows.push({ p, r });
     $('#s-tally', el).innerHTML = rows.length ? `<b>${rows.length}</b><span>${rows.length === 1 ? 'time' : 'times'}</span><small>you’re scheduled</small>` : '';
     if (!rows.length) {
-      return `<div class="empty"><h3>You’re not on anything coming up</h3><p>Nothing in the next ${plural(s.status.weeks_ahead || 6, 'week')}. When you’re scheduled in Planning Center, it shows up here.</p></div>`;
+      return `<div class="empty"><h3>You’re not on anything coming up</h3><p>Nothing scheduled from today on. When you’re scheduled in Planning Center, it shows up here.</p></div>`;
     }
     return `<ul class="svc-mine">${rows.map(({ p, r }) => {
       const t = m.type(p);

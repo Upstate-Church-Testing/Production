@@ -50,14 +50,14 @@ function build(meId) {
     const tu = { id: `${id}-u`, service_type_id: id, name: 'Ushers', shown: false, sequence: 4, positions: [] };
     teams.push(tb, tf, tw, tu);
     if (id === 'st-hb-k' || id === 'st-ya') return;
-    for (let w = 0; w < 4; w++) {
+    for (let w = -4; w < 4; w++) { // like the real copy: some weeks back as well as ahead
       const isWed = id === 'st-svl-r';
       const day = new Date(base.getTime() + (daysToSunday + w * 7 - (isWed ? 4 : 0)) * 864e5);
-      if (id === 'st-svl-x' && w > 0) continue;
+      if (id === 'st-svl-x' && w !== 0) continue;
       const pid = `${id}-p${w}`;
       const serviceTimes = times.map((t) => ({ name: null, kind: 'service', starts_at: eastern(day, t), ends_at: null }));
       plans.push({
-        id: pid, service_type_id: id, title: title.split(' - ')[1] || null, series_title: w < 2 ? 'Better Together' : null,
+        id: pid, service_type_id: id, title: title.split(' - ')[1] || null, series_title: w >= 0 && w < 2 ? 'Better Together' : null,
         dates: day.toISOString().slice(0, 10), sort_date: serviceTimes[0].starts_at,
         times: [{ name: 'Call and Rehearsal', kind: 'rehearsal', starts_at: eastern(day, call), ends_at: null }, ...serviceTimes],
         url: '#', needed: [], synced_at: new Date().toISOString(),
