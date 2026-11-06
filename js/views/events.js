@@ -419,20 +419,22 @@ export function mount(el, ctx) {
   function liveHtml(m, p, w) {
     const st = s.live;
     const title = p.title || m.type(p).name;
+    // Close on the left, the clock on the right, and the event big and centered under them,
+    // so it's plain which event this is at a glance. A small Live / Ended tag under it.
     const top = (badge) => `<header class="lvx-top">
-        ${badge}
-        <span class="lvx-event">${esc(title)}</span>
-        <span class="lvx-wall" data-tick="wall"></span>
         <button type="button" class="lvx-close" data-act="close" aria-label="Close Live">${icon('close')}</button>
+        <span class="lvx-wall" data-tick="wall"></span>
+        <h1 class="lvx-event">${esc(title)}</h1>
+        ${badge}
       </header>`;
     if (!st || st.available === false || !w) {
       const msg = !st ? (s.liveError ? `Couldn’t reach Planning Center Live: ${esc(s.liveError)}. Trying again.` : 'Reading Planning Center Live…')
         : `Planning Center Live isn’t available for this plan.${st.note ? ` ${esc(st.note)}` : ''}`;
-      return `<div class="lvx">${top('<span class="lv-badge">Live</span>')}<p class="lvx-msg">${msg}</p></div>`;
+      return `<div class="lvx">${top('')}<p class="lvx-msg">${msg}</p></div>`;
     }
     const hhmm = (ms) => m.c.time(ms);
     const badge = w.state === 'live' ? '<span class="lv-badge is-live"><i></i>Live</span>'
-      : w.state === 'done' ? '<span class="lv-badge is-done">Ended</span>' : '<span class="lv-badge">Not started</span>';
+      : w.state === 'done' ? '<span class="lv-badge is-done">Ended</span>' : '';
     const meta = (it) => [it.kind === 'song' ? 'Song' : it.kind === 'media' ? 'Media' : null, it.key_name ? `Key ${it.key_name}` : null,
       it.description && it.description.length <= 40 && !/\n/.test(it.description) ? it.description : null].filter(Boolean).join(' · ');
     const itemCard = (r, k, opts = {}) => `<section class="lvx-card ${opts.cls || ''}">

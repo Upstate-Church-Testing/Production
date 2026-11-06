@@ -3018,7 +3018,7 @@ html.lv-full-on, html.lv-full-on body { overflow: hidden; }
 
 /* Live: driving it from here (admins). Pinned to the bottom so they're always in reach. */
 .lvx-ctl {
-  position: sticky; bottom: calc(-1 * (env(safe-area-inset-bottom, 0px) + 14px)); z-index: 1; display: grid; gap: 8px;
+  position: sticky; bottom: 0; z-index: 1; display: grid; gap: 8px;
   margin: 0 -16px calc(-1 * (env(safe-area-inset-bottom, 0px) + 14px)); padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
   background: var(--bg); box-shadow: 0 -10px 24px var(--bg);
 }
@@ -3042,3 +3042,18 @@ html.lv-full-on, html.lv-full-on body { overflow: hidden; }
 .lvx-ctl-err { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; font-weight: 600; color: var(--live); }
 .lvx-ctl-err .ico { width: 16px; height: 16px; flex: none; margin-top: 1px; }
 html.lv-full-on #toast { z-index: 95; } /* toasts show over the Live view */
+
+/* Live header: red close on the left, the clock on the right, the event big and centered */
+.lvx-top { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "close wall" "title title" "badge badge"; align-items: center; gap: 4px 10px; min-height: 0; }
+.lvx-top .lvx-close { grid-area: close; margin: 0 0 0 -4px; width: 44px; height: 44px; background: var(--live); border-color: transparent; color: #fff; }
+.lvx-top .lvx-close .ico { width: 20px; height: 20px; stroke-width: 2.4; }
+.lvx-top .lvx-wall { grid-area: wall; justify-self: end; }
+.lvx-top .lvx-event {
+  grid-area: title; justify-self: center; text-align: center; max-width: 100%; margin: 2px 0 0;
+  font: 600 clamp(26px, 7.4vw, 44px)/1.12 var(--f-display); letter-spacing: -0.01em; color: var(--fg);
+  white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+}
+.lvx-top .lv-badge { grid-area: badge; justify-self: center; margin-top: 2px; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .lvx-top .lvx-event { font-size: clamp(20px, 6vh, 28px); margin: 0; }
+}
