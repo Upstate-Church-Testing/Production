@@ -14,6 +14,8 @@
 //     there's none), then any other note category it has, by its Planning Center name.
 // When someone hits Next in Planning Center Live, this follows within a couple of seconds
 // (pco-live reads Live for every screen at once). The screen stays awake while it's open.
+// Admins can drive Live from here: Take control, then Back and Next, as the Planning
+// Center account Tally is connected with (it shows as that person in Planning Center Live).
 // Staff and up (the Planning Center service is shared with staff).
 
 import { esc, icon, $, debounce, initials, pageTitle } from '../util.js';
@@ -34,6 +36,7 @@ const NOTE_COLS = [
 
 export function mount(el, ctx) {
   let alive = true;
+  const isAdmin = ctx.me.role === 'admin';
   const nav = ctx.eventsNav || (ctx.eventsNav = { plan: null, pane: 'flow', live: false });
   const s = {
     status: undefined, data: null, error: null,
@@ -43,6 +46,7 @@ export function mount(el, ctx) {
     liveError: null,
     offset: 0,          // server clock minus this device's
     sig: '',            // what the Live layer was last drawn from
+    busy: null,         // a Take control / Next / Back on its way to Planning Center
   };
   let pollTimer = null;
   let checkTimer = null;
@@ -267,7 +271,12 @@ export function mount(el, ctx) {
       layer.setAttribute('role', 'dialog');
       layer.setAttribute('aria-modal', 'true');
       layer.setAttribute('aria-label', `Live: ${cur.p.title || 'event'}`);
-      layer.addEventListener('click', (e) => { if (e.target.closest('[data-act="close"]')) closeLive(); });
+      layer.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-act]');
+        if (!b) return;
+        if (b.dataset.act === 'close') closeLive();
+        else if (['take', 'release', 'next', 'previous'].includes(b.dataset.act)) drive(b.dataset.act);
+      });
       document.body.appendChild(layer);
       document.documentElement.classList.add('lv-full-on');
       // Where the browser can (not iPhone Safari), the whole screen: no browser bars either.
@@ -319,13 +328,38 @@ export function mount(el, ctx) {
     pollTimer = setTimeout(poll, p._day === m.today ? POLL_MS : SLOW_POLL_MS);
   }
 
+  /** Admins: drive Planning Center Live as Tally's Planning Center account. */
+  async function drive(action) {
+    const cur = current();
+    if (!isAdmin || !cur || s.busy) return;
+    s.busy = action;
+    paint();
+    const asked = Date.now();
+    try {
+      const st = await ctx.store.pcoLive(cur.p.id, action);
+      if (!alive || nav.plan !== cur.p.id) return;
+      if (st?.now) s.offset = Date.parse(st.now) - (asked + Date.now()) / 2;
+      s.live = st; s.liveError = null;
+    } catch (e) {
+      ctx.toast(e.message);
+    } finally {
+      s.busy = null;
+      if (alive) paint();
+    }
+  }
+
+  /** What the layer shows, in short: a change means drawing it again. */
+  function sigOf(w) {
+    return [s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.controller_id, s.live?.me_id, s.live?.full_read_at,
+      !!s.liveError, !!s.live, s.busy, w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
+  }
+
   /** Redraw the layer when what it shows changed (the numbers tick on their own). */
   function paint() {
     const cur = current();
     if (!layer || !cur) return;
     const w = s.live && s.live.available !== false ? where(s.live, now()) : null;
-    const sig = [s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.full_read_at, !!s.liveError, !!s.live,
-      w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
+    const sig = sigOf(w);
     if (sig === s.sig) { tick(); return; }
     s.sig = sig;
     layer.innerHTML = liveHtml(cur.m, cur.p, w);
@@ -449,7 +483,7 @@ export function mount(el, ctx) {
         <span><small>Service</small><b data-tick="svc">—</b></span>
         <span><small>Planned</small><b>${esc(dur(w.planned))}</b></span>
         <span><small>On pace to end</small><b data-tick="proj">—</b><em data-tick="delta"></em></span>
-        ${st.controller ? `<span class="lvx-by"><small>Driving</small><b>${esc(st.controller)}</b></span>` : ''}
+        ${st.controller && !isAdmin ? `<span class="lvx-by"><small>Driving</small><b>${esc(st.controller)}</b></span>` : ''}
       </footer>` : w.state === 'wait' ? `<footer class="lvx-foot">
         <span><small>Service</small><b>${w.plannedStart ? esc(hhmm(w.plannedStart)) : '—'}</b></span>
         <span><small>Planned</small><b>${esc(dur(w.planned))}</b></span>
@@ -459,7 +493,28 @@ export function mount(el, ctx) {
         ${top(badge)}
         <div class="lvx-main">${main}</div>
         ${foot}
+        ${isAdmin ? controlsHtml(st, w) : ''}
         ${s.liveError ? `<p class="lv-warn">${icon('warn')}Lost Planning Center Live for a moment: ${esc(s.liveError)}. Still trying.</p>` : ''}
+      </div>`;
+  }
+
+  /** Admins: Take control, then Back and Next (as Tally's Planning Center account). */
+  function controlsHtml(st, w) {
+    const mine = !!st.me_id && st.controller_id === st.me_id;
+    const off = s.busy ? 'disabled' : '';
+    const label = (act, text) => (s.busy === act ? 'Sending…' : text);
+    if (!mine) {
+      return `<div class="lvx-ctl">
+          <button type="button" class="lvx-btn is-take" data-act="take" ${off}>${esc(label('take', 'Take control'))}</button>
+          <p class="lvx-ctl-note">${st.controller ? `<b>${esc(st.controller)}</b> is driving in Planning Center Live. Taking control moves it to Tally.` : 'Nobody is driving Planning Center Live. Take control to run it from here.'}</p>
+        </div>`;
+    }
+    return `<div class="lvx-ctl">
+        <div class="lvx-btns">
+          <button type="button" class="lvx-btn is-back" data-act="previous" ${off} ${w.state === 'wait' ? 'disabled' : ''}>${icon('chevron')}<span>${esc(label('previous', 'Back'))}</span></button>
+          <button type="button" class="lvx-btn is-go" data-act="next" ${off} ${w.state === 'done' ? 'disabled' : ''}><span>${esc(label('next', 'Next'))}</span>${icon('chevron')}</button>
+        </div>
+        <p class="lvx-ctl-note">Driving Planning Center Live as <b>${esc(st.controller || 'Tally')}</b>. <button type="button" class="lvx-let" data-act="release" ${off}>Let go</button></p>
       </div>`;
   }
 
@@ -487,7 +542,7 @@ export function mount(el, ctx) {
     const t = now();
     const w = where(s.live, t);
     // The schedule moved on (Doors Open became Worship Center Doors Open, the service time passed): redraw.
-    if ([s.live.current_id, s.live.current?.start, s.live.controller, s.live.full_read_at, !!s.liveError, !!s.live, w.state, w.block?.id, w.nextBlock?.id].join('|') !== s.sig) { paint(); return; }
+    if (sigOf(w) !== s.sig) { paint(); return; }
     const set = (k, v, cls) => {
       const x = $(`[data-tick="${k}"]`, layer);
       if (!x) return;

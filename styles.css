@@ -3015,3 +3015,27 @@ html.lv-full-on, html.lv-full-on body { overflow: hidden; }
   .lvx-card { padding: 12px 14px; }
   .lvx-notes > div { grid-template-columns: 70px minmax(0, 1fr); }
 }
+
+/* Live: driving it from here (admins). Pinned to the bottom so they're always in reach. */
+.lvx-ctl {
+  position: sticky; bottom: calc(-1 * (env(safe-area-inset-bottom, 0px) + 14px)); z-index: 1; display: grid; gap: 8px;
+  margin: 0 -16px calc(-1 * (env(safe-area-inset-bottom, 0px) + 14px)); padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  background: var(--bg); box-shadow: 0 -10px 24px var(--bg);
+}
+.lvx-btns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
+.lvx-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 60px; padding: 0 18px;
+  border-radius: var(--r-lg); border: 1px solid var(--line-2); background: var(--panel-2); color: var(--fg); font: 700 18px/1 var(--f-body);
+  touch-action: manipulation;
+}
+.lvx-btn .ico { width: 22px; height: 22px; stroke-width: 2.2; }
+.lvx-btn.is-back .ico { transform: scaleX(-1); }
+.lvx-btn.is-go { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+.lvx-btn.is-take { width: 100%; background: color-mix(in srgb, var(--live) 14%, var(--panel-2)); border-color: color-mix(in srgb, var(--live) 50%, var(--line)); }
+.lvx-btn:disabled { opacity: 0.45; cursor: default; }
+.lvx-ctl-note { font-size: 12.5px; color: var(--muted); }
+.lvx-ctl-note b { color: var(--fg); font-weight: 600; }
+.lvx-let { background: none; border: 0; padding: 0 2px; color: var(--accent-ink); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+@media (min-width: 900px) {
+  .lvx-ctl { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; grid-template-columns: minmax(0, 520px) 1fr; align-items: center; column-gap: 16px; }
+}

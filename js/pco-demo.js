@@ -153,6 +153,8 @@ export function createPcoDemo({ wait, clone, me, changed }) {
   let lastSync = new Date(Date.now() - 6 * 60e3).toISOString();
   me.pco_person_id = 'pp-me';
   const myName = () => me.full_name || 'You';
+  const liveDriving = new Set(); // plans the preview's Tally account is driving in Live
+  const liveMoved = new Map();   // plan -> { idx, start }: where Next and Back left it
 
   const isAdmin = () => me.role === 'admin';
   const canSee = (access) => (access === 'everyone' ? me.role !== 'pending' : access === 'staff' ? ['staff', 'admin'].includes(me.role) : isAdmin());
@@ -306,12 +308,14 @@ export function createPcoDemo({ wait, clone, me, changed }) {
         it(18, 'Online Closing Host', 'item', 'post', 27),
       ];
     },
-    /** Planning Center Live, made up: today's event is a few items in, each a little long or short. */
-    async pcoLive(planId) {
-      await wait(90);
+    /** Planning Center Live, made up: today's event is a few items in, each a little long or short.
+     *  Admins can take control and move it (take, release, next, previous), like the real one. */
+    async pcoLive(planId, action = null) {
+      await wait(action ? 350 : 90);
       if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can see Live.');
       const plan = db.plans.find((p) => p.id === planId);
       if (!plan) throw new Error('That service isn’t shared in the app.');
+      if (action && !isAdmin()) throw new Error('Only an admin can drive Live from here.');
       const items = eventItems(planId);
       const svc = plan.times.find((x) => x.kind === 'service') || { starts_at: plan.sort_date };
       const pt = `${planId}-svc`;
@@ -322,7 +326,25 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       const times = run.map((r) => ({ id: `${r.id}-t`, item_id: r.id, plan_time_id: pt, start: null, end: null, length: 0, exclude: false }));
       let current = null;
       let next = null;
-      if (t >= start && t < start + 3 * 3600e3) {
+      const timed = () => { // where the made-up clock is (before anyone drives it from here)
+        if (t < start || t >= start + 3 * 3600e3) return -1;
+        let at = start;
+        for (let k = 0; k < run.length; k++) { const len = (run[k].length + [12, -8, 35, 0][k % 4]) * 1000; if (t < at + len || k === run.length - 1) return k; at += len; }
+        return -1;
+      };
+      if (action === 'take') liveDriving.add(planId);
+      else if (action === 'release') liveDriving.delete(planId);
+      else if (action) {
+        if (!liveDriving.has(planId)) throw new Error('Jordan Pike is driving in Planning Center Live. Take control first.');
+        const k = liveMoved.has(planId) ? liveMoved.get(planId).idx : timed();
+        liveMoved.set(planId, { idx: Math.max(0, Math.min(run.length - 1, k + (action === 'next' ? 1 : -1))), start: t });
+      }
+      if (liveMoved.has(planId)) {
+        const { idx, start: began } = liveMoved.get(planId);
+        times[idx].start = iso(began);
+        for (let j = idx - 1; j >= 0; j--) { times[j].end = times[j + 1].start; times[j].start = iso(Date.parse(times[j].end) - run[j].length * 1000); }
+        current = times[idx]; next = times[idx + 1] || null;
+      } else if (t >= start && t < start + 3 * 3600e3) {
         let at = start;
         for (let k = 0; k < run.length; k++) {
           const len = (run[k].length + [12, -8, 35, 0][k % 4]) * 1000;
@@ -334,7 +356,9 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       } else if (t < start) next = { id: pt, item_id: null, plan_time_id: pt, start: null, end: null, length: 0, exclude: false };
       return clone({
         plan_id: planId, available: true, current_id: current?.id ?? null, next_id: next?.id ?? null, current, next,
-        controller: current ? 'Jordan Pike' : null, note: null,
+        live_id: planId, me_id: 'pp-me',
+        controller: liveDriving.has(planId) ? myName() : current ? 'Jordan Pike' : null,
+        controller_id: liveDriving.has(planId) ? 'pp-me' : current ? 'pp-JordanPike' : null, note: null,
         items: items.map(({ plan_id: _p, arrangement: _a, ...x }) => x), item_times: times,
         plan_times: plan.times.map((x, i) => ({ id: x.kind === 'service' ? pt : `${planId}-t${i}`, name: x.name, kind: x.kind, starts_at: x.starts_at, ends_at: x.ends_at, live_starts_at: x.kind === 'service' && current ? x.starts_at : null, live_ends_at: null })),
         read_at: iso(t - 700), full_read_at: iso(t - 6000), now: iso(t),

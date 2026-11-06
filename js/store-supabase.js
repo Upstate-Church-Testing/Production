@@ -233,8 +233,9 @@ export async function createSupabaseStore(url, key) {
       return ok(await sb.from('pco_plan_items').select('*').eq('plan_id', planId).order('sequence'));
     },
     /** Planning Center Live for one plan (Events › Live): current item, next, who's driving, item times. */
-    async pcoLive(planId) {
-      const { data, error } = await sb.functions.invoke('pco-live', { body: { plan_id: planId } });
+    /** With an action (admins): take, release, next, previous: drive Planning Center Live. */
+    async pcoLive(planId, action = null) {
+      const { data, error } = await sb.functions.invoke('pco-live', { body: action ? { plan_id: planId, action } : { plan_id: planId } });
       if (error) {
         let msg = error.message;
         try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch { /* not JSON */ }

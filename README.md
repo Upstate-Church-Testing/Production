@@ -129,6 +129,12 @@ the last few past ones; an event opens on its times, a Live button and two panes
   under its own name. Side by side (Now left, Next right) on a computer or a phone on its
   side. The screen stays awake while it's open, and computers and iPads go to the browser's
   full screen.
+  **Admins can drive it from here**: Take control, then Back and Next (pinned to the bottom),
+  and Let go. Tally drives as the Planning Center account its connection was made with (the
+  person who made the token; Planning Center Live shows that name as driving). Taking control
+  moves it away from whoever was driving in Planning Center Live, the way Take Control does
+  there; Back and Next only work while Tally holds it. (`pco-live` with an `action`: take,
+  release, next, previous; it reads Live again right after, so every screen sees the move.)
   When someone hits Next in Planning Center Live, every screen follows within about two
   seconds: the app asks `pco-live` every 1.5 seconds while Live is open, and `pco-live`
   reads Planning Center at most every 1.5 seconds per plan however many screens are watching

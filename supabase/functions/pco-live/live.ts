@@ -30,7 +30,7 @@ export async function readLive(pco: Pco, base: string) {
     doc = await pco.get(`${base}/live?include=current_item_time,next_item_time,controller`);
   } catch (e) {
     if (e instanceof PcoError && (e.status === 403 || e.status === 404)) {
-      return { available: false, current: null, next: null, controller: null, current_id: null, next_id: null, note: e.message };
+      return { available: false, current: null, next: null, controller: null, controller_id: null, live_id: null, current_id: null, next_id: null, note: e.message };
     }
     throw e;
   }
@@ -43,6 +43,8 @@ export async function readLive(pco: Pco, base: string) {
   const wa = who?.attributes || {};
   return {
     available: true,
+    live_id: live?.id ? String(live.id) : null,
+    controller_id: relId(live, 'controller'),
     current_id: currentId,
     next_id: nextId,
     current: liveTime(find('ItemTime', currentId)),
