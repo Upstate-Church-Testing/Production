@@ -107,8 +107,8 @@ and nobody's own Planning Center permissions matter here.
 ## Events (staff)
 
 One-off Planning Center services (Engage, a conference, a coffeehouse) as a whole, on
-their own page in the sidebar. Which services are events is set per Planning Center service
-(`pco_service_types.is_event`; `pco_set_event` for admins). Simpsonville › Events is one, shared
+their own page in the sidebar. Which services are events is set per Planning Center service:
+the **Event** chip beside it in Settings › Planning Center (`pco_service_types.is_event`, `pco_set_event`). Simpsonville › Events is one, shared
 with staff and kept off Scheduling (`on_roster` false), so the sync copies its plans, flow and
 team like any other shared service. The page lists what's coming up (today's in red), then
 the last few past ones; an event opens on its times and three panes:

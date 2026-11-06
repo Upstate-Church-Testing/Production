@@ -158,6 +158,7 @@ export function mountPcoSettings(box, ctx) {
     return `<li class="pc-svc">
       <span class="pc-name"><b>${esc(t.name)}</b><small>${esc(where)}</small></span>
       ${rosterChip(t)}
+      ${eventChip(t)}
       <div class="seg pc-access" role="radiogroup" aria-label="Who sees ${esc(t.name)}">
         ${ACCESS.map(([v, label, hint]) => `<button type="button" role="radio" data-pc="access" data-id="${esc(t.id)}" data-v="${v}" title="${hint}" aria-checked="${t.access === v}" aria-selected="${t.access === v}">${label}</button>`).join('')}
       </div>
@@ -167,6 +168,12 @@ export function mountPcoSettings(box, ctx) {
   function rosterChip(t) {
     const on = t.on_roster !== false;
     return `<button type="button" class="chip pc-roster" data-pc="roster" data-id="${esc(t.id)}" aria-pressed="${on}" title="${on ? 'On' : 'Off'} PCO › Scheduling" ${t.access === 'hidden' ? 'hidden' : ''}>${on ? icon('check') : ''}Scheduling</button>`;
+  }
+
+  /** An event: on the Events page, with Live (one-off services: Engage, a conference). */
+  function eventChip(t) {
+    const on = !!t.is_event;
+    return `<button type="button" class="chip pc-roster" data-pc="event" data-id="${esc(t.id)}" aria-pressed="${on}" title="${on ? 'On' : 'Off'} the Events page" ${t.access === 'hidden' ? 'hidden' : ''}>${on ? icon('check') : ''}Event</button>`;
   }
 
   // ----------------------------------------------------------- actions ---
@@ -203,8 +210,7 @@ export function mountPcoSettings(box, ctx) {
       t.access = v;
       $$(`[data-pc="access"][data-id="${CSS.escape(t.id)}"]`, box).forEach((x) => { const on = x.dataset.v === v; x.setAttribute('aria-checked', on); x.setAttribute('aria-selected', on); });
       paintGroupCount(b.closest('.pc-group'));
-      const chip = $(`[data-pc="roster"][data-id="${CSS.escape(t.id)}"]`, box);
-      if (chip) chip.hidden = v === 'hidden';
+      for (const chip of $$(`[data-pc="roster"][data-id="${CSS.escape(t.id)}"], [data-pc="event"][data-id="${CSS.escape(t.id)}"]`, box)) chip.hidden = v === 'hidden';
       try { await ctx.store.pcoSetAccess(t.id, v); requestSync(); }
       catch (err) { t.access = before; ctx.toast(err.message); render(); }
       return;
@@ -219,6 +225,18 @@ export function mountPcoSettings(box, ctx) {
         await ctx.store.pcoSetRoster(t.id, t.on_roster);
         ctx.toast(t.on_roster ? `${t.name} is on the roster` : `${t.name} is off the roster`);
       } catch (err) { t.on_roster = before; ctx.toast(err.message); render(); }
+      return;
+    }
+    if (a === 'event') {
+      const t = data.types.find((x) => x.id === b.dataset.id);
+      if (!t) return;
+      const before = !!t.is_event;
+      t.is_event = !before;
+      b.outerHTML = eventChip(t);
+      try {
+        await ctx.store.pcoSetEvent(t.id, t.is_event);
+        ctx.toast(t.is_event ? `${t.name} is on Events` : `${t.name} is off Events`);
+      } catch (err) { t.is_event = before; ctx.toast(err.message); render(); }
       return;
     }
     if (a === 'team') {

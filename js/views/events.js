@@ -15,7 +15,7 @@
 import { esc, icon, $, debounce, initials, pageTitle } from '../util.js';
 import { clock, realPhoto, teamKey, teamServices, hiddenPosition, STATUS_LABEL } from '../pco.js';
 
-const POLL_MS = 2000;         // Live: ask this often while it's on screen
+const POLL_MS = 1500;         // Live: ask this often while it's on screen
 const SLOW_POLL_MS = 15000;   // …when the event isn't today
 const CHECK_MS = 20000;       // the event list: has Planning Center changed?
 const PAST_SHOWN = 6;         // past events listed (latest first)
