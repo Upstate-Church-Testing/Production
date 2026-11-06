@@ -1053,7 +1053,7 @@ export function mount(el, ctx) {
             <button class="icon-btn" data-g="close" aria-label="Close">${icon('close')}</button></div>
           <p class="sh-brand">${esc(t.manufacturer || 'No brand')}</p>
           <h2>${esc(t.name)}</h2>
-          <p class="sh-sub">${esc([t.category, t.part_number].filter(Boolean).join(' · ') || 'No category yet')}</p>
+          <p class="sh-sub"><span class="brand-in">${esc(t.manufacturer || 'No brand')} · </span>${esc([t.category, t.part_number].filter(Boolean).join(' · ') || 'No category yet')}</p>
         </header>
         <div class="sh-body">
           ${t.unknown ? `<section class="unknown-box"><p>${icon('warn')}<span><b>Model not known yet.</b> This holds the spot for ${units.length === 1 ? 'one item' : `${units.length} items`} until you find out what ${units.length === 1 ? 'it is' : 'they are'}. Open each item and pick its real model, or rename this one with Edit model if they’re all the same.</span></p>

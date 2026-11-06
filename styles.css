@@ -2731,3 +2731,87 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 }
 .form-row .field input { width: 100%; min-width: 0; box-sizing: border-box; }
 .form-row .field input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 44px; }
+
+/* ------------------------------------------- iOS 26.0 home-screen gap -- */
+/* --vgap is the height iOS 26.0 leaves off the bottom of home-screen apps (0 everywhere
+   else); full-screen layers reach past it to the real bottom of the screen. */
+.sheet-root, .dd-menu-root, .fp-root, .nav-scrim { bottom: calc(-1 * var(--vgap, 0px)); }
+@media (max-width: 859px) { .nav { bottom: calc(-1 * var(--vgap, 0px)); } }
+
+/* Phones fold the brand into the line under a panel's title instead of its own line. */
+.sh-sub .brand-in { display: none; }
+
+/* -------------------------------------------------- phones: more per screen -- */
+/* The same layout with less dead space: smaller headers and footers, tighter cards.
+   Computers and iPads (700px and wider) are unchanged. */
+@media (max-width: 699px) {
+  /* page heads: a count with no tabs beside it shares the title's line */
+  .page-head { padding-top: 10px; padding-bottom: 10px; gap: 8px; }
+  .h1 { font-size: 34px; }
+  .page-title h1 { font-size: 26px; }
+  .tally b { font-size: 24px; }
+  .page-head:has(> .page-title + .mode-row):not(:has(.mode-seg)) { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 12px; }
+  .page-head:has(> .page-title + .mode-row):not(:has(.mode-seg)) > .mode-row { grid-column: 2; grid-row: 1; justify-content: flex-end; }
+  .page-head:has(> .page-title + .mode-row):not(:has(.mode-seg)) .tally { justify-content: flex-end; text-align: right; }
+  .toolbar { padding-top: 6px; padding-bottom: 10px; }
+  .results { gap: 14px; }
+
+  /* panels: closer to the top, a slimmer header and footer */
+  .sheet { height: calc(100% - 10px - env(safe-area-inset-top, 0px)); border-radius: 22px 22px 0 0; }
+  .sh-head { padding-top: 6px; padding-bottom: 10px; }
+  .sh-head::before { width: 36px; height: 4px; margin-bottom: 6px; }
+  .sh-top { min-height: 36px; }
+  .sh-top .icon-btn { width: 36px; height: 36px; }
+  .sh-head h2 { font-size: 26px; margin-top: 4px; }
+  .sh-brand { display: none; }
+  .sh-brand + h2 { margin-top: 4px; }
+  .sh-sub { margin-top: 3px; font-size: 13.5px; }
+  .sh-sub .brand-in { display: inline; }
+  .sh-body { gap: 16px; padding-top: 4px; padding-bottom: 20px; }
+  .sh-foot { padding-top: 8px; padding-bottom: max(10px, calc(env(safe-area-inset-bottom, 0px) - 12px)); }
+  .sh-foot .btn { min-height: 40px; }
+
+  /* inside a panel */
+  .block { gap: 10px; }
+  .kv { gap: 10px 14px; }
+  .kv dd { margin-top: 2px; }
+  .kv.compact { gap: 8px 12px; }
+  .notes { padding: 10px 12px; }
+  .photo-hero { aspect-ratio: 16 / 9; max-height: 210px; border-radius: var(--r-lg); }
+  .photo-hero.is-compact { max-height: 180px; }
+  .photo-hero.is-empty, .photo-hero.is-busy { min-height: 96px; padding: 14px 16px; gap: 4px; }
+  .photo-hero.is-empty .ico { width: 24px; height: 24px; }
+  .ipcard { padding: 12px 14px; gap: 8px; }
+  .big-ip { font-size: 24px; }
+  .ipcard .btn { min-height: 36px; padding: 0 14px; font-size: 13.5px; }
+  .ip-list { gap: 8px; }
+  .type-link .thumb { width: 42px; height: 42px; border-radius: 10px; }
+
+  /* ports: the name and its signal on one side, what's plugged in on the other */
+  .port-group { margin: 8px 0 4px 2px; }
+  .port-list { padding: 2px 12px; }
+  .port-list li { padding: 8px 0; gap: 2px 10px; grid-template-columns: minmax(92px, 0.8fr) minmax(0, 1.4fr) 2.2em; }
+  .patch-list { padding: 2px 12px; }
+  .patch-list li { padding: 8px 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2px 10px; }
+  .patch-edit .patch-row { padding: 10px 12px; gap: 6px; }
+
+  /* lists and cards */
+  .gear-list { padding: 0 6px 6px; }
+  .gear-row { min-height: 66px; padding: 8px; gap: 12px; }
+  .thumb { width: 50px; height: 50px; border-radius: 13px; }
+  .gear-row + .gear-row::before { left: 70px; }
+  .net-head { padding: 14px 14px 10px 16px; }
+  .fx-table tbody tr { padding: 10px 12px; }
+  .fx-loc, .fx-room { margin-top: 2px; }
+  .fx-table td[data-label] { margin-top: 4px; }
+  .px-card { padding: 13px 14px; gap: 8px; }
+  .cam-card { padding: 12px 12px 8px; }
+  .sys-room { padding: 10px 14px 12px; }
+  .mt-card { padding: 12px 12px 12px 10px; }
+  .svc-you { padding: 14px 16px; }
+  .svc-place { padding: 12px 14px 12px 16px; }
+  .hz-row { padding: 10px 8px; }
+  .panel { padding: 16px; }
+  .rg-pos { padding: 12px 14px 14px; }
+  .result-note:has(> .btn.link + span) { flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+}

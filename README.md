@@ -490,6 +490,18 @@ Simpsonville's rooms; leave All locations and pick Worship Center to get every l
 Worship Center. **Show N items** goes back to the list. The Tally bar and the search + Filters bar stay at the top while you scroll
 (`wireFilterButton` in `js/picker.js`).
 
+**More per screen on phones** (under 700px; the "phones: more per screen" block at the
+end of `styles.css`): slimmer page heads (a page without tabs puts its count on the
+title's line), panels that start higher with a smaller title, the brand folded into the
+line under it ("Yamaha QL5 · Console"), a slimmer footer, a shorter product photo, and
+tighter cards, lists and port rows. iPads and computers are unchanged.
+
+**iOS 26.0 bottom gap.** iOS 26.0 lays out home-screen apps about a status bar too short
+(fixed in 26.1), so panels pinned to the bottom stopped that far above the screen edge.
+`fitBottom()` in `js/app.js` measures the shortfall in the home-screen app on an iPhone
+or iPad (20–90px, so an open keyboard never counts) and sets `--vgap`; panels, menus and
+the Filters page reach past it to the real bottom. Everywhere else it's 0.
+
 ## Room groups
 
 A room can be part of a bigger area at the same location (`rooms.group_id`, one level):

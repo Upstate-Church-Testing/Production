@@ -125,8 +125,32 @@ function blockZoom() {
   document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 }
 
+// iOS 26.0 lays out home-screen apps about a status bar too short, so panels pinned to
+// the bottom stop that far above the screen edge (WebKit fixed it in iOS 26.1). In the
+// home-screen app on an iPhone or iPad, measure the shortfall and let panels reach the
+// bottom anyway (--vgap). Anywhere else, and once iOS is fixed, it measures 0.
+function fitBottom() {
+  const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  let gap = 0;
+  const measure = () => {
+    if (ios && standalone) {
+      const tall = window.innerHeight > window.innerWidth;
+      const full = tall ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+      const short = Math.round(full - window.innerHeight);
+      if (short < 20) gap = 0;
+      else if (short <= 90) gap = short; // the bug's size; anything bigger (a keyboard) leaves it as it was
+    }
+    document.documentElement.style.setProperty('--vgap', `${gap}px`);
+  };
+  measure();
+  window.addEventListener('resize', measure);
+  window.addEventListener('orientationchange', () => setTimeout(measure, 300));
+}
+
 async function boot() {
   blockZoom();
+  fitBottom();
   applyTheme();
   // Filters used to be remembered between launches; they now reset every time.
   for (const k of ['ucp.campus', 'ucp.geardep', 'ucp.geartags', 'ucp.gearcat', 'ucp.gearbrand', 'ucp.netdep', 'ucp.tags']) {

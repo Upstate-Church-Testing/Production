@@ -346,7 +346,7 @@ export function openDeviceSheet(ctx, host, id, editing = false, preset = {}) {
           <button class="icon-btn" data-a="close" aria-label="Close">${icon('close')}</button></div>
         ${ty?.manufacturer ? `<p class="sh-brand">${esc(ty.manufacturer)}</p>` : ''}
         <h2>${esc(isFixtureType(ty) ? ty.name : dev.name)}</h2>
-        <p class="sh-sub">${esc((isFixtureType(ty) ? [ty.category, assetTag(dev.asset_no)] : [ty?.name, ty?.category]).filter(Boolean).join(' · '))}</p>
+        <p class="sh-sub">${ty?.manufacturer ? `<span class="brand-in">${esc(ty.manufacturer)}${isFixtureType(ty) ? ' · ' : ' '}</span>` : ''}${esc((isFixtureType(ty) ? [ty.category, assetTag(dev.asset_no)] : [ty?.name, ty?.category]).filter(Boolean).join(' · '))}</p>
       </header>
       <div class="sh-body">
         ${ty?.photo_path ? `<div class="photo-hero is-compact"><img src="${esc(ctx.store.photoUrl(ty.photo_path))}" alt="${esc(typeLabel(ty))}"></div>` : ''}
