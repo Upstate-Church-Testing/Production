@@ -348,6 +348,7 @@ export function mount(el, ctx) {
     const rosterMode = nav.mode === 'roster' && connected && !!m?.plans.length;
     el.classList.toggle('is-roster', rosterMode);
     document.documentElement.classList.toggle('ros-lock', rosterMode); // the page holds still; only the grid scrolls sideways
+    if (rosterMode && window.scrollY) window.scrollTo(0, 0); // coming from a page that was scrolled down
     el.classList.toggle('is-people', nav.mode === 'people');
     $('#s-rkey', el).hidden = !rosterMode;
     const wk = $('#s-week', el);
@@ -829,7 +830,7 @@ export function mount(el, ctx) {
     const top = wrap.getBoundingClientRect().top + window.scrollY;
     const tabs = document.querySelector('.nav')?.getBoundingClientRect();
     const below = tabs && tabs.top > window.innerHeight / 2 ? window.innerHeight - tabs.top + 8 : 0; // the phone tab bar
-    const room = Math.max(220, window.innerHeight - top - below - 14);
+    const room = Math.max(220, window.innerHeight - top - below - (window.innerWidth < 700 ? 0 : 14)); // a phone: down to the bottom edge
     // On a phone, never so big that fewer than three weeks fit across beside the labels.
     let MAX = window.innerWidth < 600 ? 1.25 : 1.5;
     if (window.innerWidth < 700) {

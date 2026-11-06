@@ -2848,6 +2848,15 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 }
 
 /* Scheduling: the page itself never scrolls up and down; the grid scrolls sideways only
-   (when every row fits, which is nearly always). */
-html.ros-lock, html.ros-lock body { overflow: hidden; overscroll-behavior: none; height: 100%; }
+   (when every row fits, which is nearly always). The page is exactly the screen's height:
+   the grid runs to the bottom edge and pads its totals row clear of the home bar, instead
+   of the page keeping a home-bar strip below it. Up-and-down swipes do nothing, and
+   nothing bounces. */
+html.ros-lock { padding-bottom: 0; }
+html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan-x; }
 .ros-wrap.fits { overflow-y: hidden; overscroll-behavior: none; touch-action: pan-x; }
+html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { padding-bottom: env(safe-area-inset-bottom, 0px); }
+@media (max-width: 699px) {
+  html.ros-lock .ros-wrap { border-bottom: 0; }
+  html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { vertical-align: top; padding-top: 4px; }
+}

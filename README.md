@@ -69,7 +69,10 @@ everything else on Scheduling is Sunday mornings. The toggle only shows when the
 midweek to show.
 
 Scheduling always shows every location at once (there's no location picker), and the
-page itself holds still: only the grid scrolls, sideways, through the dates. Training
+page itself holds still: only the grid scrolls, sideways, through the dates. On a phone the
+page is exactly the screen's height: the grid runs to the bottom edge with its totals row
+padded clear of the home bar (the page drops its usual home-bar strip), and up-and-down
+swipes are turned off (`touch-action: pan-x`, `html.ros-lock`). Training
 spots ("CG (Training)") aren't rows on it.
 
 One church-wide connection, so nobody connects their own Planning Center account
