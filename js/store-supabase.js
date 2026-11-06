@@ -232,6 +232,20 @@ export async function createSupabaseStore(url, key) {
     async pcoItems(planId) {
       return ok(await sb.from('pco_plan_items').select('*').eq('plan_id', planId).order('sequence'));
     },
+    /** Planning Center Live for one plan (Events › Live): current item, next, who's driving, item times. */
+    async pcoLive(planId) {
+      const { data, error } = await sb.functions.invoke('pco-live', { body: { plan_id: planId } });
+      if (error) {
+        let msg = error.message;
+        try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch { /* not JSON */ }
+        throw friendly(new Error(msg));
+      }
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    async pcoSetEvent(typeId, on) {
+      ok(await sb.rpc('pco_set_event', { p_type: typeId, p_on: !!on }));
+    },
     /** connect { app_id, secret } · disconnect · sync */
     async pco(action, payload = {}) {
       const { data, error } = await sb.functions.invoke('pco', { body: { action, ...payload } });

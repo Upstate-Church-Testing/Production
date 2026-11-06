@@ -10,6 +10,7 @@ import * as TeamView from './views/team.js';
 import * as ResiView from './views/resi.js';
 import * as ServicesView from './views/services.js';
 import * as MeetingsView from './views/meetings.js';
+import * as EventsView from './views/events.js';
 import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
@@ -55,6 +56,8 @@ const NAV = [
     children: [
       { id: 'network', label: 'IP sheet', minRole: 'staff', view: NetworkView },
     ] },
+  // Events: one-off Planning Center services (Engage, a conference) as a whole, with Live.
+  { id: 'events', label: 'Events', icon: 'play', minRole: 'staff', view: EventsView },
   // PCO: Planning Center, one page per view of it. They all share the Services view;
   // `scope.mode` says which one it opens on (the tabs it used to have are these pages).
   { id: 'pco', label: 'PCO', icon: 'calendar', folder: true,

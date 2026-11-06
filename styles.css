@@ -2860,3 +2860,134 @@ html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { padding-bottom: env(s
   html.ros-lock .ros-wrap { border-bottom: 0; }
   html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { vertical-align: top; padding-top: 4px; }
 }
+
+/* ---------------------------------------------------------------- events -- */
+/* Events: one-off Planning Center services as a whole. The list, then an event with
+   Live (where the service is, from Planning Center Live), Flow and Team. */
+
+.ev-list { display: grid; gap: 22px; }
+.ev-h { font: 700 11.5px/1.2 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.ev-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ev-card {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 12px 14px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); color: var(--fg);
+}
+.ev-card:hover { border-color: var(--line-2); }
+.ev-card.is-today { border-color: color-mix(in srgb, var(--live) 50%, var(--line)); background: color-mix(in srgb, var(--live) 6%, var(--panel)); }
+.ev-card.is-past { opacity: 0.62; }
+.ev-card.is-past:hover { opacity: 0.9; }
+.ev-day {
+  flex: none; display: grid; justify-items: center; width: 50px; padding: 6px 0 5px;
+  border-radius: var(--r-sm); background: var(--panel-2); border: 1px solid var(--line);
+}
+.ev-day small { font: 700 10px/1.2 var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ev-day b { font: 700 20px/1.1 var(--f-body); font-variant-numeric: tabular-nums; }
+.ev-what { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.ev-what b { font: 600 16px/1.25 var(--f-body); }
+.ev-what small { font-size: 13px; color: var(--muted); }
+.ev-when { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.ev-card.is-today .ev-when { color: var(--live); }
+.ev-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 10px var(--live); }
+.ev-go { width: 18px; height: 18px; color: var(--faint); flex: none; }
+
+.ev-top { padding-bottom: 6px; }
+.ev-back { margin-left: -6px; }
+.ev-back .ico { transform: scaleX(-1); }
+.ev-panes { justify-self: start; }
+.ev-panes button { display: inline-flex; align-items: center; gap: 7px; }
+.ev-panes .ico { width: 16px; height: 16px; }
+.ev-panes small { font-size: 11.5px; font-weight: 700; color: var(--faint); }
+.ev-livedot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); flex: none; }
+.ev-pane { display: grid; gap: 14px; min-width: 0; }
+.ev-pane #lv { display: grid; gap: 14px; min-width: 0; }
+
+/* Live: the clock */
+.lv { display: grid; gap: 14px; padding: 18px; border-radius: var(--r-lg); background: var(--bg); border: 1px solid var(--line); min-width: 0; }
+.lv-off, .lv-loading { color: var(--muted); }
+.lv-top { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.lv-badge {
+  display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 11px; border-radius: 999px;
+  background: var(--panel-3); color: var(--muted); font: 700 11.5px/1 var(--f-body); letter-spacing: 0.07em; text-transform: uppercase;
+}
+.lv-badge.is-live { background: color-mix(in srgb, var(--live) 18%, transparent); color: var(--live); }
+.lv-badge.is-live i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; animation: lv-pulse 1.6s ease-in-out infinite; }
+@keyframes lv-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .lv-badge.is-live i { animation: none; } }
+.lv-by { font-size: 13px; color: var(--muted); min-width: 0; }
+.lv-by b { color: var(--fg); font-weight: 600; }
+.lv-wall { margin-left: auto; font: 600 14px/1 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.lv-fullbtn .ico { width: 15px; height: 15px; }
+.lv-k { display: block; font: 700 11px/1.2 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.lv-now { display: grid; gap: 6px; min-width: 0; }
+.lv-now h3 { font: 500 30px/1.12 var(--f-display); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.lv-meta { font-size: 14px; color: var(--muted); }
+.lv-clock { font: 600 clamp(64px, 15vw, 132px)/1 var(--f-mono); letter-spacing: -0.045em; font-variant-numeric: tabular-nums; margin: 8px 0 4px; white-space: nowrap; }
+.lv-clock.is-close { color: var(--soft); }
+.lv-clock.is-over, .lv-clock.is-late { color: var(--live); }
+.lv-clock.is-small { font-size: clamp(44px, 10vw, 76px); }
+.lv-bar { height: 6px; border-radius: 99px; background: var(--panel-3); overflow: hidden; }
+.lv-bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: inherit; transition: width 0.25s linear; }
+.lv-bar i.is-over { background: var(--live); }
+.lv-sub { font-size: 13.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lv-notes { display: flex; flex-wrap: wrap; gap: 6px; }
+.lv-next {
+  display: flex; align-items: baseline; gap: 10px; padding: 12px 14px; min-width: 0;
+  border-radius: var(--r); background: var(--panel-2); border: 1px solid var(--line);
+}
+.lv-next .lv-k { flex: none; }
+.lv-next b { flex: 1; min-width: 0; font: 600 16px/1.3 var(--f-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-next span { flex: none; font: 600 14px/1 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.lv-svc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lv-svc > div { display: grid; gap: 4px; align-content: start; padding: 10px 12px; border-radius: var(--r-sm); background: var(--panel-2); border: 1px solid var(--line); min-width: 0; }
+.lv-svc b { font: 600 18px/1.15 var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-svc em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--muted); }
+.lv-svc em.is-over { color: var(--live); }
+.lv-svc em.is-under { color: var(--ok); }
+.lv-warn { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--soft); }
+.lv-warn .ico { width: 16px; height: 16px; flex: none; }
+.lv-foot { font-size: 12px; color: var(--faint); }
+
+/* Live: the run of show, with what actually happened */
+.lv-flow .lv-row.is-done { opacity: 0.5; }
+.lv-flow .lv-row.is-skipped { opacity: 0.4; }
+.lv-flow .lv-row.is-skipped .fl-main > b { text-decoration: line-through; }
+.lv-flow .lv-row.is-now {
+  margin: 0 -12px; padding: 10px 12px; border-radius: var(--r-sm); border-bottom-color: transparent;
+  background: color-mix(in srgb, var(--live) 9%, transparent); box-shadow: inset 3px 0 0 var(--live);
+}
+.lv-flow .lv-row.is-now .fl-time { color: var(--live); }
+.lv-len { display: grid; justify-items: end; gap: 1px; }
+.lv-len b { font-weight: 600; color: var(--fg); }
+.lv-len small { font: 700 11px/1.2 var(--f-body); color: var(--faint); }
+.lv-len small.is-over { color: var(--live); }
+.lv-len small.is-under { color: var(--ok); }
+
+/* Live, full screen: a confidence screen (the phone stays awake) */
+html.lv-full-on, html.lv-full-on body { overflow: hidden; }
+.lv.is-full {
+  position: fixed; inset: 0; z-index: 48; border: 0; border-radius: 0; overflow: auto; overscroll-behavior: contain;
+  padding: calc(env(safe-area-inset-top, 0px) + 14px) max(22px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 18px) max(22px, env(safe-area-inset-left, 0px));
+  grid-template-rows: auto 1fr auto auto; align-content: stretch; gap: 18px;
+}
+.lv.is-full .lv-now { align-content: center; }
+.lv.is-full .lv-now h3 { font-size: clamp(30px, 5.5vw, 64px); }
+.lv.is-full .lv-meta { font-size: clamp(14px, 1.8vw, 20px); }
+.lv.is-full .lv-clock { font-size: clamp(96px, 24vw, 320px); }
+.lv.is-full .lv-next b { font-size: clamp(17px, 2.6vw, 30px); }
+.lv.is-full .lv-svc b { font-size: clamp(16px, 2.4vw, 28px); }
+
+@media (max-width: 699px) {
+  .lv { padding: 14px; gap: 12px; }
+  .lv-now h3 { font-size: 24px; }
+  .lv-clock { font-size: clamp(60px, 21vw, 104px); }
+  .lv-svc { gap: 6px; }
+  .lv-svc > div { padding: 8px 9px; }
+  .lv-svc b { font-size: 15px; }
+  .lv-svc .lv-k { font-size: 9.5px; letter-spacing: 0.07em; }
+  .lv-fullbtn span { display: none; }
+  .ev-card { gap: 12px; padding: 10px 12px; }
+  .ev-what b { font-size: 15px; }
+}
+.page-head.ev-top { display: flex; justify-content: flex-start; align-items: center; }
+.lv-clock.is-long { font-size: clamp(48px, 15vw, 104px); }
+.lv.is-full .lv-clock.is-long { font-size: clamp(72px, 17vw, 240px); }

@@ -87,7 +87,61 @@ function build(meId) {
       fill(tf, FOH, midweek ? (w === 1 ? [0] : w >= 2 ? [2] : []) : w >= 2 ? [1] : []);
     }
   });
+  // Events (like Simpsonville › Events): one-off services on the Events page, with Live.
+  // Today's started 21 minutes ago, so Live has something to show.
+  const ev = 'st-svl-e';
+  const POS = ['Director', 'Audio', 'CG', 'Lighting', 'Cam 1'];
+  types.push({ id: ev, name: 'Events', path: ['09 UC Simpsonville'], campus_id: 'c-SVL', campus_set: false, access: 'staff', access_set: true, on_roster: false, show_audio: false, is_event: true, sequence: SERVICES.length, teams_synced_at: new Date().toISOString() });
+  const te = { id: `${ev}-p`, service_type_id: ev, name: 'Production', shown: true, sequence: 1, positions: POS.map((x, k) => ({ id: `${ev}-p${k}`, name: x, sequence: k })) };
+  teams.push(te);
+  const onNow = Math.floor((Date.now() - 21 * 60e3) / 60e3) * 60e3;
+  [["Women's Night", 0, null], ['Chili Fest', 1, '10:00'], ['Newcomers Lunch', 16, '16:00'], ['Christmas Coffeehouse', 28, '18:00'], ['Marriage Conference', -13, '10:00']]
+    .forEach(([title, inDays, hhmm], k) => {
+      const day = new Date(base.getTime() + inDays * 864e5);
+      const start = hhmm ? eastern(day, hhmm) : new Date(onNow).toISOString();
+      const before = (min) => new Date(Date.parse(start) - min * 60e3).toISOString();
+      const pid = `${ev}-e${k}`;
+      plans.push({
+        id: pid, service_type_id: ev, title, series_title: null, dates: start.slice(0, 10), sort_date: start,
+        times: [
+          { name: 'Rehearsal', kind: 'other', starts_at: before(150), ends_at: before(60) },
+          { name: 'Service Runthrough', kind: 'other', starts_at: before(120), ends_at: before(90) },
+          { name: 'Doors Open', kind: 'other', starts_at: before(60), ends_at: before(15) },
+          { name: null, kind: 'service', starts_at: start, ends_at: before(-120) },
+        ],
+        url: '#', needed: k === 1 ? [{ team_id: te.id, position: 'Lighting', quantity: 1 }] : [], synced_at: new Date().toISOString(),
+      });
+      POS.forEach((pos, j) => {
+        if (k === 1 && pos === 'Lighting') return;
+        const who = NAMES[(k * 5 + j * 3) % NAMES.length];
+        people.push({ id: `${pid}-x${j}`, plan_id: pid, team_id: te.id, person_id: `pp-${who.replace(/\W/g, '')}`, name: who, position: pos, status: k === 2 && j === 3 ? 'U' : 'C', photo: null, invite_pending: false });
+      });
+    });
   return { types, teams, plans, people };
+}
+
+/** An event's order of service (the demo's events all run like this). */
+function eventItems(planId) {
+  const it = (n, title, kind, length, extra = {}) => ({ id: `${planId}-i${n}`, plan_id: planId, sequence: n, title, kind, position: 'during', length, description: null, key_name: null, arrangement: null, notes: [], ...extra });
+  return [
+    it(1, 'Worship', 'header', 0),
+    it(2, 'Call to Worship', 'item', 30, { description: 'Avery' }),
+    it(3, 'Holy Spirit Welcome', 'song', 261, { key_name: 'E', description: 'Avery' }),
+    it(4, 'I Believe', 'song', 350, { key_name: 'F', description: 'Jordan' }),
+    it(5, 'Jesus Paid It All', 'song', 333, { key_name: 'F', description: 'Jordan', notes: [{ category: 'Lighting', content: 'Warm wash; haze down for the prayer' }] }),
+    it(6, 'Welcome', 'header', 0),
+    it(7, 'Event Welcome', 'item', 60),
+    it(8, 'Bumper Video', 'media', 20, { notes: [{ category: 'Video', content: 'Roll on the host’s cue' }] }),
+    it(9, 'Speakers', 'header', 0),
+    it(10, 'Speaker 1', 'item', 600),
+    it(11, 'Speaker 2', 'item', 600),
+    it(12, 'Speaker 3', 'item', 600),
+    it(13, 'Speaker 4', 'item', 600),
+    it(14, 'Worship', 'header', 0),
+    it(15, 'Holy Forever', 'song', 315, { key_name: 'F' }),
+    it(16, 'Shout to the Lord', 'song', 341, { key_name: 'F' }),
+    it(17, 'Pray and Close', 'item', 120),
+  ];
 }
 
 export function createPcoDemo({ wait, clone, me, changed }) {
@@ -227,6 +281,7 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       await wait(120);
       const plan = db.plans.find((p) => p.id === planId);
       if (!plan) return [];
+      if (plan.service_type_id === 'st-svl-e') return eventItems(planId);
       const it = (n, title, kind, position, length, extra = {}) => ({ id: `${planId}-i${n}`, plan_id: planId, sequence: n, title, kind, position, length, description: null, key_name: null, arrangement: null, notes: [], ...extra });
       return [
         it(1, 'Pre-Service', 'header', 'during', 0),
@@ -248,6 +303,46 @@ export function createPcoDemo({ wait, clone, me, changed }) {
         it(17, 'Post-Service', 'header', 'during', 0),
         it(18, 'Online Closing Host', 'item', 'post', 27),
       ];
+    },
+    /** Planning Center Live, made up: today's event is a few items in, each a little long or short. */
+    async pcoLive(planId) {
+      await wait(90);
+      if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can see Live.');
+      const plan = db.plans.find((p) => p.id === planId);
+      if (!plan) throw new Error('That service isn’t shared in the app.');
+      const items = eventItems(planId);
+      const svc = plan.times.find((x) => x.kind === 'service') || { starts_at: plan.sort_date };
+      const pt = `${planId}-svc`;
+      const start = Date.parse(svc.starts_at);
+      const t = Date.now();
+      const iso = (ms) => new Date(ms).toISOString();
+      const run = items.filter((x) => x.kind !== 'header');
+      const times = run.map((r) => ({ id: `${r.id}-t`, item_id: r.id, plan_time_id: pt, start: null, end: null, length: 0, exclude: false }));
+      let current = null;
+      let next = null;
+      if (t >= start && t < start + 3 * 3600e3) {
+        let at = start;
+        for (let k = 0; k < run.length; k++) {
+          const len = (run[k].length + [12, -8, 35, 0][k % 4]) * 1000;
+          times[k].start = iso(at);
+          if (t < at + len || k === run.length - 1) { current = times[k]; next = times[k + 1] || null; break; }
+          times[k].end = iso(at + len);
+          at += len;
+        }
+      } else if (t < start) next = { id: pt, item_id: null, plan_time_id: pt, start: null, end: null, length: 0, exclude: false };
+      return clone({
+        plan_id: planId, available: true, current_id: current?.id ?? null, next_id: next?.id ?? null, current, next,
+        controller: current ? 'Jordan Pike' : null, note: null,
+        items: items.map(({ plan_id: _p, arrangement: _a, ...x }) => x), item_times: times,
+        plan_times: plan.times.map((x, i) => ({ id: x.kind === 'service' ? pt : `${planId}-t${i}`, name: x.name, kind: x.kind, starts_at: x.starts_at, ends_at: x.ends_at, live_starts_at: x.kind === 'service' && current ? x.starts_at : null, live_ends_at: null })),
+        read_at: iso(t - 700), full_read_at: iso(t - 6000), now: iso(t),
+      });
+    },
+    async pcoSetEvent(id, on) {
+      await wait(120);
+      if (!isAdmin()) throw new Error('Only an admin can choose which services are events.');
+      db.types.find((t) => t.id === id).is_event = !!on;
+      changed('pco');
     },
     async pco(action, payload = {}) {
       await wait(500);

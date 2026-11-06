@@ -104,6 +104,38 @@ and nobody's own Planning Center permissions matter here.
 - Scheduling people from the app goes through the same connection (next step), so what
   someone may do is decided by their role here, not by their Planning Center login.
 
+## Events (staff)
+
+One-off Planning Center services (Engage, a conference, a coffeehouse) as a whole, on
+their own page in the sidebar. Which services are events is set per Planning Center service
+(`pco_service_types.is_event`; `pco_set_event` for admins). Simpsonville › Events is one, shared
+with staff and kept off Scheduling (`on_roster` false), so the sync copies its plans, flow and
+team like any other shared service. The page lists what's coming up (today's in red), then
+the last few past ones; an event opens on its times and three panes:
+
+- **Live**: where the service is right now, from Planning Center Live. The item that's up
+  with its time left in big numbers (amber in the last 30 seconds, red and counting up once
+  it's over), a bar, what's next, how long the service has run, the planned length, and the
+  time it's on pace to end (long or short against the plan). Below, the run of show: what's
+  done with how long each actually took (+/- the plan), the one that's up, and when the rest
+  should start from here. Before Live starts: a countdown to the service time and what's up
+  first. When it's over: when it started and ended, and how long it ran. **Full screen** is
+  a confidence screen: the clock alone, the browser's full screen where it has one (not on
+  iPhone), and the screen kept awake.
+  When someone hits Next in Planning Center Live, every screen follows within about two
+  seconds: the app asks `pco-live` every 1.5 seconds while Live is on screen, and `pco-live`
+  reads Planning Center at most every 1.5 seconds per plan however many screens are watching
+  (`pco_live_cache` holds the last answer; items and their times are read again when the item
+  moves, or every 20 seconds). Planning Center has no push for Live to a token like ours, so
+  this is the fastest that stays well inside its rate limit. Counting uses the server's
+  clock, so every screen shows the same second. Times left from trying Live out earlier (a
+  rehearsal) don't count as the service having run.
+- **Flow**: the order of service as planned, with times from the service start and notes.
+- **Team**: who's on the production teams (audio left out, like everywhere else).
+
+Next steps: prep for an event (tasks, files, who's doing what) as a project, and driving
+Live (Next / Previous) from here.
+
 ## People (production volunteers)
 
 PCO › People (staff only) lists everyone on the production teams, whether or not
@@ -389,10 +421,12 @@ activity         every change: who, when, old → new (passwords never copied); 
 pco_connection   the one Planning Center connection (token secret in Vault; the app can't read this table)
 pco_service_types ── pco_teams (shown or not; positions)
         │            who sees it: access = everyone | staff | hidden, and which location
+        │            is_event: shown on Events (with Live)
         ├── pco_team_people (who's on each shown team; fills volunteers)
         └── pco_plans (upcoming: dates, times, open spots, Planning Center version) ── pco_plan_people (shown teams only; invite sent or not)
                                                           └─ pco_plan_items (the flow: songs, hosts, media, lengths, team notes)
 pco_live         one row the sync touches when anything changed (apps listen over realtime)
+pco_live_cache   Planning Center Live's last answer per plan (pco-live only), so many screens share one read
 
 rig_positions    a room's hanging positions (FOH Batten, Upstage Truss…): name, notes, sort_order front to back
 camera_builds    a location's camera positions (Cam N), in service or not; their gear is items with Spot "Cam N"
@@ -415,6 +449,7 @@ js/config.js                   Supabase URL + publishable key (empty = preview m
 js/app.js                      sign-in, roles, the sidebar (NAV) and pages, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
+js/views/events.js            Events: one-off Planning Center services, with Live (the service clock), Flow and Team
 js/views/network.js            the IP sheet
 js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, area / spot, operator position, category, used as and brand; Items is a card per room › area › spot. Grid (models × locations or rooms) is built but not offered for now
 js/views/haze.js               Gear › Haze: hazers, tank checks, fluid bottles per location
@@ -446,6 +481,7 @@ js/views/pco-settings.js       Settings › Planning Center (connect, who sees w
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
 js/pco-demo.js                 made-up Planning Center data for the preview
 supabase/functions/pco/        edge function: connect/disconnect/sync/candidates/schedule/unschedule (index.ts), API client (pco.ts), sync (sync.ts), scheduling (schedule.ts), database (db.ts)
+supabase/functions/pco-live/   edge function: Planning Center Live for Events › Live (index.ts: auth, the shared read; live.ts: reading Live and the item times)
 supabase/migrations/*.sql      database, permissions, history
 supabase/seed.sql              the 10 campuses, matched to Planning Center
 tools/stamp.py                 run before each publish; open copies reload themselves
