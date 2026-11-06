@@ -2846,3 +2846,8 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
   .ros-key { gap: 2px 8px; font-size: 10.5px; }
   .ros-key .rk, .ros-key .rk-l { gap: 4px; }
 }
+
+/* Scheduling: the page itself never scrolls up and down; the grid scrolls sideways only
+   (when every row fits, which is nearly always). */
+html.ros-lock, html.ros-lock body { overflow: hidden; overscroll-behavior: none; height: 100%; }
+.ros-wrap.fits { overflow-y: hidden; overscroll-behavior: none; touch-action: pan-x; }

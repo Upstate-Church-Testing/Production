@@ -68,6 +68,10 @@ Wednesdays when it keeps its audio op (`show_audio`) or is named Midweek or Wedn
 everything else on Scheduling is Sunday mornings. The toggle only shows when there's a
 midweek to show.
 
+Scheduling always shows every location at once (there's no location picker), and the
+page itself holds still: only the grid scrolls, sideways, through the dates. Training
+spots ("CG (Training)") aren't rows on it.
+
 One church-wide connection, so nobody connects their own Planning Center account
 and nobody's own Planning Center permissions matter here.
 
@@ -501,7 +505,9 @@ tighter cards, lists and port rows. iPads and computers are unchanged.
 that differ from the code), positions as the team says them (CG, LX, C1…, TD, DIR, AUD,
 PROD), Loc / Pos for the headers, "Nov 8" without the weekday, and "Sundays". The grid is
 sized so the next three weeks fit across; a name that doesn't fit its pill shows as
-"Jordan P." (measured, not guessed). Wider screens keep the full labels.
+"Jordan P." (measured, not guessed). It opens with the next date right beside the labels
+(`scrollToNext` re-measures, since Safari and Chrome measure inside a zoomed table differently).
+Wider screens keep the full labels.
 
 **iOS 26.0 bottom gap.** iOS 26.0 lays out home-screen apps about a status bar too short
 (fixed in 26.1), so panels pinned to the bottom stopped that far above the screen edge.

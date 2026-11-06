@@ -15,6 +15,8 @@ import { peopleView, LANYARDS } from './volunteers.js';
 import { openScheduleSheet, takeOff } from './schedule-sheet.js';
 
 const POLL_MS = 20000; // backup for the live push (a phone that slept, a dropped connection)
+/** Training spots ("CG (Training)") aren't rows on the Scheduling grid. */
+const TRAINING = /\btraining\b/i;
 const LETTER_NAME = { V: 'Vintage', M: 'Modern', N: 'North Modern', T: 'Traditional', E: 'Español', W: 'Midweek' };
 
 // The Scheduling grid on a phone uses short labels so three weeks fit across. Both the
@@ -105,7 +107,6 @@ export function mount(el, ctx) {
           <button type="button" role="tab" data-week="sun">${both('Sunday mornings', 'Sundays')}</button>
           <button type="button" role="tab" data-week="mid">Wednesdays</button>
         </div>
-        <div class="ros-head" id="s-rhead" hidden>${dropdownHtml('s-rloc', 'Location', 'caps slim')}</div>
         <p class="tally" id="s-tally" aria-live="polite"></p>
       </div>
       <div class="ros-key" id="s-rkey" hidden></div>
@@ -129,21 +130,9 @@ export function mount(el, ctx) {
         ...m.places.map((c) => ({ value: c.id, label: c.short_name, count: m.plansAt(c.id).length }))];
     },
   };
-  // The roster offers only locations with a service on the roster (Laurens and Union aren't).
-  const rosterCampus = (m = model()) => (m && s.campus !== ALL && !m.rosterPlaces.some((c) => c.id === s.campus) ? ALL : s.campus);
-  const rosterOptions = {
-    ...locOptions,
-    unit: () => ['service', 'services'],
-    get: () => rosterCampus(),
-    options: () => {
-      const m = model();
-      if (!m) return [{ value: ALL, label: 'All locations' }];
-      return [{ value: ALL, label: 'All locations', count: m.onRoster.length },
-        ...m.rosterPlaces.map((c) => ({ value: c.id, label: c.short_name, count: m.rosterAt(c.id).length }))];
-    },
-  };
+  // Scheduling always shows every location at once.
+  const rosterCampus = () => ALL;
   const loc = wireDropdown($('#s-loc', el), locOptions);
-  const rloc = wireDropdown($('#s-rloc', el), rosterOptions);
   const people = peopleView({
     ctx, s, model: () => model(), kindName: (t, p) => kindName(t, p), openPlan: (id) => openPlan(id), reloadPeople: () => loadPeople(),
   });
@@ -189,6 +178,7 @@ export function mount(el, ctx) {
       clearTimeout(timer); clearInterval(clockTimer);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('resize', onResize);
+      document.documentElement.classList.remove('ros-lock');
       unsubscribe();
     },
   };
@@ -357,13 +347,12 @@ export function mount(el, ctx) {
     seg.querySelectorAll('[data-smode]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.smode === nav.mode)));
     const rosterMode = nav.mode === 'roster' && connected && !!m?.plans.length;
     el.classList.toggle('is-roster', rosterMode);
+    document.documentElement.classList.toggle('ros-lock', rosterMode); // the page holds still; only the grid scrolls sideways
     el.classList.toggle('is-people', nav.mode === 'people');
-    $('#s-rhead', el).hidden = !rosterMode;
     $('#s-rkey', el).hidden = !rosterMode;
     const wk = $('#s-week', el);
     wk.hidden = !rosterMode || m.weeks.size < 2; // only once there's a midweek to show
     wk.querySelectorAll('[data-week]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.week === m?.week)));
-    rloc.update();
     $('#s-bar', el).hidden = !connected || !m?.plans.length || nav.mode === 'mine' || rosterMode;
     drawHead();
     loc.update();
@@ -636,7 +625,7 @@ export function mount(el, ctx) {
       for (const t of m.rosterTypes('mid')) {
         if (!t.campus_id || (where !== ALL && t.campus_id !== where)) continue;
         for (const team of m.teams.filter((x) => teamServices(x).includes(t.id))) {
-          for (const x of team.positions || []) if (x.name) rowFor(t.campus_id, team, x.name);
+          for (const x of team.positions || []) if (x.name && !TRAINING.test(x.name)) rowFor(t.campus_id, team, x.name);
         }
       }
     }
@@ -649,7 +638,7 @@ export function mount(el, ctx) {
     for (const p of scope) {
       for (const r of m.people.get(p.id) || []) {
         const team = teamOf.get(r.team_id);
-        if (!team) continue;
+        if (!team || TRAINING.test(r.position || '')) continue;
         const cell = cellFor(p, team, r.position);
         const who = r.person_id || r.name || r.id;
         let pill = cell.people.get(who);
@@ -658,7 +647,7 @@ export function mount(el, ctx) {
       }
       for (const n of p.needed || []) {
         const team = teamOf.get(n.team_id);
-        if (!team) continue;
+        if (!team || TRAINING.test(n.position || '')) continue;
         const cell = cellFor(p, team, n.position);
         cell.openBy.set(p.id, (cell.openBy.get(p.id) || 0) + Math.max(1, n.quantity || 1));
         cell.openTeam.set(p.id, n.team_id);
@@ -812,7 +801,15 @@ export function mount(el, ctx) {
     const next = $('thead .ros-day:not(.is-past)', wrap);
     const edge = $$('thead .ros-corner', wrap).pop();
     if (!next || !edge) return;
-    wrap.scrollLeft += next.getBoundingClientRect().left - edge.getBoundingClientRect().right;
+    // Safari measures inside a zoomed table in unzoomed pixels and Chrome in zoomed ones,
+    // so step toward it and measure again until the next date sits right beside the labels.
+    for (let i = 0; i < 6; i++) {
+      const off = next.getBoundingClientRect().left - edge.getBoundingClientRect().right;
+      if (Math.abs(off) < 0.5) break;
+      const was = wrap.scrollLeft;
+      wrap.scrollLeft = was + off;
+      if (wrap.scrollLeft === was) break; // at the end: can't go further
+    }
   }
 
   /** Scales the roster so every row fits on the screen; only the dates scroll sideways.
@@ -860,7 +857,11 @@ export function mount(el, ctx) {
       rows.forEach((tr, k) => { tr.style.height = `${(natRows[k] + extra).toFixed(2)}px`; });
       return apply(zz);
     };
-    const done = (r) => { fitNames(table); return r; };
+    const done = (r) => {
+      fitNames(table);
+      wrap.classList.toggle('fits', wrap.scrollHeight <= wrap.clientHeight + 1); // nothing to scroll up and down
+      return r;
+    };
     if (size?.z) { // a size worked out elsewhere: use it as it is
       apply(size.z);
       if (size.extra > 0) grow(size.z, size.extra);
