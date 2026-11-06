@@ -94,11 +94,12 @@ function build(meId) {
   types.push({ id: ev, name: 'Events', path: ['09 UC Simpsonville'], campus_id: 'c-SVL', campus_set: false, access: 'staff', access_set: true, on_roster: false, show_audio: false, is_event: true, sequence: SERVICES.length, teams_synced_at: new Date().toISOString() });
   const te = { id: `${ev}-p`, service_type_id: ev, name: 'Production', shown: true, sequence: 1, positions: POS.map((x, k) => ({ id: `${ev}-p${k}`, name: x, sequence: k })) };
   teams.push(te);
-  const onNow = Math.floor((Date.now() - 21 * 60e3) / 60e3) * 60e3;
-  [["Women's Night", 0, null], ['Chili Fest', 1, '10:00'], ['Newcomers Lunch', 16, '16:00'], ['Christmas Coffeehouse', 28, '18:00'], ['Marriage Conference', -13, '10:00']]
+  // Today's two: one 21 minutes in (Live has an item up), one starting in 40 (doors are open).
+  const minute = (n) => new Date(Math.floor((Date.now() + n * 60e3) / 60e3) * 60e3).toISOString();
+  [["Women's Night", 0, minute(-21)], ['Chili Fest', 1, '10:00'], ['Newcomers Lunch', 16, '16:00'], ['Christmas Coffeehouse', 28, '18:00'], ['Marriage Conference', -13, '10:00'], ['Student Worship Night', 0, minute(40)]]
     .forEach(([title, inDays, hhmm], k) => {
       const day = new Date(base.getTime() + inDays * 864e5);
-      const start = hhmm ? eastern(day, hhmm) : new Date(onNow).toISOString();
+      const start = /T/.test(hhmm) ? hhmm : eastern(day, hhmm);
       const before = (min) => new Date(Date.parse(start) - min * 60e3).toISOString();
       const pid = `${ev}-e${k}`;
       plans.push({
@@ -107,6 +108,7 @@ function build(meId) {
           { name: 'Rehearsal', kind: 'other', starts_at: before(150), ends_at: before(60) },
           { name: 'Service Runthrough', kind: 'other', starts_at: before(120), ends_at: before(90) },
           { name: 'Doors Open', kind: 'other', starts_at: before(60), ends_at: before(15) },
+          { name: 'Worship Center Doors Open', kind: 'other', starts_at: before(15), ends_at: start },
           { name: null, kind: 'service', starts_at: start, ends_at: before(-120) },
         ],
         url: '#', needed: k === 1 ? [{ team_id: te.id, position: 'Lighting', quantity: 1 }] : [], synced_at: new Date().toISOString(),
@@ -125,22 +127,22 @@ function eventItems(planId) {
   const it = (n, title, kind, length, extra = {}) => ({ id: `${planId}-i${n}`, plan_id: planId, sequence: n, title, kind, position: 'during', length, description: null, key_name: null, arrangement: null, notes: [], ...extra });
   return [
     it(1, 'Worship', 'header', 0),
-    it(2, 'Call to Worship', 'item', 30, { description: 'Avery' }),
-    it(3, 'Holy Spirit Welcome', 'song', 261, { key_name: 'E', description: 'Avery' }),
-    it(4, 'I Believe', 'song', 350, { key_name: 'F', description: 'Jordan' }),
-    it(5, 'Jesus Paid It All', 'song', 333, { key_name: 'F', description: 'Jordan', notes: [{ category: 'Lighting', content: 'Warm wash; haze down for the prayer' }] }),
+    it(2, 'Call to Worship', 'item', 30, { description: 'Avery', notes: [{ category: 'Audio', content: 'VOX - 1' }, { category: 'CG', content: 'Scripture: Psalm 95:1-2' }, { category: 'Lighting', content: 'Stage wash up from preset' }] }),
+    it(3, 'Holy Spirit Welcome', 'song', 261, { key_name: 'E', description: 'Avery', notes: [{ category: 'Audio', content: 'VOX - 1' }, { category: 'CG', content: 'Lyrics' }] }),
+    it(4, 'I Believe', 'song', 350, { key_name: 'F', description: 'Jordan', notes: [{ category: 'Audio', content: 'VOX - 2' }, { category: 'CG', content: 'Lyrics' }, { category: 'Lighting', content: 'Song look 4' }] }),
+    it(5, 'Jesus Paid It All', 'song', 333, { key_name: 'F', description: 'Jordan', notes: [{ category: 'Audio', content: 'VOX - 2 · Jordan prays, Avery brings the table' }, { category: 'CG', content: 'Lyrics' }, { category: 'Lighting', content: 'Warm wash; haze down for the prayer' }] }),
     it(6, 'Welcome', 'header', 0),
-    it(7, 'Event Welcome', 'item', 60),
-    it(8, 'Bumper Video', 'media', 20, { notes: [{ category: 'Video', content: 'Roll on the host’s cue' }] }),
+    it(7, 'Event Welcome', 'item', 60, { notes: [{ category: 'Audio', content: 'Host: VOX - 3' }, { category: 'CG', content: 'Welcome slide' }] }),
+    it(8, 'Bumper Video', 'media', 20, { notes: [{ category: 'Media', content: 'Bumper video' }, { category: 'Audio', content: 'Playback up' }] }),
     it(9, 'Speakers', 'header', 0),
-    it(10, 'Speaker 1', 'item', 600),
-    it(11, 'Speaker 2', 'item', 600),
-    it(12, 'Speaker 3', 'item', 600),
-    it(13, 'Speaker 4', 'item', 600),
+    it(10, 'Speaker 1', 'item', 600, { notes: [{ category: 'Audio', content: 'VOX - 4' }, { category: 'CG', content: 'Name lower third' }, { category: 'Lighting', content: 'Speaker look' }] }),
+    it(11, 'Speaker 2', 'item', 600, { notes: [{ category: 'Audio', content: 'VOX - 5' }, { category: 'CG', content: 'Name lower third' }] }),
+    it(12, 'Speaker 3', 'item', 600, { notes: [{ category: 'Audio', content: 'VOX - 6' }, { category: 'CG', content: 'Name lower third' }] }),
+    it(13, 'Speaker 4', 'item', 600, { notes: [{ category: 'Audio', content: 'VOX - 3 · keys pad in at the 3:00 mark' }, { category: 'CG', content: 'Name lower third; leave the verse up at the end' }] }),
     it(14, 'Worship', 'header', 0),
-    it(15, 'Holy Forever', 'song', 315, { key_name: 'F' }),
-    it(16, 'Shout to the Lord', 'song', 341, { key_name: 'F' }),
-    it(17, 'Pray and Close', 'item', 120),
+    it(15, 'Holy Forever', 'song', 315, { key_name: 'F', notes: [{ category: 'Audio', content: 'VOX - 2' }, { category: 'CG', content: 'Lyrics' }, { category: 'Lighting', content: 'Song look 2' }] }),
+    it(16, 'Shout to the Lord', 'song', 341, { key_name: 'F', notes: [{ category: 'Audio', content: 'VOX - 1' }, { category: 'CG', content: 'Lyrics' }] }),
+    it(17, 'Pray and Close', 'item', 120, { notes: [{ category: 'Lighting', content: 'House to half' }] }),
   ];
 }
 

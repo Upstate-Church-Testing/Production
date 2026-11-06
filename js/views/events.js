@@ -1,28 +1,40 @@
 // Events: the one-off services in Planning Center (Engage, a conference, a coffeehouse)
 // as a whole. Which services count as events is set per Planning Center service
-// (pco_service_types.is_event). The list is coming up first, then what's past; an event
-// opens on three panes:
-//   Live  where the service is right now, from Planning Center Live: the item that's up,
-//         its time left (counting over in red), what's next, the service clock and
-//         whether it's running long, and the run of show with each item's actual time.
-//         When someone hits Next in Planning Center Live, this follows within a couple
-//         of seconds (pco-live reads Live for every screen at once). Full screen keeps
-//         the phone awake, for a confidence screen.
-//   Flow  the order of service as planned, with notes.
-//   Team  who's on the production teams.
+// (pco_service_types.is_event). The list is coming up first, then what's past. An event
+// shows its times, a Live button, and two panes: Flow (the order of service as planned,
+// with notes) and Team (who's on the production teams).
+//
+// Live is a full-screen production view of Planning Center Live, on its own layer over
+// the whole app (not inside the page, so nothing can clip it). It shows:
+//   Before the service: what's on now (Doors Open), a countdown to the next thing on the
+//     schedule, what that is, and the first item up with its notes.
+//   During: the item that's up, its time left in big numbers (amber near the end, red and
+//     counting up once over), what's next and after that, and the service clock.
+//   Every item shows its production notes: Audio, CG and Lighting always (a dash when
+//     there's none), then any other note category it has, by its Planning Center name.
+// When someone hits Next in Planning Center Live, this follows within a couple of seconds
+// (pco-live reads Live for every screen at once). The screen stays awake while it's open.
 // Staff and up (the Planning Center service is shared with staff).
 
 import { esc, icon, $, debounce, initials, pageTitle } from '../util.js';
 import { clock, realPhoto, teamKey, teamServices, hiddenPosition, STATUS_LABEL } from '../pco.js';
 
-const POLL_MS = 1500;         // Live: ask this often while it's on screen
+const POLL_MS = 1500;         // Live: ask this often while it's open
 const SLOW_POLL_MS = 15000;   // …when the event isn't today
 const CHECK_MS = 20000;       // the event list: has Planning Center changed?
 const PAST_SHOWN = 6;         // past events listed (latest first)
 
+// Production notes on Live, by Planning Center note category (exact names this church uses).
+// These three always show; any other category an item has follows under its own name.
+const NOTE_COLS = [
+  { label: 'Audio', dep: 'audio', re: /^audio(\s*\(foh\))?$/i },
+  { label: 'CG', dep: 'video', re: /^cg$/i },
+  { label: 'Lighting', dep: 'lighting', re: /^lighting(\s+operator)?$/i },
+];
+
 export function mount(el, ctx) {
   let alive = true;
-  const nav = ctx.eventsNav || (ctx.eventsNav = { plan: null, pane: null, full: false });
+  const nav = ctx.eventsNav || (ctx.eventsNav = { plan: null, pane: 'flow', live: false });
   const s = {
     status: undefined, data: null, error: null,
     items: new Map(),   // plan id -> its flow (from the sync), loaded when opened
@@ -30,16 +42,16 @@ export function mount(el, ctx) {
     liveFor: null,      // which plan that answer is for
     liveError: null,
     offset: 0,          // server clock minus this device's
-    sig: '',            // what the Live pane was last drawn from
+    sig: '',            // what the Live layer was last drawn from
   };
   let pollTimer = null;
   let checkTimer = null;
   let tickTimer = null;
   let wake = null;
   let wallFmt = null;
+  let layer = null;          // the Live layer, on <body> while open
+  let browserFull = false;   // the browser's own full screen (computers, iPads)
   const now = () => Date.now() + s.offset;
-  /** Which pane the open event shows: Live on its day, Flow otherwise, until someone picks. */
-  const paneOf = (m, p) => nav.pane || (p._day === m.today ? 'live' : 'flow');
 
   el.innerHTML = `<div class="ev-page" id="ev"><div class="loading">${'<div class="sk tall"></div>'.repeat(2)}</div></div>`;
   const root = $('#ev', el);
@@ -50,19 +62,19 @@ export function mount(el, ctx) {
     if (t.dataset.open) { open(t.dataset.open); return; }
     if (t.dataset.pane) { nav.pane = t.dataset.pane; draw(); return; }
     const act = t.dataset.act;
-    if (act === 'back') { open(null); }
-    else if (act === 'full') { setFull(!nav.full); }
-    else if (act === 'retry') { load(); }
-    else if (act === 'settings') { ctx.openSettings('pco'); }
+    if (act === 'back') open(null);
+    else if (act === 'live') openLive();
+    else if (act === 'retry') load();
+    else if (act === 'settings') ctx.openSettings('pco');
   });
-  const onKey = (e) => { if (e.key === 'Escape' && nav.full) setFull(false); };
+  const onKey = (e) => { if (e.key === 'Escape' && layer) closeLive(); };
   document.addEventListener('keydown', onKey);
-  // The browser's own full screen (computers, iPads) ending with Esc ends ours too.
-  let browserFull = false;
-  const onFs = () => { if (!document.fullscreenElement && browserFull) { browserFull = false; if (nav.full) setFull(false); } };
+  const onFs = () => { if (!document.fullscreenElement && browserFull) { browserFull = false; if (layer) closeLive(); } };
   document.addEventListener('fullscreenchange', onFs);
   const onVisible = () => {
-    if (document.visibilityState === 'visible') { poll(); check(); if (nav.full) keepAwake(true); }
+    if (document.visibilityState !== 'visible') return;
+    check();
+    if (layer) { poll(); keepAwake(true); }
   };
   document.addEventListener('visibilitychange', onVisible);
   const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'pco') load(true); }, 300));
@@ -71,13 +83,11 @@ export function mount(el, ctx) {
   return {
     unmount() {
       alive = false;
-      clearTimeout(pollTimer); clearTimeout(checkTimer); clearInterval(tickTimer);
+      closeLive();
+      clearTimeout(checkTimer);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('fullscreenchange', onFs);
-      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
       document.removeEventListener('visibilitychange', onVisible);
-      document.documentElement.classList.remove('lv-full-on');
-      keepAwake(false);
       unsubscribe();
     },
   };
@@ -135,9 +145,9 @@ export function mount(el, ctx) {
   }
 
   function open(planId) {
-    if (nav.plan !== planId) { s.live = null; s.liveFor = null; s.liveError = null; s.sig = ''; nav.pane = null; }
+    if (nav.plan !== planId) { s.live = null; s.liveFor = null; s.liveError = null; s.sig = ''; nav.pane = 'flow'; }
+    if (!planId) closeLive();
     nav.plan = planId;
-    if (!planId) setFull(false, false);
     draw();
     window.scrollTo(0, 0);
   }
@@ -146,7 +156,6 @@ export function mount(el, ctx) {
 
   function draw() {
     if (!alive) return;
-    clearInterval(tickTimer); tickTimer = null;
     if (s.error && !s.data) {
       root.innerHTML = `${head()}<div class="empty"><p>Couldn’t load events: ${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
       return;
@@ -160,7 +169,8 @@ export function mount(el, ctx) {
     const plan = nav.plan ? m.plans.find((p) => p.id === nav.plan) : null;
     if (nav.plan && !plan) nav.plan = null;
     root.innerHTML = plan ? eventHtml(m, plan) : listHtml(m);
-    if (plan) afterEvent(m, plan); else stopLive();
+    if (plan && nav.live) openLive();
+    else if (!plan) closeLive();
   }
 
   function head(extra = '') {
@@ -171,7 +181,7 @@ export function mount(el, ctx) {
     const n = m.upcoming.length;
     const tally = `<p class="tally"><b>${n}</b><span>coming up</span></p>`;
     if (!m.plans.length) {
-      return `${head()}<div class="empty"><p>No events yet.</p><p class="fine">Events are Planning Center services marked as events (Simpsonville › Events).</p></div>`;
+      return `${head()}<div class="empty"><p>No events yet.</p><p class="fine">Events are Planning Center services marked as events (Settings › Planning Center).</p></div>`;
     }
     const card = (p) => {
       const t = m.type(p);
@@ -184,7 +194,7 @@ export function mount(el, ctx) {
         <span class="ev-day"><small>${esc(m.c.weekday(p.sort_date).slice(0, 3))}</small><b>${esc(m.c.date(p.sort_date).replace(/^\D+/, ''))}</b><small>${esc(m.c.date(p.sort_date).replace(/\s.*$/, ''))}</small></span>
         <span class="ev-what"><b>${esc(p.title || t.name)}</b>
           <small>${esc([campus, svc.length ? m.c.times(svc) : m.c.time(p.sort_date), crew ? `${crew} on the team` : null].filter(Boolean).join(' · '))}</small></span>
-        <span class="ev-when">${isToday ? `<i class="ev-dot"></i>` : ''}${esc(when)}</span>
+        <span class="ev-when">${isToday ? '<i class="ev-dot"></i>' : ''}${esc(when)}</span>
         ${icon('chevron', 'ev-go')}
       </button></li>`;
     };
@@ -198,18 +208,14 @@ export function mount(el, ctx) {
   function eventHtml(m, p) {
     const t = m.type(p);
     const campus = t.campus_id ? ctx.campusById.get(t.campus_id)?.short_name : null;
-    const pane = paneOf(m, p);
+    const pane = nav.pane === 'team' ? 'team' : 'flow';
     const items = s.items.get(p.id);
     if (items === undefined) loadItems(p.id);
     const crew = m.people.filter((x) => x.plan_id === p.id && !hiddenPosition(x.position));
     const steps = items?.filter?.((x) => x.kind !== 'header').length;
-    // Planning Center lists the service time twice on some plans (the service, and an
-    // "other" time named Service at the same start): once is enough.
-    const svcStarts = new Set((p.times || []).filter((x) => x.kind === 'service').map((x) => x.starts_at));
-    const times = (p.times || []).filter((x) => x.starts_at && !(x.kind !== 'service' && /^service$/i.test(x.name || '') && svcStarts.has(x.starts_at)))
-      .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+    const times = shownTimes(p.times || []);
     return `<div class="page-head ev-top">
-        <button type="button" class="btn small ghost ev-back" data-act="back">${icon('chevron', 'flip')}<span>Events</span></button>
+        <button type="button" class="btn small ghost ev-back" data-act="back">${icon('chevron')}<span>Events</span></button>
       </div>
       <article class="svc-detail ev-detail">
         <header class="svc-dhead">
@@ -221,49 +227,82 @@ export function mount(el, ctx) {
           ${p.url && p.url !== '#' ? `<a class="btn small ghost" href="${esc(p.url)}" target="_blank" rel="noopener">${icon('open')}<span>Planning Center</span></a>` : ''}
         </header>
         ${times.length ? `<ol class="svc-times-list">${times.map((x) => `<li class="${x.kind === 'service' ? 'is-service' : ''}">
-            <b>${esc(m.c.time(x.starts_at))}</b><span>${esc(x.name || (x.kind === 'service' ? 'Service' : x.kind === 'rehearsal' ? 'Rehearsal' : 'Other'))}</span>
+            <b>${esc(m.c.time(x.starts_at))}</b><span>${esc(timeName(x))}</span>
           </li>`).join('')}</ol>` : ''}
+        <button type="button" class="ev-live-btn" data-act="live">
+          <i class="ev-livedot" aria-hidden="true"></i>
+          <span><b>Live</b><small>Where the service is, from Planning Center Live</small></span>
+          ${icon('expand')}
+        </button>
         <div class="seg ev-panes" role="tablist" aria-label="Show">
-          <button type="button" role="tab" data-pane="live" aria-selected="${pane === 'live'}"><i class="ev-livedot" aria-hidden="true"></i>Live</button>
           <button type="button" role="tab" data-pane="flow" aria-selected="${pane === 'flow'}">${icon('list')}Flow${steps ? `<small>${steps}</small>` : ''}</button>
           <button type="button" role="tab" data-pane="team" aria-selected="${pane === 'team'}">${icon('team')}Team<small>${crew.filter((x) => x.status !== 'D').length}</small></button>
         </div>
-        <section class="ev-pane" data-pane-body="${pane}">
-          ${pane === 'live' ? `<div id="lv">${liveHtml(m, p)}</div>` : pane === 'flow' ? flowHtml(m, p, items) : teamHtml(m, p, crew)}
-        </section>
+        <section class="ev-pane">${pane === 'flow' ? flowHtml(m, p, items) : teamHtml(m, p, crew)}</section>
       </article>`;
   }
 
   async function loadItems(planId) {
     s.items.set(planId, null);
     try { s.items.set(planId, (await ctx.store.pcoItems(planId)) || []); } catch (e) { s.items.set(planId, { error: e.message }); }
-    if (alive && nav.plan === planId && (nav.pane || 'flow') !== 'live') draw();
-    else if (alive && nav.plan === planId) { const tab = $('[data-pane="flow"]', root); const n = s.items.get(planId)?.filter?.((x) => x.kind !== 'header').length; if (tab && n) tab.innerHTML = `${icon('list')}Flow<small>${n}</small>`; }
+    if (alive && nav.plan === planId) draw();
   }
 
   // ------------------------------------------------------------- live ---
 
-  function afterEvent(m, p) {
-    if (paneOf(m, p) !== 'live') { stopLive(); return; }
-    if (s.liveFor !== p.id) { s.live = null; s.liveFor = p.id; }
-    tickTimer = setInterval(() => tick(m, p), 250);
-    tick(m, p);
-    if (!pollTimer) poll();
-    keepAwake(nav.full);
+  function current() {
+    const m = model();
+    const p = m && nav.plan ? m.plans.find((x) => x.id === nav.plan) : null;
+    return p ? { m, p } : null;
   }
 
-  function stopLive() {
+  function openLive() {
+    const cur = current();
+    if (!cur) return;
+    nav.live = true;
+    if (s.liveFor !== cur.p.id) { s.live = null; s.liveFor = cur.p.id; s.liveError = null; s.sig = ''; }
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.className = 'lvx-root';
+      layer.setAttribute('role', 'dialog');
+      layer.setAttribute('aria-modal', 'true');
+      layer.setAttribute('aria-label', `Live: ${cur.p.title || 'event'}`);
+      layer.addEventListener('click', (e) => { if (e.target.closest('[data-act="close"]')) closeLive(); });
+      document.body.appendChild(layer);
+      document.documentElement.classList.add('lv-full-on');
+      // Where the browser can (not iPhone Safari), the whole screen: no browser bars either.
+      try {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen && matchMedia('(hover: hover)').matches) {
+          document.documentElement.requestFullscreen().then(() => { browserFull = true; }).catch(() => {});
+        }
+      } catch { /* not offered */ }
+      paint();
+      $('[data-act="close"]', layer)?.focus({ preventScroll: true });
+    }
+    clearInterval(tickTimer);
+    tickTimer = setInterval(tick, 250);
+    tick();
+    if (!pollTimer) poll();
+    keepAwake(true);
+  }
+
+  function closeLive() {
+    nav.live = false;
     clearTimeout(pollTimer); pollTimer = null;
     clearInterval(tickTimer); tickTimer = null;
     keepAwake(false);
+    if (layer) { layer.remove(); layer = null; }
+    document.documentElement.classList.remove('lv-full-on');
+    if (document.fullscreenElement && browserFull) { browserFull = false; document.exitFullscreen().catch(() => {}); }
+    if (alive) $('[data-act="live"]', root)?.focus({ preventScroll: true });
   }
 
   async function poll() {
     clearTimeout(pollTimer); pollTimer = null;
-    const m = model();
-    const p = m && nav.plan ? m.plans.find((x) => x.id === nav.plan) : null;
-    if (!alive || !p || paneOf(m, p) !== 'live') return;
+    const cur = current();
+    if (!alive || !layer || !cur) return;
     if (document.visibilityState === 'hidden') return; // onVisible starts it again
+    const { m, p } = cur;
     const asked = Date.now();
     try {
       const st = await ctx.store.pcoLive(p.id);
@@ -275,16 +314,22 @@ export function mount(el, ctx) {
     } catch (e) {
       s.liveError = e.message;
     }
-    if (!alive || nav.plan !== p.id || paneOf(m, p) !== 'live') return;
-    const sig = liveSig();
-    if (sig !== s.sig) { const box = $('#lv', root); if (box) box.innerHTML = liveHtml(m, p); }
-    tick(m, p);
+    if (!alive || !layer || nav.plan !== p.id) return;
+    paint();
     pollTimer = setTimeout(poll, p._day === m.today ? POLL_MS : SLOW_POLL_MS);
   }
 
-  function liveSig() {
-    const st = s.live;
-    return st ? [st.current_id, st.current?.start, st.next_id, st.controller, st.full_read_at, !!s.liveError, nav.full].join('|') : `none|${!!s.liveError}|${nav.full}`;
+  /** Redraw the layer when what it shows changed (the numbers tick on their own). */
+  function paint() {
+    const cur = current();
+    if (!layer || !cur) return;
+    const w = s.live && s.live.available !== false ? where(s.live, now()) : null;
+    const sig = [s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.full_read_at, !!s.liveError, !!s.live,
+      w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
+    if (sig === s.sig) { tick(); return; }
+    s.sig = sig;
+    layer.innerHTML = liveHtml(cur.m, cur.p, w);
+    tick();
   }
 
   /** Where the service is, worked out from a Live answer and the time now. */
@@ -297,8 +342,8 @@ export function mount(el, ctx) {
       || services.find((x) => !x.live_ends_at && Date.parse(x.ends_at || x.starts_at) > t - 3600e3)
       || services[services.length - 1] || null;
     const timesFor = new Map((st.item_times || []).filter((x) => x && (!pt || x.plan_time_id === pt.id)).map((x) => [x.item_id, x]));
-    const rows = items.map((it) => ({ it, t: timesFor.get(it.id) || null }));
-    const run = rows.filter((r) => r.it.kind !== 'header' && !r.t?.exclude && (r.t || !timesFor.size));
+    const run = items.filter((it) => it.kind !== 'header').map((it) => ({ it, t: timesFor.get(it.id) || null }))
+      .filter((r) => !r.t?.exclude && (r.t || !timesFor.size));
     const cur = st.current ? run.findIndex((r) => r.it.id === st.current.item_id) : -1;
     const len = (r) => Math.max(0, r.it.length || 0) * 1000;
     const planned = run.reduce((n, r) => n + len(r), 0);
@@ -317,111 +362,134 @@ export function mount(el, ctx) {
       const begun = Date.parse(st.current.start || r.t?.start || t);
       item = { r, begun, elapsed: t - begun, length: len(r), left: len(r) - (t - begun) };
     }
-    const after = cur >= 0 ? run.slice(cur + 1) : state === 'wait' ? run : [];
-    const restMs = after.reduce((n, r) => n + len(r), 0);
-    const projected = state === 'live' ? t + Math.max(0, item.left) + restMs : state === 'wait' && plannedStart ? Math.max(t, plannedStart) + planned : null;
-    // When each item starts: what happened, then what's planned from now.
-    // (Items before the current one that never went live were skipped: no time.)
-    let at = state === 'wait' ? Math.max(t, plannedStart ?? t) : null;
-    const when = new Map();
-    run.forEach((r, k) => {
-      if (r.t?.start && state !== 'wait' && (state !== 'live' || k <= cur)) {
-        const end = r.t.end ? Date.parse(r.t.end) : run[k + 1]?.t?.start ? Date.parse(run[k + 1].t.start) : null;
-        when.set(r.it.id, { start: Date.parse(r.t.start), actual: end ? end - Date.parse(r.t.start) : k === cur ? t - Date.parse(r.t.start) : null });
-        if (k === cur) at = Math.max(t, Date.parse(r.t.start) + len(r));
-      } else if (state === 'live' && k < cur) {
-        when.set(r.it.id, { skipped: true });
-      } else if (at != null) {
-        when.set(r.it.id, { start: at, planned: true });
-        at += len(r);
-      }
-    });
+    const rest = state === 'live' ? run.slice(cur + 1) : state === 'wait' ? run : [];
+    const restMs = rest.reduce((n, r) => n + len(r), 0);
+    const projected = state === 'live' ? t + Math.max(0, item.left) + restMs : null;
     const lastEnd = (pt?.live_ends_at ? Date.parse(pt.live_ends_at) : null)
       ?? run.map((r) => (r.t?.end ? Date.parse(r.t.end) : null)).filter(Boolean).sort((a, b) => b - a)[0] ?? null;
+    // Before the service: the plan's schedule (Doors Open, then the service). What's on now
+    // (the latest-starting block under way) and the next thing to start.
+    const blocks = shownTimes(pts).map((x) => ({ ...x, s: Date.parse(x.starts_at), e: x.ends_at ? Date.parse(x.ends_at) : null }));
+    const block = state === 'wait' ? blocks.filter((x) => x.kind !== 'service' && x.s <= t && (x.e == null || x.e > t)).sort((a, b) => b.s - a.s)[0] || null : null;
+    const nextBlock = state === 'wait' ? blocks.find((x) => x.s > t) || null : null;
     return {
-      pt, run, rows, cur, item, state, planned, plannedStart, first, projected, when, lastEnd,
-      next: state === 'live' ? run[cur + 1] || null : state === 'wait' ? run[0] || null : null,
-      after: state === 'live' ? run[cur + 2] || null : state === 'wait' ? run[1] || null : null,
+      pt, run, cur, item, state, planned, plannedStart, first, projected, lastEnd, block, nextBlock,
+      next: state === 'live' ? run[cur + 1] || null : null,
+      then: state === 'live' ? run[cur + 2] || null : null,
+      upFirst: state === 'wait' ? run[0] || null : null,
     };
   }
 
-  function liveHtml(m, p) {
-    s.sig = liveSig();
+  function liveHtml(m, p, w) {
     const st = s.live;
-    if (!st) {
-      if (s.liveError) return `<div class="lv lv-off"><p>Couldn’t reach Planning Center Live: ${esc(s.liveError)}</p><p class="fine">Trying again every few seconds.</p></div>`;
-      return `<div class="lv lv-loading"><div class="sk tall"></div></div>`;
+    const title = p.title || m.type(p).name;
+    const top = (badge) => `<header class="lvx-top">
+        ${badge}
+        <span class="lvx-event">${esc(title)}</span>
+        <span class="lvx-wall" data-tick="wall"></span>
+        <button type="button" class="lvx-close" data-act="close" aria-label="Close Live">${icon('close')}</button>
+      </header>`;
+    if (!st || st.available === false || !w) {
+      const msg = !st ? (s.liveError ? `Couldn’t reach Planning Center Live: ${esc(s.liveError)}. Trying again.` : 'Reading Planning Center Live…')
+        : `Planning Center Live isn’t available for this plan.${st.note ? ` ${esc(st.note)}` : ''}`;
+      return `<div class="lvx">${top('<span class="lv-badge">Live</span>')}<p class="lvx-msg">${msg}</p></div>`;
     }
-    if (st.available === false) return `<div class="lv lv-off"><p>Planning Center Live isn’t available for this plan.</p>${st.note ? `<p class="fine">${esc(st.note)}</p>` : ''}</div>`;
-    const w = where(st, now());
     const hhmm = (ms) => m.c.time(ms);
-    const meta = (it) => [it.kind === 'song' ? 'Song' : it.kind === 'media' ? 'Media' : null, it.key_name ? `Key ${it.key_name}` : null,
-      it.description && it.description.length <= 40 && !/\n/.test(it.description) ? it.description : null].filter(Boolean).join(' · ');
-    const now_ = w.state === 'live' ? w.item.r.it : w.next?.it;
     const badge = w.state === 'live' ? '<span class="lv-badge is-live"><i></i>Live</span>'
       : w.state === 'done' ? '<span class="lv-badge is-done">Ended</span>' : '<span class="lv-badge">Not started</span>';
-    const notes = (it) => (it?.notes || []).map((n) => `<span class="fl-note"><em ${noteDep(n.category)}>${esc(n.category)}</em>${esc(n.content)}</span>`).join('');
-    const nowBlock = w.state === 'done'
-      ? `<div class="lv-now"><small class="lv-k">Service</small>
-          <h3>Over</h3>
-          <div class="lv-clock is-small">${w.first && w.lastEnd ? esc(dur(w.lastEnd - w.first)) : '—'}</div>
-          <p class="lv-sub">${w.first ? `Started ${esc(hhmm(w.first))}` : ''}${w.lastEnd ? ` · ended ${esc(hhmm(w.lastEnd))}` : ''} · planned ${esc(dur(w.planned))}</p>
-        </div>`
-      : `<div class="lv-now">
-          <small class="lv-k">${w.state === 'live' ? 'Now' : 'Up first'}</small>
-          <h3>${esc(now_?.title || 'Nothing in the flow')}</h3>
-          ${now_ && meta(now_) ? `<p class="lv-meta">${esc(meta(now_))}</p>` : ''}
-          <div class="lv-clock" data-tick="big">—</div>
-          ${w.state === 'live' ? '<div class="lv-bar"><i data-tick="bar"></i></div>' : ''}
-          <p class="lv-sub" data-tick="sub"></p>
-          ${notes(now_) ? `<div class="lv-notes">${notes(now_)}</div>` : ''}
-        </div>`;
-    const next = w.state === 'done' ? null : w.state === 'live' ? w.next : w.after;
-    const rows = w.rows.map((r) => {
-      if (r.it.kind === 'header') return `<li class="fl-head"><span>${esc(r.it.title || 'Section')}</span></li>`;
-      if (!w.run.includes(r)) return '';
-      const k = w.run.indexOf(r);
-      const at = w.when.get(r.it.id);
-      const stateCls = at?.skipped ? 'is-skipped' : w.state === 'live' ? (k < w.cur ? 'is-done' : k === w.cur ? 'is-now' : '') : w.state === 'done' && at?.start && !at.planned ? 'is-done' : '';
-      const planned = Math.max(0, r.it.length || 0) * 1000;
-      const actual = at?.start && !at.planned && at.actual != null ? at.actual : null;
-      const diff = actual != null && planned && k !== w.cur ? actual - planned : null;
-      return `<li class="fl-item lv-row fl-${esc(r.it.kind)} ${stateCls}" ${k === w.cur ? 'data-tick-row="now"' : ''}>
-        <span class="fl-time">${at?.start ? esc(hhmm(at.start).replace(/\s?[AP]M$/, '')) : ''}</span>
-        <div class="fl-main"><b>${esc(r.it.title || 'Untitled')}</b>${meta(r.it) ? `<span class="fl-meta">${esc(meta(r.it))}</span>` : ''}</div>
-        <span class="fl-len lv-len">${k === w.cur ? `<b data-tick="rowlen">${esc(dur(actual ?? 0))}</b><small>of ${esc(dur(planned))}</small>`
-          : actual != null ? `<b>${esc(dur(actual))}</b>${diff != null && Math.abs(diff) >= 1000 ? `<small class="${diff > 0 ? 'is-over' : 'is-under'}">${diff > 0 ? '+' : '−'}${esc(dur(Math.abs(diff)))}</small>` : '<small>on time</small>'}`
-          : at?.skipped ? '<small>Skipped</small>' : planned ? esc(dur(planned)) : ''}</span>
-      </li>`;
-    }).join('');
-    return `<div class="lv ${nav.full ? 'is-full' : ''}" data-state="${w.state}">
-        <div class="lv-top">
-          ${badge}
-          <span class="lv-by">${st.controller ? `Driven by <b>${esc(st.controller)}</b>` : w.state === 'live' ? 'Planning Center Live' : ''}</span>
-          <span class="lv-wall" data-tick="wall"></span>
-          <button type="button" class="btn small ghost lv-fullbtn" data-act="full" aria-pressed="${nav.full}" title="${nav.full ? 'Leave full screen' : 'Full screen (keeps the screen on)'}">${icon(nav.full ? 'close' : 'expand')}<span>${nav.full ? 'Done' : 'Full screen'}</span></button>
-        </div>
-        ${nowBlock}
-        ${next ? `<div class="lv-next"><small class="lv-k">Next</small><b>${esc(next.it.title || 'Untitled')}</b><span>${esc(dur(Math.max(0, next.it.length || 0) * 1000))}</span></div>` : ''}
-        ${w.state !== 'done' ? `<div class="lv-svc">
-          <div><small class="lv-k">${w.state === 'live' ? 'Service' : 'Starts'}</small><b data-tick="svc">—</b></div>
-          <div><small class="lv-k">Planned</small><b>${esc(dur(w.planned))}</b></div>
-          <div><small class="lv-k">${w.state === 'live' ? 'On pace to end' : 'Ends about'}</small><b data-tick="proj">—</b><em data-tick="delta"></em></div>
-        </div>` : ''}
+    const meta = (it) => [it.kind === 'song' ? 'Song' : it.kind === 'media' ? 'Media' : null, it.key_name ? `Key ${it.key_name}` : null,
+      it.description && it.description.length <= 40 && !/\n/.test(it.description) ? it.description : null].filter(Boolean).join(' · ');
+    const itemCard = (r, k, opts = {}) => `<section class="lvx-card ${opts.cls || ''}">
+        <div class="lvx-k"><span>${esc(k)}</span>${opts.right || ''}</div>
+        <h2>${esc(r.it.title || 'Untitled')}</h2>
+        ${meta(r.it) ? `<p class="lvx-meta">${esc(meta(r.it))}</p>` : ''}
+        ${opts.clock || ''}
+        ${notesHtml(r.it)}
+        ${opts.after || ''}
+      </section>`;
+    let main = '';
+    if (w.state === 'live') {
+      const r = w.item.r;
+      main = itemCard(r, 'Now', {
+        cls: 'is-now',
+        right: `<span class="lvx-len">${esc(dur(w.item.length))} planned</span>`,
+        clock: `<div class="lvx-clock" data-tick="big">—</div><div class="lv-bar"><i data-tick="bar"></i></div><p class="lvx-sub" data-tick="sub"></p>`,
+      }) + (w.next ? itemCard(w.next, 'Next', {
+        cls: 'is-next',
+        right: `<span class="lvx-len">${esc(dur(Math.max(0, w.next.it.length || 0) * 1000))}</span>`,
+        after: w.then ? `<p class="lvx-then">Then <b>${esc(w.then.it.title || 'Untitled')}</b></p>` : '',
+      }) : '<section class="lvx-card is-next"><div class="lvx-k"><span>Next</span></div><h2>End of the service</h2></section>');
+    } else if (w.state === 'wait') {
+      const late = w.plannedStart != null && now() >= w.plannedStart;
+      const nowCard = `<section class="lvx-card is-now">
+          <div class="lvx-k"><span>Now</span>${w.block ? `<span class="lvx-len">${esc(hhmm(w.block.s))}${w.block.e ? `–${esc(hhmm(w.block.e))}` : ''}</span>` : ''}</div>
+          <h2>${esc(late ? 'Waiting for Planning Center Live' : w.block ? timeName(w.block) : 'Before the service')}</h2>
+          <div class="lvx-clock" data-tick="big">—</div>
+          <p class="lvx-sub" data-tick="sub"></p>
+        </section>`;
+      const nextCard = !late && w.nextBlock && w.nextBlock.kind !== 'service' ? `<section class="lvx-card is-sched">
+          <div class="lvx-k"><span>Next</span><span class="lvx-len">${esc(hhmm(w.nextBlock.s))}</span></div>
+          <h2>${esc(timeName(w.nextBlock))}</h2>
+        </section>` : '';
+      const first = w.upFirst ? itemCard(w.upFirst, 'Up first', {
+        cls: 'is-next',
+        right: `<span class="lvx-len">${w.plannedStart ? `${esc(hhmm(w.plannedStart))} · ` : ''}${esc(dur(Math.max(0, w.upFirst.it.length || 0) * 1000))}</span>`,
+        after: w.run[1] ? `<p class="lvx-then">Then <b>${esc(w.run[1].it.title || 'Untitled')}</b></p>` : '',
+      }) : '';
+      main = nowCard + `<div class="lvx-stack">${nextCard}${first}</div>`;
+    } else {
+      main = `<section class="lvx-card is-now">
+          <div class="lvx-k"><span>Service</span></div>
+          <h2>Over</h2>
+          <div class="lvx-clock is-small">${w.first && w.lastEnd ? esc(dur(w.lastEnd - w.first)) : '—'}</div>
+          <p class="lvx-sub">${w.first ? `Started ${esc(hhmm(w.first))}` : ''}${w.lastEnd ? ` · ended ${esc(hhmm(w.lastEnd))}` : ''} · planned ${esc(dur(w.planned))}</p>
+        </section>`;
+    }
+    const foot = w.state === 'live' ? `<footer class="lvx-foot">
+        <span><small>Service</small><b data-tick="svc">—</b></span>
+        <span><small>Planned</small><b>${esc(dur(w.planned))}</b></span>
+        <span><small>On pace to end</small><b data-tick="proj">—</b><em data-tick="delta"></em></span>
+        ${st.controller ? `<span class="lvx-by"><small>Driving</small><b>${esc(st.controller)}</b></span>` : ''}
+      </footer>` : w.state === 'wait' ? `<footer class="lvx-foot">
+        <span><small>Service</small><b>${w.plannedStart ? esc(hhmm(w.plannedStart)) : '—'}</b></span>
+        <span><small>Planned</small><b>${esc(dur(w.planned))}</b></span>
+        <span><small>Ends about</small><b>${w.plannedStart ? esc(hhmm(w.plannedStart + w.planned)) : '—'}</b></span>
+      </footer>` : '';
+    return `<div class="lvx" data-state="${w.state}">
+        ${top(badge)}
+        <div class="lvx-main">${main}</div>
+        ${foot}
         ${s.liveError ? `<p class="lv-warn">${icon('warn')}Lost Planning Center Live for a moment: ${esc(s.liveError)}. Still trying.</p>` : ''}
-      </div>
-      ${nav.full ? '' : `<ol class="flow lv-flow">${rows}</ol>
-      <p class="lv-foot" data-tick="foot"></p>`}`;
+      </div>`;
+  }
+
+  /** Audio, CG and Lighting always; then any other category the item has, by its own name. */
+  function notesHtml(it) {
+    const notes = it?.notes || [];
+    const used = new Set();
+    const rows = NOTE_COLS.map((col) => {
+      const hit = notes.filter((n) => col.re.test(String(n.category || '').trim()));
+      hit.forEach((n) => used.add(n));
+      return { label: col.label, dep: col.dep, text: hit.map((n) => n.content).join('\n') };
+    });
+    const extra = notes.filter((n) => !used.has(n)).map((n) => ({ label: n.category || 'Note', dep: null, text: n.content }));
+    return `<dl class="lvx-notes">${[...rows, ...extra].map((r) => `<div class="${r.text ? '' : 'is-empty'}">
+        <dt ${r.dep ? `data-dep="${r.dep}"` : ''}>${esc(r.label)}</dt><dd>${r.text ? esc(r.text).replace(/\n/g, '<br>') : '—'}</dd>
+      </div>`).join('')}</dl>`;
   }
 
   /** Every quarter second: the numbers only. */
-  function tick(m, p) {
-    const box = $('#lv', root);
-    if (!box || !s.live || s.live.available === false) return;
+  function tick() {
+    if (!layer) return;
+    const cur = current();
+    if (!cur || !s.live || s.live.available === false) return;
+    const { m } = cur;
     const t = now();
     const w = where(s.live, t);
+    // The schedule moved on (Doors Open became Worship Center Doors Open, the service time passed): redraw.
+    if ([s.live.current_id, s.live.current?.start, s.live.controller, s.live.full_read_at, !!s.liveError, !!s.live, w.state, w.block?.id, w.nextBlock?.id].join('|') !== s.sig) { paint(); return; }
     const set = (k, v, cls) => {
-      const x = $(`[data-tick="${k}"]`, box);
+      const x = $(`[data-tick="${k}"]`, layer);
       if (!x) return;
       if (x.textContent !== v) x.textContent = v;
       if (cls !== undefined) { const c = k === 'big' && v.length > 6 ? `${cls} is-long` : cls; if (x.className !== c) x.className = c; }
@@ -433,55 +501,37 @@ export function mount(el, ctx) {
     set('wall', wallFmt.format(t));
     if (w.state === 'live') {
       const left = w.item.left;
-      set('big', left >= 0 ? dur(left) : `+${dur(-left)}`, `lv-clock ${left < 0 ? 'is-over' : left < 30000 ? 'is-close' : ''}`);
-      const bar = $('[data-tick="bar"]', box);
+      set('big', left >= 0 ? dur(left) : `+${dur(-left)}`, `lvx-clock ${left < 0 ? 'is-over' : left < 30000 ? 'is-close' : ''}`);
+      const bar = $('[data-tick="bar"]', layer);
       if (bar) { bar.style.width = `${Math.min(100, w.item.length ? (w.item.elapsed / w.item.length) * 100 : 100).toFixed(1)}%`; bar.classList.toggle('is-over', left < 0); }
-      set('sub', left >= 0 ? `${dur(w.item.elapsed)} in · ${dur(w.item.length)} planned` : `Over by ${dur(-left)} · ${dur(w.item.length)} planned`);
-      set('rowlen', dur(w.item.elapsed));
+      set('sub', left >= 0 ? `Left in this item · ${dur(w.item.elapsed)} in` : `Over by ${dur(-left)} · ${dur(w.item.elapsed)} in`);
       if (w.first) set('svc', dur(t - w.first));
-    } else if (w.state === 'wait') {
-      const until = w.plannedStart != null ? w.plannedStart - t : null;
-      if (until != null && until > 0) {
-        set('big', dur(until), 'lv-clock is-wait');
-        set('sub', `Until ${m.c.time(w.plannedStart)} · waiting for Planning Center Live`);
-      } else {
-        set('big', until != null ? `+${dur(-until)}` : '—', 'lv-clock is-late');
-        set('sub', `${w.plannedStart ? `Planned for ${m.c.time(w.plannedStart)} · ` : ''}waiting for someone to start Planning Center Live`);
-      }
-      set('svc', w.plannedStart ? m.c.time(w.plannedStart) : '—');
-    }
-    if (w.projected != null) {
-      set('proj', m.c.time(w.projected));
-      const target = w.state === 'live' && w.first != null ? (w.plannedStart ?? w.first) + w.planned : null;
-      if (target != null) {
+      if (w.projected != null) {
+        set('proj', m.c.time(w.projected));
+        const target = (w.plannedStart ?? w.first) + w.planned;
         const d = w.projected - target;
         set('delta', Math.abs(d) < 30000 ? 'on time' : `${d > 0 ? '+' : '−'}${dur(Math.abs(d))} ${d > 0 ? 'long' : 'short'}`, Math.abs(d) < 30000 ? 'is-ok' : d > 0 ? 'is-over' : 'is-under');
-      } else set('delta', '');
+      }
+    } else if (w.state === 'wait') {
+      const target = w.nextBlock ? w.nextBlock.s : w.plannedStart;
+      if (target != null && target > t) {
+        set('big', dur(target - t), 'lvx-clock is-wait');
+        set('sub', w.nextBlock?.kind === 'service' || !w.nextBlock ? `Until the service · ${m.c.time(target)}` : `Until ${timeName(w.nextBlock)} · ${m.c.time(target)}`);
+      } else {
+        set('big', w.plannedStart != null ? `+${dur(t - w.plannedStart)}` : '—', 'lvx-clock is-over');
+        set('sub', w.plannedStart != null ? `Past the service time (${m.c.time(w.plannedStart)}) · starts when someone starts Planning Center Live` : 'Starts when someone starts Planning Center Live');
+      }
     }
-    const read = s.live.read_at ? Date.parse(s.live.read_at) : null;
-    set('foot', `From Planning Center Live${read ? `, read ${Math.max(0, Math.round((t - read) / 1000))}s ago` : ''}. Updates by itself.`);
   }
 
-  function setFull(on, redraw = true) {
-    nav.full = !!on;
-    document.documentElement.classList.toggle('lv-full-on', nav.full);
-    // Where the browser can (not iPhone Safari), the whole screen: no browser bars either.
-    try {
-      if (nav.full && !document.fullscreenElement && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().then(() => { browserFull = true; }).catch(() => {});
-      } else if (!nav.full && document.fullscreenElement) { browserFull = false; document.exitFullscreen().catch(() => {}); }
-    } catch { /* not offered */ }
-    keepAwake(nav.full);
-    if (redraw) { const m = model(); const p = m?.plans.find((x) => x.id === nav.plan); const box = $('#lv', root); if (m && p && box) { box.innerHTML = liveHtml(m, p); tick(m, p); } }
-  }
-
-  /** Full screen keeps the screen on (a phone as a confidence monitor). */
+  /** The screen stays on while Live is open (a phone as a confidence screen). */
   async function keepAwake(on) {
     try {
       if (on && !wake && navigator.wakeLock && document.visibilityState === 'visible') {
         wake = await navigator.wakeLock.request('screen');
         wake.addEventListener?.('release', () => { wake = null; });
-      } else if (!on && wake) { const w = wake; wake = null; await w.release(); }
+        if (!layer) { const x = wake; wake = null; await x.release(); } // closed while asking
+      } else if (!on && wake) { const x = wake; wake = null; await x.release(); }
     } catch { wake = null; }
   }
 
@@ -523,7 +573,7 @@ export function mount(el, ctx) {
     const blocks = teams.map((tm) => {
       const order = new Map((tm.positions || []).map((x, i) => [teamKey(x.name), i]));
       const rank = (pos) => (order.has(teamKey(pos)) ? order.get(teamKey(pos)) : 500);
-      const rows = crew.filter((r) => r.team_id === tm.id && !hiddenPosition(r.position)).sort((a, b) => rank(a.position) - rank(b.position) || String(a.name).localeCompare(String(b.name)));
+      const rows = crew.filter((r) => r.team_id === tm.id).sort((a, b) => rank(a.position) - rank(b.position) || String(a.name).localeCompare(String(b.name)));
       const open = needed.filter((n) => n.team_id === tm.id);
       if (!rows.length && !open.length) return '';
       return `<div class="svc-team"><h4>${esc(tm.name)} <span class="count">${rows.filter((r) => r.status !== 'D').length}</span></h4>
@@ -546,6 +596,16 @@ export function mount(el, ctx) {
     </li>`;
   }
 }
+
+/** A plan's times once each: Planning Center lists the service twice on some plans (the
+ *  service, and an "other" time named Service at the same start). */
+function shownTimes(times) {
+  const svcStarts = new Set(times.filter((x) => x.kind === 'service').map((x) => x.starts_at));
+  return times.filter((x) => x.starts_at && !(x.kind !== 'service' && /^service$/i.test(x.name || '') && svcStarts.has(x.starts_at)))
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+}
+
+const timeName = (x) => x.name || (x.kind === 'service' ? 'Service' : x.kind === 'rehearsal' ? 'Rehearsal' : 'Other');
 
 /** 75000 → "1:15", 3725000 → "1:02:05". */
 function dur(ms) {

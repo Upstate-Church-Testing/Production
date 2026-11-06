@@ -111,19 +111,26 @@ their own page in the sidebar. Which services are events is set per Planning Cen
 the **Event** chip beside it in Settings › Planning Center (`pco_service_types.is_event`, `pco_set_event`). Simpsonville › Events is one, shared
 with staff and kept off Scheduling (`on_roster` false), so the sync copies its plans, flow and
 team like any other shared service. The page lists what's coming up (today's in red), then
-the last few past ones; an event opens on its times and three panes:
+the last few past ones; an event opens on its times, a Live button and two panes (Flow, Team):
 
-- **Live**: where the service is right now, from Planning Center Live. The item that's up
-  with its time left in big numbers (amber in the last 30 seconds, red and counting up once
-  it's over), a bar, what's next, how long the service has run, the planned length, and the
-  time it's on pace to end (long or short against the plan). Below, the run of show: what's
-  done with how long each actually took (+/- the plan), the one that's up, and when the rest
-  should start from here. Before Live starts: a countdown to the service time and what's up
-  first. When it's over: when it started and ended, and how long it ran. **Full screen** is
-  a confidence screen: the clock alone, the browser's full screen where it has one (not on
-  iPhone), and the screen kept awake.
+- **Live** (the red button under the times): a full-screen production view of Planning
+  Center Live, on its own layer over the whole app (`.lvx-root` on `<body>`: inside the page,
+  iPhone Safari clipped it to the event card). Close it with ✕ (or Esc).
+  Before the service: what's on now from the plan's times (Doors Open), a countdown to the
+  next thing (Worship Center Doors Open, then the service), what that is, and the item up
+  first. Past the service time with Live not started: how late, counting up in red.
+  During: the item that's up with its time left in big numbers (amber in the last 30
+  seconds, red and counting up once it's over), a bar, what's next and the one after; along
+  the bottom how long the service has run, the planned length, the time it's on pace to end
+  (long or short against the plan) and who's driving. After: when it started and ended.
+  Every item shows its **production notes**: Audio (Planning Center's "Audio" and "Audio
+  (FOH)" note categories), CG ("CG") and Lighting ("Lighting", "Lighting Operator") always, a
+  dash when there's none; then any other category the item has (Video, Media, Producer…)
+  under its own name. Side by side (Now left, Next right) on a computer or a phone on its
+  side. The screen stays awake while it's open, and computers and iPads go to the browser's
+  full screen.
   When someone hits Next in Planning Center Live, every screen follows within about two
-  seconds: the app asks `pco-live` every 1.5 seconds while Live is on screen, and `pco-live`
+  seconds: the app asks `pco-live` every 1.5 seconds while Live is open, and `pco-live`
   reads Planning Center at most every 1.5 seconds per plan however many screens are watching
   (`pco_live_cache` holds the last answer; items and their times are read again when the item
   moves, or every 20 seconds). Planning Center has no push for Live to a token like ours, so
