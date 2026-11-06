@@ -16,6 +16,45 @@ import { openScheduleSheet, takeOff } from './schedule-sheet.js';
 
 const POLL_MS = 20000; // backup for the live push (a phone that slept, a dropped connection)
 const LETTER_NAME = { V: 'Vintage', M: 'Modern', N: 'North Modern', T: 'Traditional', E: 'Español', W: 'Midweek' };
+
+// The Scheduling grid on a phone uses short labels so three weeks fit across. Both the
+// full and the short label are drawn; CSS shows one (.lf full, .ls short).
+const both = (full, short) => (short && short !== full ? `<span class="lf">${esc(full)}</span><span class="ls">${esc(short)}</span>` : esc(full));
+/** AN, FF, FI, GVL, GCC, HB, MLN, SVL: a location's code, with the two the team says differently. */
+const CAMPUS_SHORT = { AND: 'AN', MAU: 'MLN' };
+const campusShort = (c) => (c ? CAMPUS_SHORT[c.code] || c.code || c.short_name : 'Other');
+/** CG, LX, C1, TD, DIR…: positions as the team says them. Anything unknown stays as it is. */
+function positionShort(name) {
+  const n = String(name || '').trim();
+  const cam = /^cam(?:era)?\s*(\d+)\b/i.exec(n);
+  if (cam) return `C${cam[1]}`;
+  if (/^td\b|\bswitcher\b/i.test(n)) return 'TD';
+  const ptz = /^ptz\s*seat\s*(\d+)/i.exec(n);
+  if (ptz) return `PTZ${ptz[1]}`;
+  return n
+    .replace(/\bcomputer graphics\b/gi, 'CG')
+    .replace(/\blight(?:ing|s)?\b/gi, 'LX')
+    .replace(/\bdirector\b/gi, 'DIR')
+    .replace(/\bproducer\b/gi, 'PROD')
+    .replace(/\bstage manager\b/gi, 'SM')
+    .replace(/\(?\btraining\b\)?/gi, 'TR')
+    .replace(/\b(?:audio|sound)\b/gi, 'AUD')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, ' ');
+}
+const teamShort = (t) => (String(t).length <= 4 ? t : String(t).split(/[\s/]+/).filter(Boolean).map((w) => w[0]).join('').toUpperCase());
+/** First name and last initial, for a name that doesn't fit its pill on a phone. */
+function nameShort(name) {
+  const parts = String(name || '').trim().split(/\s+/);
+  return parts.length < 2 ? name : `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+/** On a phone, a name that doesn't fit its pill shows as "First L."; one that fits stays whole. */
+function fitNames(table) {
+  const names = [...table.querySelectorAll('.rp b')].filter((b) => b.querySelector('.ns'));
+  names.forEach((b) => b.classList.remove('is-short'));
+  if (window.innerWidth >= 700) return;
+  names.filter((b) => b.scrollWidth > b.clientWidth + 0.5).forEach((b) => b.classList.add('is-short'));
+}
 const FAST_MS = 3000;
 
 export function mount(el, ctx) {
@@ -63,7 +102,7 @@ export function mount(el, ctx) {
           <button type="button" role="tab" data-smode="mine">My schedule</button>
         </div>
         <div class="seg ros-week" role="tablist" aria-label="Which services" id="s-week" hidden>
-          <button type="button" role="tab" data-week="sun">Sunday mornings</button>
+          <button type="button" role="tab" data-week="sun">${both('Sunday mornings', 'Sundays')}</button>
           <button type="button" role="tab" data-week="mid">Wednesdays</button>
         </div>
         <div class="ros-head" id="s-rhead" hidden>${dropdownHtml('s-rloc', 'Location', 'caps slim')}</div>
@@ -692,13 +731,15 @@ export function mount(el, ctx) {
           openPills(row, d, cell)}</div></td>`;
       }).join('');
       const label = row.showTeam ? `${row.position} · ${row.team}` : row.position;
+      const short = row.showTeam ? `${positionShort(row.position)}·${teamShort(row.team)}` : positionShort(row.position);
+      const place = ctx.campusById.get(row.campusId);
       const loc = !campus && ri === 0
-        ? `<th class="ros-loc" rowspan="${g.rows.length}" scope="rowgroup"><span>${esc(ctx.campusById.get(row.campusId)?.short_name || 'Other')}</span></th>` : '';
-      return `<tr class="${ri === 0 ? 'ros-first' : ''}">${loc}<th class="ros-pos" scope="row" title="${esc(`${row.position} · ${row.team}`)}">${esc(label)}</th>${cells}</tr>`;
+        ? `<th class="ros-loc" rowspan="${g.rows.length}" scope="rowgroup" title="${esc(place?.short_name || 'Other')}"><span>${both(place?.short_name || 'Other', campusShort(place))}</span></th>` : '';
+      return `<tr class="${ri === 0 ? 'ros-first' : ''}">${loc}<th class="ros-pos" scope="row" title="${esc(`${row.position} · ${row.team}`)}">${both(label, short)}</th>${cells}</tr>`;
     }).join('')).join('');
     const head = days.map((d) => {
       const p = m.plans.find((x) => x._day === d);
-      return `<th class="ros-day ${when(d)}" scope="col" ${d < today ? 'title="Already happened"' : ''}>${esc(d === today ? 'Today' : m.c.weekday(p.sort_date).slice(0, 3))} <b>${esc(m.c.date(p.sort_date))}</b></th>`;
+      return `<th class="ros-day ${when(d)}" scope="col" ${d < today ? 'title="Already happened"' : ''}>${d === today ? 'Today' : `<span class="lf">${esc(m.c.weekday(p.sort_date).slice(0, 3))}</span>`} <b>${esc(m.c.date(p.sort_date))}</b></th>`;
     }).join('');
     const foot = totals.map((t, i) => `<td class="${when(days[i])}"><span class="ros-tot">${[
       t.C ? `<span class="st-C" title="Confirmed">${t.C}</span>` : '',
@@ -718,9 +759,9 @@ export function mount(el, ctx) {
     return `
       <div class="ros-wrap">
         <table class="ros ${campus ? 'one-place' : ''}">
-          <thead><tr>${campus ? '' : '<th class="ros-corner ros-loc-h" scope="col">Location</th>'}<th class="ros-corner ros-pos-h" scope="col">Position</th>${head}</tr></thead>
+          <thead><tr>${campus ? '' : `<th class="ros-corner ros-loc-h" scope="col">${both('Location', 'Loc')}</th>`}<th class="ros-corner ros-pos-h" scope="col">${both('Position', 'Pos')}</th>${head}</tr></thead>
           <tbody>${body}</tbody>
-          <tfoot><tr><th class="ros-foot-h" ${campus ? '' : 'colspan="2"'}>Totals</th>${foot}</tr></tfoot>
+          <tfoot><tr><th class="ros-foot-h" ${campus ? '' : 'colspan="2"'}>${campus ? both('Totals', 'Tot') : 'Totals'}</th>${foot}</tr></tfoot>
         </table>
       </div>`;
   }
@@ -761,7 +802,7 @@ export function mount(el, ctx) {
     }).join('');
     const label = `${name}: ${STATUS_LABEL[pill.status]}${pill.entries.length > 1 ? ` (${pill.entries.map((e) => `${kindName(m.type(e.plan), e.plan)} ${(STATUS_LABEL[e.status] || STATUS_LABEL.U).toLowerCase()}`).join(', ')})` : ''}`;
     return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
-      <span class="rp-dots">${dots}</span><b>${esc(shown)}</b>${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
+      <span class="rp-dots">${dots}</span><b>${many || nameShort(name) === name ? esc(shown) : `<span class="nf">${esc(name)}</span><span class="ns">${esc(nameShort(name))}</span>`}</b>${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
     </button>`;
   }
 
@@ -792,7 +833,19 @@ export function mount(el, ctx) {
     const tabs = document.querySelector('.nav')?.getBoundingClientRect();
     const below = tabs && tabs.top > window.innerHeight / 2 ? window.innerHeight - tabs.top + 8 : 0; // the phone tab bar
     const room = Math.max(220, window.innerHeight - top - below - 14);
-    const MAX = window.innerWidth < 600 ? 1.25 : 1.5; // on a phone, bigger would leave room for only one week
+    // On a phone, never so big that fewer than three weeks fit across beside the labels.
+    let MAX = window.innerWidth < 600 ? 1.25 : 1.5;
+    if (window.innerWidth < 700) {
+      const corner = $$('thead .ros-corner', table).pop()?.getBoundingClientRect();
+      const left = table.getBoundingClientRect().left;
+      // The three weeks it opens on: the next service and the two after it.
+      const cols = $$('thead .ros-day', table);
+      const next = cols.findIndex((c) => !c.classList.contains('is-past'));
+      const from = Math.max(0, Math.min(next < 0 ? 0 : next, cols.length - 3));
+      const three = cols.slice(from, from + 3).reduce((w, c) => w + c.getBoundingClientRect().width, 0);
+      const wider = table.offsetWidth > wrap.clientWidth + 1; // more dates than fit: columns are at their narrowest
+      if (wider && corner && three) MAX = Math.min(MAX, Math.max(0.8, wrap.clientWidth / (corner.right - left + three)));
+    }
     const clamp = (z) => Math.max(0.55, Math.min(MAX, z)); // past 0.55 it scrolls instead of shrinking
     const apply = (z) => {
       table.style.zoom = z.toFixed(3);
@@ -807,10 +860,11 @@ export function mount(el, ctx) {
       rows.forEach((tr, k) => { tr.style.height = `${(natRows[k] + extra).toFixed(2)}px`; });
       return apply(zz);
     };
+    const done = (r) => { fitNames(table); return r; };
     if (size?.z) { // a size worked out elsewhere: use it as it is
       apply(size.z);
       if (size.extra > 0) grow(size.z, size.extra);
-      return size;
+      return done(size);
     }
     // Text and borders snap to pixels, so height doesn't follow zoom smoothly (a step down
     // can drop a lot, a step up add a lot). Measure, and close in on the biggest zoom that fits.
@@ -839,7 +893,7 @@ export function mount(el, ctx) {
     // make the rows taller so the grid still reaches the bottom of the screen.
     const zz = Number(table.style.zoom) || 1;
     let { h, space } = apply(zz);
-    if (size || zz < MAX - 0.001 || h >= space - 4 || !rows.length) return { z: zz, extra: 0 };
+    if (size || zz < MAX - 0.001 || h >= space - 4 || !rows.length) return done({ z: zz, extra: 0 });
     let extra = (space - h) / zz / rows.length;
     for (let i = 0; i < 3; i++) {
       ({ h, space } = grow(zz, extra));
@@ -847,7 +901,7 @@ export function mount(el, ctx) {
       extra += (space - h) / zz / rows.length;
     }
     if (h > space + 0.5) { extra -= (h - space) / zz / rows.length + 0.5; grow(zz, extra); }
-    return { z: zz, extra };
+    return done({ z: zz, extra });
   }
 
   /** One person's day on one position: each service and their answer to it. */

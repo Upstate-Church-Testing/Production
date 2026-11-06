@@ -496,6 +496,13 @@ title's line), panels that start higher with a smaller title, the brand folded i
 line under it ("Yamaha QL5 · Console"), a slimmer footer, a shorter product photo, and
 tighter cards, lists and port rows. iPads and computers are unchanged.
 
+**Scheduling on phones**: the grid runs edge to edge with short labels: locations by code
+(AN, FF, FI, GVL, GCC, HB, MLN, SVL; `CAMPUS_SHORT` in `js/views/services.js` holds the two
+that differ from the code), positions as the team says them (CG, LX, C1…, TD, DIR, AUD,
+PROD), Loc / Pos for the headers, "Nov 8" without the weekday, and "Sundays". The grid is
+sized so the next three weeks fit across; a name that doesn't fit its pill shows as
+"Jordan P." (measured, not guessed). Wider screens keep the full labels.
+
 **iOS 26.0 bottom gap.** iOS 26.0 lays out home-screen apps about a status bar too short
 (fixed in 26.1), so panels pinned to the bottom stopped that far above the screen edge.
 `fitBottom()` in `js/app.js` measures the shortfall in the home-screen app on an iPhone

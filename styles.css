@@ -2815,3 +2815,34 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
   .rg-pos { padding: 12px 14px 14px; }
   .result-note:has(> .btn.link + span) { flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
 }
+
+/* ------------------------------------------- Scheduling grid on phones -- */
+/* Short labels (AN, SVL · CG, LX, C1, TD, DIR · Loc, Pos), the grid edge to edge, and
+   narrower date columns so three weeks fit across. Wider screens show the full labels. */
+.ls, .ns { display: none; }
+.rp b.is-short .nf { display: none; }
+.rp b.is-short .ns { display: inline; }
+@media (max-width: 699px) {
+  .ros .lf, .ros-week .lf { display: none; }
+  .ros .ls, .ros-week .ls { display: inline; }
+  .ros-wrap { margin-left: calc(-1 * var(--gutter-l)); margin-right: calc(-1 * var(--gutter-r)); border-left: 0; border-right: 0; border-radius: 0; }
+  .ros .ros-loc, .ros .ros-loc-h { width: 42px; min-width: 42px; max-width: 42px; }
+  .ros .ros-loc { padding: 2px 4px 2px 10px; font-size: 12px; letter-spacing: 0.02em; }
+  .ros .ros-pos, .ros .ros-pos-h { left: 42px; min-width: 40px; max-width: 64px; }
+  .ros .ros-pos { padding: 0 6px; }
+  .ros thead th { padding: 0 6px; }
+  .ros .ros-corner { letter-spacing: 0.06em; }
+  .ros .ros-loc-h { padding-left: 10px; }
+  .ros-day b { margin-left: 0; }
+  .ros td { min-width: 108px; padding: 1px 2px; }
+  .ros .rp b { contain: inline-size; flex: 1 1 auto; } /* a long name shortens with … instead of widening the week */
+  .ros .ros-foot-h { padding-left: 10px; }
+  .ros-tot { gap: 2px; }
+  .ros-tot span { min-width: 18px; height: 16px; padding: 0 4px; font-size: 10.5px; }
+  .ros tfoot td { padding: 0 2px; }
+  /* Sundays | Wednesdays and the location side by side */
+  .ros-head { flex: 1 1 150px; }
+  .ros-head .dd-label { display: none; }
+  .ros-key { gap: 2px 8px; font-size: 10.5px; }
+  .ros-key .rk, .ros-key .rk-l { gap: 4px; }
+}
