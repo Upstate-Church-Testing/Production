@@ -44,6 +44,9 @@ export async function readLive(pco: Pco, base: string) {
   return {
     available: true,
     live_id: live?.id ? String(live.id) : null,
+    // What Planning Center says Tally's account may do here.
+    can_control: live?.attributes?.can_control ?? null,
+    can_take_control: live?.attributes?.can_take_control ?? null,
     controller_id: relId(live, 'controller'),
     current_id: currentId,
     next_id: nextId,

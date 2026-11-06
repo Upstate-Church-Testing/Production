@@ -147,15 +147,27 @@ async function control(sb: any, planId: string, action: string) {
   if (!meId) throw new Problem(400, 'Couldn’t tell which Planning Center account Tally uses.');
   const lv = await readLive(pco, base);
   if (!lv.available || !lv.live_id) throw new Problem(400, 'Planning Center Live isn’t available for this plan.');
-  const liveBase = `${base}/live/${lv.live_id}`;
   const mine = lv.controller_id === meId;
+  // Planning Center's docs put Live's actions under live/{id}; on a plan's own path that can
+  // answer "not found", so the bare live/ path is tried too. A "not found" changes nothing.
+  const act = async (name: string) => {
+    let last: unknown = null;
+    for (const path of [`${base}/live/${lv.live_id}/${name}`, `${base}/live/${name}`]) {
+      try { await pco.send('POST', path); return; } catch (e) {
+        if (e instanceof PcoError && e.status === 404) { last = e; continue; }
+        throw e;
+      }
+    }
+    const allowed = lv.can_take_control === false ? ' Planning Center says the account Tally is connected with can’t take control of this plan’s Live.' : '';
+    throw new Problem(400, `Planning Center didn’t accept ${name.replace(/_/g, ' ')} from Tally.${allowed}`);
+  };
   if (action === 'take') {
-    if (!mine) await pco.send('POST', `${liveBase}/toggle_control`);
+    if (!mine) await act('toggle_control');
   } else if (action === 'release') {
-    if (mine) await pco.send('POST', `${liveBase}/toggle_control`);
+    if (mine) await act('toggle_control');
   } else {
     if (!mine) throw new Problem(409, lv.controller ? `${lv.controller} is driving in Planning Center Live. Take control first.` : 'Take control first.');
-    await pco.send('POST', `${liveBase}/${action === 'next' ? 'go_to_next_item' : 'go_to_previous_item'}`);
+    await act(action === 'next' ? 'go_to_next_item' : 'go_to_previous_item');
   }
   // Everyone's next ask gets the move: read it all again now.
   const after = await readLive(pco, base);

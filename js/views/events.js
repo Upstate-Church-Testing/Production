@@ -47,6 +47,7 @@ export function mount(el, ctx) {
     offset: 0,          // server clock minus this device's
     sig: '',            // what the Live layer was last drawn from
     busy: null,         // a Take control / Next / Back on its way to Planning Center
+    ctlError: null,     // why the last one didn't go through (shown in the Live view itself)
   };
   let pollTimer = null;
   let checkTimer = null;
@@ -333,6 +334,7 @@ export function mount(el, ctx) {
     const cur = current();
     if (!isAdmin || !cur || s.busy) return;
     s.busy = action;
+    s.ctlError = null;
     paint();
     const asked = Date.now();
     try {
@@ -341,7 +343,7 @@ export function mount(el, ctx) {
       if (st?.now) s.offset = Date.parse(st.now) - (asked + Date.now()) / 2;
       s.live = st; s.liveError = null;
     } catch (e) {
-      ctx.toast(e.message);
+      s.ctlError = e.message || 'That didn’t go through.';
     } finally {
       s.busy = null;
       if (alive) paint();
@@ -351,7 +353,7 @@ export function mount(el, ctx) {
   /** What the layer shows, in short: a change means drawing it again. */
   function sigOf(w) {
     return [s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.controller_id, s.live?.me_id, s.live?.full_read_at,
-      !!s.liveError, !!s.live, s.busy, w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
+      !!s.liveError, !!s.live, s.busy, s.ctlError, w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
   }
 
   /** Redraw the layer when what it shows changed (the numbers tick on their own). */
@@ -503,10 +505,12 @@ export function mount(el, ctx) {
     const mine = !!st.me_id && st.controller_id === st.me_id;
     const off = s.busy ? 'disabled' : '';
     const label = (act, text) => (s.busy === act ? 'Sending…' : text);
+    const err = s.ctlError ? `<p class="lvx-ctl-err" role="alert">${icon('warn')}${esc(s.ctlError)}</p>` : '';
     if (!mine) {
       return `<div class="lvx-ctl">
           <button type="button" class="lvx-btn is-take" data-act="take" ${off}>${esc(label('take', 'Take control'))}</button>
           <p class="lvx-ctl-note">${st.controller ? `<b>${esc(st.controller)}</b> is driving in Planning Center Live. Taking control moves it to Tally.` : 'Nobody is driving Planning Center Live. Take control to run it from here.'}</p>
+          ${err}
         </div>`;
     }
     return `<div class="lvx-ctl">
@@ -515,6 +519,7 @@ export function mount(el, ctx) {
           <button type="button" class="lvx-btn is-go" data-act="next" ${off} ${w.state === 'done' ? 'disabled' : ''}><span>${esc(label('next', 'Next'))}</span>${icon('chevron')}</button>
         </div>
         <p class="lvx-ctl-note">Driving Planning Center Live as <b>${esc(st.controller || 'Tally')}</b>. <button type="button" class="lvx-let" data-act="release" ${off}>Let go</button></p>
+        ${err}
       </div>`;
   }
 

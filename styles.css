@@ -3039,3 +3039,6 @@ html.lv-full-on, html.lv-full-on body { overflow: hidden; }
 @media (min-width: 900px) {
   .lvx-ctl { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; grid-template-columns: minmax(0, 520px) 1fr; align-items: center; column-gap: 16px; }
 }
+.lvx-ctl-err { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; font-weight: 600; color: var(--live); }
+.lvx-ctl-err .ico { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+html.lv-full-on #toast { z-index: 95; } /* toasts show over the Live view */
