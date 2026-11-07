@@ -491,7 +491,7 @@ export function mount(el, ctx) {
       it.description && it.description.length <= 40 && !/\n/.test(it.description) ? it.description : null].filter(Boolean).join(' · ');
     const itemCard = (r, k, opts = {}) => `<section class="lvx-card ${opts.cls || ''}">
         <div class="lvx-k"><span>${esc(k)}</span>${opts.right || ''}</div>
-        <div class="lvx-who"><h2>${esc(r.it.title || 'Untitled')}</h2>${micHtml(r.it)}</div>
+        <div class="lvx-who"><h2>${esc(r.it.title || 'Untitled')}</h2>${micHtml(r.it)}${opts.len ? `<span class="lvx-t lvx-wholen">${esc(opts.len)}</span>` : ''}</div>
         ${meta(r.it) ? `<p class="lvx-meta">${esc(meta(r.it))}</p>` : ''}
         ${opts.clock || ''}
         ${opts.after || ''}
@@ -499,17 +499,16 @@ export function mount(el, ctx) {
     let main = '';
     if (w.state === 'live') {
       const r = w.item.r;
+      const len = (x) => dur(Math.max(0, x.it.length || 0) * 1000);
+      // Now (its length is at the end of the bar), then the next two, each with its length at the bottom right.
       main = itemCard(r, 'Now', {
         cls: 'is-now',
-        right: `<span class="lvx-len">${esc(dur(w.item.length))}</span>`,
         // The bar with how far in on its left and the item's length on its right.
         clock: `<div class="lvx-clock" data-tick="big">—</div>
           <div class="lvx-barrow"><span class="lvx-t" data-tick="in"></span><div class="lv-bar"><i data-tick="bar"></i></div><span class="lvx-t">${esc(dur(w.item.length))}</span></div>`,
-      }) + (w.next ? itemCard(w.next, 'Next', {
-        cls: 'is-next',
-        right: `<span class="lvx-len">${esc(dur(Math.max(0, w.next.it.length || 0) * 1000))}</span>`,
-        after: w.then ? `<p class="lvx-then">Then <b>${esc(w.then.it.title || 'Untitled')}</b></p>` : '',
-      }) : '<section class="lvx-card is-next"><div class="lvx-k"><span>Next</span></div><h2>End of the service</h2></section>');
+      }) + `<div class="lvx-stack">${w.next
+        ? itemCard(w.next, 'Next', { cls: 'is-next', len: len(w.next) }) + (w.then ? itemCard(w.then, 'Then', { cls: 'is-next is-then', len: len(w.then) }) : '')
+        : '<section class="lvx-card is-next"><div class="lvx-k"><span>Next</span></div><h2>End of the service</h2></section>'}</div>`;
     } else if (w.state === 'wait') {
       const late = w.plannedStart != null && now() >= w.plannedStart;
       const nowCard = `<section class="lvx-card is-now">
@@ -524,7 +523,8 @@ export function mount(el, ctx) {
         </section>` : '';
       const first = w.upFirst ? itemCard(w.upFirst, 'Up first', {
         cls: 'is-next',
-        right: `<span class="lvx-len">${w.plannedStart ? `${esc(hhmm(w.plannedStart))} · ` : ''}${esc(dur(Math.max(0, w.upFirst.it.length || 0) * 1000))}</span>`,
+        right: w.plannedStart ? `<span class="lvx-len">${esc(hhmm(w.plannedStart))}</span>` : '',
+        len: dur(Math.max(0, w.upFirst.it.length || 0) * 1000),
         after: w.run[1] ? `<p class="lvx-then">Then <b>${esc(w.run[1].it.title || 'Untitled')}</b></p>` : '',
       }) : '';
       main = nowCard + `<div class="lvx-stack">${nextCard}${first}</div>`;

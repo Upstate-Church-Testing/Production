@@ -3088,3 +3088,8 @@ html.lv-full-on .sheet-root { z-index: 100; } /* Gear's item pop-up opens over L
 .lvx-barrow { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .lvx-barrow .lv-bar { flex: 1; min-width: 0; }
 .lvx-t { flex: none; font: 600 16px/1 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Live: the next two, each with its length at the bottom right (in line with the name) */
+.lvx-wholen { margin-left: auto; align-self: flex-end; padding-bottom: 0.35em; }
+.lvx-card.is-then h2 { font-size: clamp(23px, 6.2vw, 42px); color: color-mix(in srgb, var(--fg) 82%, var(--muted)); }
+.lvx-card.is-then .lvx-mic { font-size: 15px; }
