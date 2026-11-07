@@ -670,19 +670,32 @@ function setTheme(t) { save('ucp.theme', t); applyTheme(); }
 // browser window back to its old size).
 
 let updateReady = false;
+let latestV = null;
 const QUIET_MS = 10 * 60 * 1000;
 const AWAY_MS = 30 * 60 * 1000;
 let lastTouch = Date.now();
+// The version this copy is (from its own script address, js/app.js?v=…). The browser may keep
+// index.html for 10 minutes (GitHub Pages), so a phone can open an older copy than version.json says.
+const RUNNING = (() => { try { return new URL(import.meta.url).searchParams.get('v'); } catch { return null; } })();
+const TRIED_KEY = 'ucp.updating';
 
 function busyForUpdate() {
   return !!document.querySelector('.sheet-root, .dd-menu-root, .fp-root')
     || !!(document.fullscreenElement || document.webkitFullscreenElement)
     || !!document.activeElement?.matches?.('input, textarea, select, [contenteditable="true"]');
 }
-/** Reloads into the new version if one is waiting and nothing would be lost. */
+/** Reloads into the new version if one is waiting and nothing would be lost. Loads it by a
+ *  new address (?u=version) so a kept copy of the old page can't come back instead, and never
+ *  twice for the same version (if that still gives the old copy, it waits for the next one). */
 function takeUpdate() {
   if (!updateReady || busyForUpdate()) return false;
-  location.reload();
+  let tried = null;
+  try { tried = sessionStorage.getItem(TRIED_KEY); } catch { /* private mode */ }
+  if (latestV && tried === latestV) return false;
+  try { if (latestV) sessionStorage.setItem(TRIED_KEY, latestV); } catch { /* private mode */ }
+  const u = new URL(location.href);
+  u.searchParams.set('u', latestV || String(Date.now()));
+  location.replace(u.toString());
   return true;
 }
 
@@ -693,14 +706,23 @@ function watchForUpdates() {
   for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
     window.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true });
   }
+  // The ?u= an update came in by isn't needed in the address once it's here.
+  if (new URL(location.href).searchParams.has('u')) {
+    try { history.replaceState(history.state, '', location.pathname + location.hash); } catch { /* fine */ }
+  }
+  let first = true;
   const check = async () => {
     try {
       const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
       if (!r.ok) return;
       const { v } = await r.json();
+      latestV = v;
+      if (RUNNING ? v !== RUNNING : loaded != null && v !== loaded) updateReady = true;
       if (loaded == null) loaded = v;
-      else if (v !== loaded) updateReady = true;
+      if (RUNNING && v === RUNNING) { try { sessionStorage.removeItem(TRIED_KEY); } catch { /* fine */ } }
     } catch { /* offline */ }
+    // Just opened on an older copy: take the new one now, before anything's been touched.
+    if (first) { first = false; if (updateReady && takeUpdate()) return; }
     if (updateReady && Date.now() - lastTouch > QUIET_MS) takeUpdate(); // left alone (a screen on the wall)
   };
   check();

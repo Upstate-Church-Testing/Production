@@ -132,6 +132,10 @@ the last few past ones; an event opens on its times, a Live button and two panes
   Live for now. Side by side (Now left, Next right) on a computer or a phone on its
   side. The screen stays awake while it's open, and computers and iPads go to the browser's
   full screen.
+  Updates (app.js): a copy knows its own version (its script's ?v=), so one opened from the
+  browser's kept index.html (GitHub Pages lets it keep it 10 minutes) knows it's behind and takes
+  the new version right away; the reload goes by a new address (?u=version, removed again once
+  loaded) so the kept page can't come back, and it never reloads twice for the same version.
   A new version is taken while Live is open (it comes straight back to the same event,
   Live up: `sessionStorage` ucp.events.nav), and closing Live is a good moment for one too;
   elsewhere the app waits for a quiet moment as before.
