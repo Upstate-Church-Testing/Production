@@ -104,6 +104,19 @@ and nobody's own Planning Center permissions matter here.
 - Scheduling people from the app goes through the same connection (next step), so what
   someone may do is decided by their role here, not by their Planning Center login.
 
+## Home (staff)
+
+What Tally opens on (it's first in the sidebar, and the app lands on the first page you can see;
+volunteers, who don't see it, land where they did before). **Ready for Sunday?** One card per
+thing to check; for now, **Volunteers**: the people on PCO › Scheduling for the next Sunday
+morning (today, if it's Sunday), every location. Open spots aren't counted, only the people
+scheduled, so it reads like the grid's column: "Everyone's confirmed · 19 of 19 spots filled",
+or "1 person declined" / "2 people haven't confirmed yet", with who and where listed. A tap
+goes to Scheduling with those people outlined on the grid and a line over it saying who
+declined (or hasn't answered) and what to do; ✕ clears it. Home and Scheduling count with the
+same code (`js/roster.js`: the PCO model and the grid's rows, moved out of views/services.js
+unchanged), so the numbers always match. Next: CG and lighting.
+
 ## Events (staff)
 
 One-off Planning Center services (Engage, a conference, a coffeehouse) as a whole, on
@@ -475,6 +488,8 @@ js/config.js                   Supabase URL + publishable key (empty = preview m
 js/app.js                      sign-in, roles, the sidebar (NAV) and pages, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
+js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
+js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
 js/views/events.js            Events: one-off Planning Center services, with Live (the service clock), Flow and Team
 js/views/network.js            the IP sheet
 js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, area / spot, operator position, category, used as and brand; Items is a card per room › area › spot. Grid (models × locations or rooms) is built but not offered for now

@@ -11,6 +11,7 @@ import * as ResiView from './views/resi.js';
 import * as ServicesView from './views/services.js';
 import * as MeetingsView from './views/meetings.js';
 import * as EventsView from './views/events.js';
+import * as HomeView from './views/home.js';
 import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
@@ -28,6 +29,8 @@ export const ROLE_LABEL = { pending: 'Waiting for approval', volunteer: 'Volunte
 // Software is the Gear view over computers: what runs on them and which version (and a tab on every gear page).
 const GEAR_TABS = ['types', 'models', 'software'];
 const NAV = [
+  // Home: what Tally opens on (the first page you can see is where it lands). Ready for Sunday?
+  { id: 'home', label: 'Home', icon: 'home', minRole: 'staff', view: HomeView },
   { id: 'gear', label: 'Gear', short: 'Gear', icon: 'box', minRole: 'staff', view: GearView, title: 'Gear',
     scope: null, // the whole Gear view, filters and all
     children: [
@@ -101,6 +104,8 @@ const ctx = {
   newDevice: (preset) => goWith('network', { newDevice: preset }),
   openType: (id) => goWith('gear', { type: id }),
   openSettings: (section) => goWith('account', { section }),
+  /** Another page, with something for it to pick up (ctx.pending): Home sends Scheduling who to mark. */
+  goTo: (id, pending) => goWith(id, pending),
   /** A page that's a good moment for a waiting new version (Events › Live, which comes back
    *  where it was) can take it now. True when it's reloading. */
   updateNow: () => takeUpdate(),

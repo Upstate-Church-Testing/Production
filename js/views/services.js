@@ -10,13 +10,12 @@
 
 import { esc, icon, $, $$, debounce, plural, timeAgo, initials, pageTitle } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
-import { clock, teamKey, teamServices, realPhoto, hiddenPosition, STATUS_LABEL } from '../pco.js';
+import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
 import { openScheduleSheet, takeOff } from './schedule-sheet.js';
+import { pcoModel, rosterData as sharedRosterData } from '../roster.js';
 
 const POLL_MS = 20000; // backup for the live push (a phone that slept, a dropped connection)
-/** Training spots ("CG (Training)") aren't rows on the Scheduling grid. */
-const TRAINING = /\btraining\b/i;
 const LETTER_NAME = { V: 'Vintage', M: 'Modern', N: 'North Modern', T: 'Traditional', E: 'Español', W: 'Midweek' };
 
 // The Scheduling grid on a phone uses short labels so three weeks fit across. Both the
@@ -65,6 +64,10 @@ export function mount(el, ctx) {
   const isAdmin = ctx.me.role === 'admin';
   // Where you were (location, date, service) lasts while the app is open.
   const nav = ctx.servicesNav || (ctx.servicesNav = { date: null, plan: null, pane: 'flow', at: 0, mode: 'services' });
+  // Home sent us here about a Sunday: who declined (or hasn't answered) that day stands out,
+  // with a line saying who, until it's closed or this page is left.
+  let attn = null;
+  if (ctx.pending?.attention) { attn = ctx.pending.attention; ctx.pending = null; nav.week = 'sun'; }
   // Which PCO page this is. With one, the page stays on its own view and a jump to
   // another view (a plan from My schedule) goes to that page.
   const fixed = ctx.page?.scope?.mode || null;
@@ -158,6 +161,7 @@ export function mount(el, ctx) {
     else if (act === 'retry') load();
     else if (act === 'mine') setMode('mine');
     else if (act === 'all-places') pickCampus(ALL);
+    else if (act === 'attn-off') { attn = null; draw(); }
   });
 
   const onVisible = () => { if (document.visibilityState === 'visible') checkStatus(); };
@@ -276,50 +280,9 @@ export function mount(el, ctx) {
 
   /** Everything the screen needs, worked out from what this person is allowed to read. */
   function model() {
-    const d = s.data;
-    if (!d) return null;
-    const c = clock(s.status?.time_zone);
-    const types = d.types.filter((t) => t.access !== 'hidden'); // admins can read hidden ones; they don't show here
-    const typeById = new Map(types.map((t) => [t.id, t]));
-    const teams = d.teams.filter((t) => t.shown && teamServices(t).some((id) => typeById.has(id)));
-    const start = (p) => {
-      const first = p.times.find((x) => x.kind === 'service' && x.starts_at);
-      return Date.parse(first?.starts_at || p.sort_date);
-    };
-    // No audio, except on services an admin marked to keep their audio op (the midweeks).
-    const keepAudio = (typeId) => !!typeById.get(typeId)?.show_audio;
-    const shows = (typeId, position) => keepAudio(typeId) || !hiddenPosition(position);
-    const plans = d.plans.filter((p) => typeById.has(p.service_type_id))
-      .map((p) => ({ ...p, needed: (p.needed || []).filter((n) => shows(p.service_type_id, n.position)), _day: c.day(p.sort_date), _start: start(p) }))
-      .sort((a, b) => a._start - b._start || (typeById.get(a.service_type_id).sequence ?? 99) - (typeById.get(b.service_type_id).sequence ?? 99));
-    const planType = new Map(plans.map((p) => [p.id, p.service_type_id]));
-    const people = new Map();
-    for (const p of d.people) if (shows(planType.get(p.plan_id), p.position)) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]);
-    // Planning Center is copied from some weeks back, so what already happened is here too.
-    // Past is before today (a service day counts as coming up until the day is over).
-    const today = c.day(Date.now());
-    const upcoming = plans.filter((p) => p._day >= today);
-    const me = ctx.me.pco_person_id;
-    const mine = me ? upcoming.filter((p) => (people.get(p.id) || []).some((x) => x.person_id === me)) : [];
-    const type = (p) => typeById.get(p.service_type_id);
-    const plansAt = (campusId) => plans.filter((p) => type(p).campus_id === campusId);
-    const places = ctx.campuses.filter((cp) => plansAt(cp.id).length);
-    // PCO › Scheduling: shared services an admin hasn't taken off it (Settings › Planning Center),
-    // Sunday mornings or Wednesdays (the midweeks: kept audio, or named for it). One at a time.
-    const midweek = (t) => !!t && (!!t.show_audio || /mid\s*-?\s*week|wednesday/i.test(t.name));
-    const weekOf = (t) => (midweek(t) ? 'mid' : 'sun');
-    const rosterAll = plans.filter((p) => type(p).on_roster !== false);
-    const weeks = new Set(rosterAll.map((p) => weekOf(type(p))));
-    const week = weeks.has(nav.week || 'sun') ? nav.week || 'sun' : weeks.has('sun') ? 'sun' : 'mid';
-    const rosterIn = (w) => rosterAll.filter((p) => weekOf(type(p)) === w);
-    const onRoster = rosterIn(week);
-    const rosterAt = (campusId) => onRoster.filter((p) => type(p).campus_id === campusId);
-    const rosterPlaces = ctx.campuses.filter((cp) => rosterAt(cp.id).length);
-    // The services on each, even ones with nothing copied yet (Wednesdays shows every position).
-    const rosterTypes = (w) => types.filter((t) => t.on_roster !== false && weekOf(t) === w);
-    return { c, today, types, typeById, teams, plans, upcoming, people, me, mine, type, plansAt, places,
-      week, weeks, rosterIn, rosterTypes, onRoster, rosterAt, rosterPlaces };
+    return pcoModel(s.data, s.status, ctx, nav.week);
   }
+
 
   // ---------------------------------------------------------- drawing ---
 
@@ -395,12 +358,13 @@ export function mount(el, ctx) {
         if (m.rosterIn('sun').length) { box.innerHTML = roster(m, 'sun', ALL); size = fitRoster(); }
         size = size || { z: null, extra: 0 };
       }
-      box.innerHTML = roster(m, m.week, rosterCampus(m));
+      box.innerHTML = (attn && m.week === 'sun' ? attentionHtml(m) : '') + roster(m, m.week, rosterCampus(m));
       fitRoster(size);
       const wrap = $('.ros-wrap', box);
       if (wrap) {
         if (keep) { wrap.scrollLeft = keep.left; wrap.scrollTop = keep.top; } else scrollToNext(wrap);
         nav.rosAt = view;
+        if (attn && m.week === 'sun') markAttention(wrap, !keep);
       }
       return;
     }
@@ -595,85 +559,9 @@ export function mount(el, ctx) {
   // one is. The grid is scaled to fit the screen top to bottom; only dates scroll.
 
   function rosterData(m, week, where) {
-    const scope = m.rosterIn(week).filter((p) => where === ALL || m.type(p).campus_id === where);
-    const teamOf = new Map(m.teams.map((t) => [t.id, t]));
-    const days = [...new Set(scope.map((p) => p._day))].sort();
-    const campusAt = (id) => { const i = ctx.campuses.findIndex((c) => c.id === id); return i < 0 ? 999 : i; };
-    // Teams with the same name (each service type has its own "Broadcast") are one team here.
-    const teamRank = new Map();
-    const posRank = new Map();
-    for (const t of [...m.teams].sort((a, b) => (a.sequence ?? 99) - (b.sequence ?? 99))) {
-      const k = teamKey(t.name);
-      if (!teamRank.has(k)) teamRank.set(k, teamRank.size);
-      (t.positions || []).forEach((x, i) => { const pk = `${k}|${teamKey(x.name)}`; if (!posRank.has(pk)) posRank.set(pk, i); });
-    }
-    const rows = new Map();
-    const rowFor = (campusId, team, position) => {
-      const tk = teamKey(team.name);
-      const pk = teamKey(position || team.name);
-      const key = `${campusId}|${tk}|${pk}`;
-      let row = rows.get(key);
-      if (!row) {
-        // Audio (kept on the midweeks) goes after the team's other positions.
-        rows.set(key, row = { key, campusId, team: team.name, position: position || team.name, cells: new Map(),
-          at: [campusAt(campusId), teamRank.get(tk) ?? 99, hiddenPosition(position) ? 1 : 0, posRank.get(`${tk}|${pk}`) ?? 500] });
-      }
-      return row;
-    };
-    // Wednesdays: every position on the midweeks' shown teams gets a row, filled or not
-    // (Sundays only lists positions someone is on, or that are open).
-    if (week === 'mid') {
-      for (const t of m.rosterTypes('mid')) {
-        if (!t.campus_id || (where !== ALL && t.campus_id !== where)) continue;
-        for (const team of m.teams.filter((x) => teamServices(x).includes(t.id))) {
-          for (const x of team.positions || []) if (x.name && !TRAINING.test(x.name)) rowFor(t.campus_id, team, x.name);
-        }
-      }
-    }
-    const cellFor = (p, team, position) => {
-      const row = rowFor(m.type(p).campus_id || '', team, position);
-      let cell = row.cells.get(p._day);
-      if (!cell) row.cells.set(p._day, cell = { people: new Map(), openBy: new Map(), openTeam: new Map() });
-      return cell;
-    };
-    for (const p of scope) {
-      for (const r of m.people.get(p.id) || []) {
-        const team = teamOf.get(r.team_id);
-        if (!team || TRAINING.test(r.position || '')) continue;
-        const cell = cellFor(p, team, r.position);
-        const who = r.person_id || r.name || r.id;
-        let pill = cell.people.get(who);
-        if (!pill) cell.people.set(who, pill = { person_id: r.person_id, name: r.name, photo: r.photo, entries: [] });
-        pill.entries.push({ plan: p, status: r.status || 'U', invite: !!r.invite_pending, ppid: r.id });
-      }
-      for (const n of p.needed || []) {
-        const team = teamOf.get(n.team_id);
-        if (!team || TRAINING.test(n.position || '')) continue;
-        const cell = cellFor(p, team, n.position);
-        cell.openBy.set(p.id, (cell.openBy.get(p.id) || 0) + Math.max(1, n.quantity || 1));
-        cell.openTeam.set(p.id, n.team_id);
-      }
-    }
-    const seq = (p) => m.type(p).sequence ?? 99;
-    for (const row of rows.values()) {
-      for (const cell of row.cells.values()) {
-        for (const pill of cell.people.values()) {
-          // First service on top, last on the bottom.
-          pill.entries.sort((a, b) => a.plan._start - b.plan._start || seq(a.plan) - seq(b.plan));
-          pill.status = wholeDay(pill.entries.map((e) => e.status));
-          pill.invite = pill.entries.some((e) => e.invite && e.status !== 'D'); // scheduled, invite email not sent yet
-        }
-        // An open spot on Vintage and Modern is one spot for one person, not two.
-        cell.open = Math.max(0, ...cell.openBy.values());
-      }
-    }
-    const list = [...rows.values()].sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1] || a.at[2] - b.at[2] || a.at[3] - b.at[3] || a.position.localeCompare(b.position));
-    // Show the team only where a location has the same position on two teams ("Audio").
-    const seen = new Map();
-    for (const r of list) { const k = `${r.campusId}|${teamKey(r.position)}`; seen.set(k, (seen.get(k) || 0) + 1); }
-    for (const r of list) r.showTeam = seen.get(`${r.campusId}|${teamKey(r.position)}`) > 1;
-    return { days, rows: list };
+    return sharedRosterData(m, week, where, ctx.campuses);
   }
+
 
   /** V, M, N (North), T (Traditional): which service a dot is. */
   function kindLetter(t, p) {
@@ -794,6 +682,43 @@ export function mount(el, ctx) {
     return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
       <span class="rp-dots">${dots}</span><b>${many || nameShort(name) === name ? esc(shown) : `<span class="nf">${esc(name)}</span><span class="ns">${esc(nameShort(name))}</span>`}</b>${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
     </button>`;
+  }
+
+  /** Who Home sent us about: their pills on that day. */
+  function attentionPills() {
+    const want = new Set(attn.statuses);
+    return [...pills.entries()].filter(([, v]) => v.day === attn.day && want.has(v.pill.status));
+  }
+
+  /** The line over the grid: who declined (or hasn't answered) and what to do. */
+  function attentionHtml(m) {
+    const { rows } = rosterData(m, 'sun', ALL);
+    const who = [];
+    for (const row of rows) {
+      const cell = row.cells.get(attn.day);
+      for (const pill of cell ? cell.people.values() : []) {
+        if (attn.statuses.includes(pill.status)) who.push(`${pill.name || 'Someone'} (${row.position}${ctx.campusById.get(row.campusId)?.short_name ? `, ${ctx.campusById.get(row.campusId).short_name}` : ''})`);
+      }
+    }
+    const plan = m.plans.find((p) => p._day === attn.day);
+    const when = plan ? `${m.c.weekday(plan.sort_date)}, ${m.c.date(plan.sort_date)}` : 'Sunday';
+    const declined = attn.statuses.includes('D');
+    const text = !who.length ? `Everyone on ${when} is set now.`
+      : declined ? `${who.join(', ')} declined for ${when}. Tap ${who.length === 1 ? 'them' : 'each one'} below to find someone else.`
+        : `${who.join(', ')} ${who.length === 1 ? 'hasn’t' : 'haven’t'} answered for ${when} yet. Tap ${who.length === 1 ? 'them' : 'one'} below to resend or swap.`;
+    return `<div class="ros-attn ${declined ? 'is-bad' : 'is-wait'}" role="status">${icon('warn')}<p>${esc(text)}</p>
+      <button type="button" class="btn icon ghost small" data-act="attn-off" aria-label="Done">${icon('close')}</button></div>`;
+  }
+
+  /** Mark them on the grid, and bring the first into view the first time. */
+  function markAttention(wrap, scroll) {
+    const hits = attentionPills().map(([id]) => $(`[data-rp="${id}"]`, wrap)).filter(Boolean);
+    hits.forEach((b) => b.classList.add('is-attn'));
+    if (scroll && hits[0]) {
+      const r = hits[0].getBoundingClientRect();
+      const w = wrap.getBoundingClientRect();
+      if (r.top < w.top || r.bottom > w.bottom) wrap.scrollTop += r.top - w.top - (w.height - r.height) / 2;
+    }
   }
 
   /** First look at the grid: the next service (today, or the next date) is the first column
@@ -1085,9 +1010,3 @@ function statusMark(st) {
   return `<span class="ro-st st-${esc(st || 'U')}" role="img" aria-label="${label}" title="${label}">${glyph}</span>`;
 }
 
-/** A person's answer for the whole day: any decline wins, then any request still out. */
-function wholeDay(statuses) {
-  if (statuses.includes('D')) return 'D';
-  if (statuses.some((x) => x !== 'C')) return 'U';
-  return 'C';
-}
