@@ -3165,21 +3165,24 @@ button.home-card:hover { border-color: color-mix(in srgb, var(--tone) 45%, var(-
 .home-chips .is-working { background: color-mix(in srgb, var(--soft) 16%, transparent); color: var(--soft); border-color: color-mix(in srgb, var(--soft) 40%, transparent); }
 
 /* ------------------------------------------------------------ cg uploads -- */
+/* A sheet on a computer: campus, its status, then the CG computer's macOS, ProPresenter and
+   Desktop Video versions, each column outlined in its logo's color with the logo once on top.
+   On a phone each campus is a card, the versions small outlined chips with their logos. */
 .cgu-when { color: var(--muted); font-size: 14px; margin-top: 4px; }
-.cgu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-width: 760px; }
-.cgu-row {
-  display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; padding: 12px 14px;
-  border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line-2);
-}
-.cgu-row.is-working { border-left-color: var(--soft); }
-.cgu-row.is-done { border-left-color: var(--ok); }
-.cgu-name { flex: 1 1 160px; display: grid; gap: 2px; min-width: 0; }
-.cgu-name b { font: 600 17px/1.2 var(--f-body); }
-.cgu-name small { font-size: 12.5px; color: var(--muted); }
+.cgu-body { padding-bottom: 28px; }
+.cgu-t { border-collapse: separate; border-spacing: 10px 0; margin: 0 -10px; }
+.cgu-t th, .cgu-t td { padding: 10px 8px; text-align: left; vertical-align: middle; font-weight: inherit; }
+.cgu-t thead th { font: 700 11px/1.2 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); padding: 12px 8px; vertical-align: bottom; }
+.cgu-t tbody tr > * { border-bottom: 1px solid var(--line); }
+.cgu-name { min-width: 170px; border-left: 3px solid var(--line-2); padding-left: 12px !important; }
+.cgu-row.is-working .cgu-name { border-left-color: var(--soft); }
+.cgu-row.is-done .cgu-name { border-left-color: var(--ok); }
+.cgu-name b { display: block; font: 600 16.5px/1.2 var(--f-body); }
+.cgu-name small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .cgu-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 4px; padding: 3px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
 .cgu-seg button {
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 38px; padding: 0 12px; border-radius: 9px;
-  border: 0; background: none; color: var(--muted); font: 600 13.5px/1 var(--f-body); cursor: pointer; touch-action: manipulation;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px; padding: 0 12px; border-radius: 9px;
+  border: 0; background: none; color: var(--muted); font: 600 13.5px/1 var(--f-body); cursor: pointer; touch-action: manipulation; white-space: nowrap;
 }
 .cgu-seg button .ico { width: 15px; height: 15px; stroke-width: 2.4; }
 .cgu-seg button:hover { color: var(--fg); }
@@ -3187,7 +3190,46 @@ button.home-card:hover { border-color: color-mix(in srgb, var(--tone) 45%, var(-
 .cgu-seg button[aria-pressed="true"].is-working { background: color-mix(in srgb, var(--soft) 22%, transparent); color: var(--soft); }
 .cgu-seg button[aria-pressed="true"].is-done { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
 .cgu-seg button:disabled { opacity: 0.6; cursor: default; }
-@media (max-width: 699px) {
-  .cgu-row { padding: 11px 12px; }
+
+/* the version columns, each in its logo's color: macOS white, ProPresenter orange, Desktop Video gold */
+.cgu-v { --vc: #ececf0; width: 132px; text-align: center !important; }
+.cgu-v.is-pp { --vc: #f1651f; }
+.cgu-v.is-dv { --vc: #ffa200; }
+.cgu-t .cgu-v { border-left: 1.5px solid var(--vc); border-right: 1.5px solid var(--vc); }
+.cgu-t thead .cgu-v { border-top: 1.5px solid var(--vc); border-radius: 14px 14px 0 0; padding: 12px 8px 10px; }
+.cgu-t tbody tr:last-child .cgu-v { border-bottom: 1.5px solid var(--vc); border-radius: 0 0 14px 14px; }
+.cgu-t tbody .cgu-v { border-bottom-color: color-mix(in srgb, var(--vc) 18%, transparent); }
+.cgu-t tbody tr:last-child .cgu-v { border-bottom-color: var(--vc); }
+.cgu-vh { display: inline-grid; justify-items: center; gap: 7px; color: var(--vc); text-transform: none; letter-spacing: 0.01em; font-size: 12.5px; }
+.cgu-vh .sw-logo { --s: 32px; }
+.cgu-vh .sw-logo.is-mono i { background: var(--vc); }
+.cgu-vchip { display: inline-flex; align-items: center; gap: 6px; }
+.cgu-vchip .sw-logo { display: none; }
+.cgu-v b { font: 600 16px/1 var(--f-mono); font-variant-numeric: tabular-nums; color: var(--fg); }
+
+@media (max-width: 899px) {
+  .cgu-t, .cgu-t tbody, .cgu-t tr { display: block; }
+  .cgu-t { margin: 0; border-spacing: 0; }
+  .cgu-t thead { display: none; }
+  .cgu-t tbody { display: grid; gap: 8px; }
+  .cgu-row {
+    display: flex !important; flex-wrap: wrap; align-items: center; gap: 10px 8px; padding: 12px 14px;
+    border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line-2);
+  }
+  .cgu-row.is-working { border-left-color: var(--soft); }
+  .cgu-row.is-done { border-left-color: var(--ok); }
+  .cgu-t tbody tr > * { border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
+  .cgu-name { flex: 1 1 100%; min-width: 0; }
+  .cgu-st { flex: 1 1 100%; }
   .cgu-seg { width: 100%; grid-template-columns: repeat(3, 1fr); }
+  .cgu-v { width: auto; }
+  .cgu-v.is-none { display: none; }
+  .cgu-vchip { padding: 5px 10px 5px 7px; border-radius: 999px; border: 1.5px solid var(--vc); }
+  .cgu-vchip .sw-logo { display: inline-flex; --s: 18px; }
+  .cgu-vchip .sw-logo.is-mono i { background: var(--vc); }
+  .cgu-v b { font-size: 14px; }
 }
+
+/* Home and CG uploads: the same side margins as every other page */
+.home-grid { padding: 0 var(--gutter-r) 28px var(--gutter-l); }
+@media (min-width: 860px) { .home-grid { padding: 4px 32px 28px 28px; } }

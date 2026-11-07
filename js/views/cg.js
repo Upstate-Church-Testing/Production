@@ -3,9 +3,21 @@
 // Sunday): on Monday it moves on to the next one, where everything starts at Not started
 // (cg_uploads is keyed by the Sunday; last week's stay as they were). Changes from anyone
 // show up live. Home shows how many are done. Staff and up.
+// Beside each campus, its CG computer's macOS, ProPresenter and Desktop Video versions, from
+// Gear (the OS from the computer's Firmware / OS field, the rest from its software). The CG
+// computer is the campus's computer at CG (location CG, or "(CG)" in its name), the Worship
+// Center's when there's more than one. A version Gear doesn't have is left blank.
 
 import { esc, icon, $, debounce, pageTitle } from '../util.js';
 import { clock, comingSunday } from '../pco.js';
+import { osOf, logoHtml, installsByDevice } from '../software.js';
+
+/** The three columns: logo on top, outlined in the logo's color. */
+const COLS = [
+  { id: 'mac', name: 'macOS', logo: 'apple.svg' },
+  { id: 'pp', name: 'ProPresenter', logo: 'propresenter.svg', sw: /^propresenter$/i },
+  { id: 'dv', name: 'Desktop Video', logo: 'blackmagic.svg', sw: /^desktop video$/i },
+];
 
 export const CG_STATES = [
   { id: 'not_started', label: 'Not started', short: 'Not started' },
@@ -15,7 +27,7 @@ export const CG_STATES = [
 
 export function mount(el, ctx) {
   let alive = true;
-  const s = { tz: 'America/New_York', sunday: null, rows: new Map(), error: null, loaded: false, saving: new Set() };
+  const s = { tz: 'America/New_York', sunday: null, rows: new Map(), error: null, loaded: false, saving: new Set(), gear: null };
   let timer = null;
 
   el.innerHTML = `<div class="cgu" id="cgu"><div class="loading">${'<div class="sk"></div>'.repeat(4)}</div></div>`;
@@ -41,7 +53,7 @@ export function mount(el, ctx) {
     s.saving.delete(campus);
     draw();
   });
-  const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'cg') load(); }, 250));
+  const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'cg') load(); else if (/device|software/.test(table)) loadGear(); }, 250));
   const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
   document.addEventListener('visibilitychange', onVisible);
 
@@ -58,8 +70,39 @@ export function mount(el, ctx) {
   async function start() {
     try { s.tz = (await ctx.store.pcoStatus())?.time_zone || s.tz; } catch { /* the default */ }
     s.sunday = comingSunday(s.tz);
-    await load();
+    await Promise.all([load(false), loadGear(false)]);
+    draw();
     timer = setInterval(tick, 60000);
+  }
+
+  /** Gear: each campus's CG computer and what's on it. */
+  async function loadGear(redraw = true) {
+    try {
+      const data = await ctx.store.networkData();
+      const rooms = new Map(data.rooms.map((r) => [r.id, r]));
+      const types = new Map(data.types.map((t) => [t.id, t]));
+      const installs = installsByDevice(data);
+      const atCg = (d) => types.get(d.type_id)?.category === 'Computer' && (/^cg$/i.test(String(d.location || '').trim()) || /\(cg\)/i.test(d.name || ''));
+      const byCampus = new Map();
+      for (const d of data.devices.filter(atCg)) {
+        const was = byCampus.get(d.campus_id);
+        const wc = (x) => /worship center/i.test(rooms.get(x.room_id)?.name || '');
+        if (!was || (wc(d) && !wc(was))) byCampus.set(d.campus_id, d);
+      }
+      s.gear = new Map([...byCampus].map(([campus, d]) => {
+        const os = osOf(d);
+        const app = (re) => (installs.get(d.id) || []).find((i) => re.test(i.sw.name));
+        const pp = app(COLS[1].sw);
+        const dv = app(COLS[2].sw);
+        return [campus, {
+          d,
+          mac: os?.family === 'macOS' ? { v: os.version || '', title: os.label } : null,
+          pp: pp ? { v: pp.version, title: `ProPresenter ${pp.version}${pp.build ? ` (${pp.build})` : ''}` } : null,
+          dv: dv ? { v: dv.version, title: `Desktop Video ${dv.version}` } : null,
+        }];
+      }));
+    } catch { if (!s.gear) s.gear = new Map(); }
+    if (redraw && alive) draw();
   }
 
   /** Monday moves it on to the next Sunday. */
@@ -68,7 +111,7 @@ export function mount(el, ctx) {
     if (next !== s.sunday) { s.sunday = next; s.rows = new Map(); load(); }
   }
 
-  async function load() {
+  async function load(redraw = true) {
     const sunday = s.sunday;
     try {
       const rows = (await ctx.store.cgUploads(sunday)) || [];
@@ -79,7 +122,7 @@ export function mount(el, ctx) {
       s.error = e.message;
     }
     s.loaded = true;
-    draw();
+    if (redraw) draw();
   }
 
   function draw() {
@@ -99,15 +142,29 @@ export function mount(el, ctx) {
     };
     root.innerHTML = `<div class="page-head"><div class="mode-row">${pageTitle(ctx.page)}${tally}</div>
         <p class="cgu-when">For ${isToday ? 'today' : `Sunday, ${esc(c.date(day))}`}. Starts over on Monday for the next Sunday.</p></div>
+      <div class="results cgu-body">
       ${s.error ? `<p class="lv-warn">${icon('warn')}Couldn’t load: ${esc(s.error)}</p>` : ''}
-      <ul class="cgu-list">${campuses.map((cp) => {
-        const st = statusOf(cp.id);
-        const r = s.rows.get(cp.id);
-        const busy = s.saving.has(cp.id);
-        return `<li class="cgu-row is-${st}">
-          <div class="cgu-name"><b>${esc(cp.short_name)}</b><small>${esc(CG_STATES.find((x) => x.id === st).label)}${r?.updated_at ? ` · ${esc(stamp(r))}` : ''}</small></div>
-          <div class="cgu-seg" role="group" aria-label="${esc(cp.short_name)} CG">${CG_STATES.map((x) => `<button type="button" data-cg="${esc(cp.id)}" data-st="${x.id}" class="is-${x.id}" aria-pressed="${st === x.id}" ${busy ? 'disabled' : ''}>${x.id === 'done' ? icon('check') : ''}<span>${esc(x.short)}</span></button>`).join('')}</div>
-        </li>`;
-      }).join('')}</ul>`;
+      <table class="cgu-t">
+        <thead><tr>
+          <th class="cgu-h-name" scope="col">Campus</th>
+          <th class="cgu-h-st" scope="col">CG for Sunday</th>
+          ${COLS.map((col) => `<th class="cgu-v is-${col.id}" scope="col"><span class="cgu-vh">${logoHtml(col.name, col.logo)}<span>${esc(col.name)}</span></span></th>`).join('')}
+        </tr></thead>
+        <tbody>${campuses.map((cp) => {
+          const st = statusOf(cp.id);
+          const r = s.rows.get(cp.id);
+          const busy = s.saving.has(cp.id);
+          const g = s.gear?.get(cp.id);
+          return `<tr class="cgu-row is-${st}">
+            <th class="cgu-name" scope="row"><b>${esc(cp.short_name)}</b><small>${esc(CG_STATES.find((x) => x.id === st).label)}${r?.updated_at ? ` · ${esc(stamp(r))}` : ''}</small></th>
+            <td class="cgu-st"><div class="cgu-seg" role="group" aria-label="${esc(cp.short_name)} CG">${CG_STATES.map((x) => `<button type="button" data-cg="${esc(cp.id)}" data-st="${x.id}" class="is-${x.id}" aria-pressed="${st === x.id}" ${busy ? 'disabled' : ''}>${x.id === 'done' ? icon('check') : ''}<span>${esc(x.short)}</span></button>`).join('')}</div></td>
+            ${COLS.map((col) => {
+              const v = g?.[col.id];
+              return `<td class="cgu-v is-${col.id} ${v?.v ? '' : 'is-none'}" ${v?.title ? `title="${esc(`${cp.short_name} CG: ${v.title}`)}"` : ''}>${v?.v ? `<span class="cgu-vchip">${logoHtml(col.name, col.logo, 'xs')}<b>${esc(v.v)}</b></span>` : ''}</td>`;
+            }).join('')}
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      </div>`;
   }
 }

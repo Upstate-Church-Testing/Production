@@ -125,7 +125,13 @@ campuses uploaded"), each campus a chip (green done, yellow working on it). A ta
 and who set it when. Always the coming Sunday (`comingSunday` in pco.js: today if it's
 Sunday, until midnight), so on Monday it moves on and everything reads Not started:
 `cg_uploads` is keyed by the Sunday, so nothing is wiped and last week's stay as they were.
-Staff change it; changes push live to every open screen.
+Staff change it; changes push live to every open screen. Beside each campus, its CG
+computer's **macOS**, **ProPresenter** and **Desktop Video** versions from Gear (macOS from the
+computer's Firmware / OS field, the others from its software): the campus's computer at CG
+(location CG or "(CG)" in its name; the Worship Center's when there's more than one), blank
+where Gear doesn't have it. On a computer they're columns, the logo once on top and the column
+outlined in the logo's color (white, ProPresenter orange, Blackmagic gold); on a phone each
+campus is a card with the versions as outlined chips.
 
 ## Events (staff)
 
