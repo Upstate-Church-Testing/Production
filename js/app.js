@@ -12,6 +12,7 @@ import * as ServicesView from './views/services.js';
 import * as MeetingsView from './views/meetings.js';
 import * as EventsView from './views/events.js';
 import * as HomeView from './views/home.js';
+import * as CgView from './views/cg.js';
 import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
@@ -31,6 +32,8 @@ const GEAR_TABS = ['types', 'models', 'software'];
 const NAV = [
   // Home: what Tally opens on (the first page you can see is where it lands). Ready for Sunday?
   { id: 'home', label: 'Home', icon: 'home', minRole: 'staff', view: HomeView },
+  // CG uploads: each campus's CG for the coming Sunday (not started, working, done). Home counts them.
+  { id: 'cg-uploads', label: 'CG uploads', icon: 'upload', minRole: 'staff', view: CgView },
   { id: 'gear', label: 'Gear', short: 'Gear', icon: 'box', minRole: 'staff', view: GearView, title: 'Gear',
     scope: null, // the whole Gear view, filters and all
     children: [

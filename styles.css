@@ -3147,3 +3147,47 @@ button.home-card:hover { border-color: color-mix(in srgb, var(--tone) 45%, var(-
 .rp.st-U.is-attn { outline-color: var(--soft); }
 @keyframes rp-attn { 50% { outline-offset: 5px; } }
 @media (prefers-reduced-motion: reduce) { .rp.is-attn { animation: none; } }
+
+/* Home: CG, lighting and broadcast on their own; CG uploads' campuses as chips */
+.home-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.home-split > span { display: grid; gap: 2px; padding: 9px 11px; border-radius: var(--r-sm); background: var(--panel-2); border: 1px solid var(--line); }
+.home-split small { font: 700 10.5px/1.2 var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.home-split b { font: 600 18px/1.15 var(--f-body); font-variant-numeric: tabular-nums; }
+.home-split em { font-style: normal; font-size: 12px; color: var(--muted); }
+.home-split .is-D b { color: var(--live); }
+.home-split .is-U b { color: var(--soft); }
+.home-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.home-chips > span {
+  font: 700 12px/1 var(--f-body); letter-spacing: 0.04em; padding: 6px 9px; border-radius: 999px;
+  background: var(--panel-3); color: var(--muted); border: 1px solid var(--line);
+}
+.home-chips .is-done { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.home-chips .is-working { background: color-mix(in srgb, var(--soft) 16%, transparent); color: var(--soft); border-color: color-mix(in srgb, var(--soft) 40%, transparent); }
+
+/* ------------------------------------------------------------ cg uploads -- */
+.cgu-when { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.cgu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-width: 760px; }
+.cgu-row {
+  display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; padding: 12px 14px;
+  border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line-2);
+}
+.cgu-row.is-working { border-left-color: var(--soft); }
+.cgu-row.is-done { border-left-color: var(--ok); }
+.cgu-name { flex: 1 1 160px; display: grid; gap: 2px; min-width: 0; }
+.cgu-name b { font: 600 17px/1.2 var(--f-body); }
+.cgu-name small { font-size: 12.5px; color: var(--muted); }
+.cgu-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 4px; padding: 3px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+.cgu-seg button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 38px; padding: 0 12px; border-radius: 9px;
+  border: 0; background: none; color: var(--muted); font: 600 13.5px/1 var(--f-body); cursor: pointer; touch-action: manipulation;
+}
+.cgu-seg button .ico { width: 15px; height: 15px; stroke-width: 2.4; }
+.cgu-seg button:hover { color: var(--fg); }
+.cgu-seg button[aria-pressed="true"].is-not_started { background: var(--panel-3); color: var(--fg); }
+.cgu-seg button[aria-pressed="true"].is-working { background: color-mix(in srgb, var(--soft) 22%, transparent); color: var(--soft); }
+.cgu-seg button[aria-pressed="true"].is-done { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+.cgu-seg button:disabled { opacity: 0.6; cursor: default; }
+@media (max-width: 699px) {
+  .cgu-row { padding: 11px 12px; }
+  .cgu-seg { width: 100%; grid-template-columns: repeat(3, 1fr); }
+}

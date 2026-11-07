@@ -1,19 +1,33 @@
-// Home: what Tally opens on. Are we ready for Sunday?
-// For now, the volunteers: the people on PCO › Scheduling for the next Sunday morning (every
-// location, the same people that grid shows, worked out by the same code: roster.js). Open
-// spots aren't counted here, only the people scheduled. Everyone confirmed says so plainly;
-// otherwise it says who has declined or not answered yet, and a tap goes to Scheduling with
-// those people marked. Staff and up.
+// Home: what Tally opens on. Are we ready for Sunday? One card per thing to check:
+//   Volunteers: the people on PCO › Scheduling for the next Sunday morning (every location,
+//     the same people that grid shows, worked out by the same code: roster.js). Open spots
+//     aren't counted, only the people scheduled. Everyone confirmed says so plainly; otherwise
+//     who has declined or not answered yet. Then CG, lighting and broadcast on their own
+//     (confirmed of scheduled). A tap goes to Scheduling with those people marked.
+//   CG uploads: how many campuses' CG is uploaded for the coming Sunday (views/cg.js), each
+//     campus's state in a row of chips. A tap goes to CG uploads.
+// Staff and up.
 
 import { esc, icon, $, debounce } from '../util.js';
 import { ALL } from '../picker.js';
 import { pcoModel, rosterData } from '../roster.js';
+import { comingSunday } from '../pco.js';
 
 const CHECK_MS = 30000; // has Planning Center changed? (the live push does most of it)
+/** The Volunteers card's breakdown: Broadcast by team (cameras, director, switcher…), CG and
+ *  Lighting by position, as Planning Center names them. */
+const GROUPS = [
+  { id: 'cg', label: 'CG', unit: 'spots' },
+  { id: 'lighting', label: 'Lighting', unit: 'spots' },
+  { id: 'broadcast', label: 'Broadcast', unit: 'positions' },
+];
+const groupOf = (row) => (/broadcast/i.test(row.team) ? 'broadcast' : /\bcg\b/i.test(row.position) ? 'cg' : /light|\blx\b/i.test(row.position) ? 'lighting' : null);
+/** AN, FF, FI, GVL, GCC, HB, MLN, SVL, LAU, UN: as the team says them. */
+const CAMPUS_SHORT = { AND: 'AN', MAU: 'MLN' };
 
 export function mount(el, ctx) {
   let alive = true;
-  const s = { status: undefined, data: null, error: null };
+  const s = { status: undefined, data: null, error: null, cg: null, cgFor: null };
   let timer = null;
 
   el.innerHTML = `<div class="home" id="home"><div class="loading"><div class="sk tall"></div></div></div>`;
@@ -22,13 +36,14 @@ export function mount(el, ctx) {
   el.addEventListener('click', (e) => {
     const t = e.target.closest('[data-go]');
     if (!t) return;
+    if (t.dataset.go !== 'scheduling') { ctx.go(t.dataset.go); return; }
     const sun = sunday();
     if (!sun?.day) { ctx.go('scheduling'); return; }
     // Scheduling marks who needs something that day: declined first, else not answered yet.
     const statuses = sun.D ? ['D'] : sun.U ? ['U'] : [];
     ctx.goTo('scheduling', statuses.length ? { attention: { day: sun.day, statuses } } : null);
   });
-  const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'pco') load(true); }, 300));
+  const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'pco') load(true); else if (table === 'cg') loadCg(); }, 300));
   const onVisible = () => { if (document.visibilityState === 'visible') check(); };
   document.addEventListener('visibilitychange', onVisible);
 
@@ -50,6 +65,7 @@ export function mount(el, ctx) {
       if (!quiet || !s.data) s.error = e.message;
     }
     if (!alive) return;
+    await loadCg(false);
     draw();
     clearTimeout(timer);
     timer = setTimeout(check, CHECK_MS);
@@ -59,6 +75,7 @@ export function mount(el, ctx) {
     clearTimeout(timer);
     if (!alive) return;
     if (document.visibilityState !== 'hidden') {
+      if (comingSunday(tz()) !== s.cgFor) await loadCg(); // Monday: on to the next Sunday
       try {
         const st = await ctx.store.pcoStatus();
         const changed = (x) => x?.changed_at ?? x?.last_sync_at;
@@ -66,6 +83,19 @@ export function mount(el, ctx) {
       } catch { /* next time */ }
     }
     timer = setTimeout(check, CHECK_MS);
+  }
+
+  function tz() { return s.status?.time_zone || 'America/New_York'; }
+
+  /** CG uploads for the coming Sunday. */
+  async function loadCg(redraw = true) {
+    const sunday = comingSunday(tz());
+    try {
+      const rows = (await ctx.store.cgUploads?.(sunday)) || [];
+      s.cg = new Map(rows.map((r) => [r.campus_id, r.status]));
+      s.cgFor = sunday;
+    } catch { if (s.cgFor !== sunday) s.cg = null; }
+    if (redraw && alive) draw();
   }
 
   /** The next Sunday morning on Scheduling (today, if it's Sunday) and who's on it. */
@@ -80,12 +110,17 @@ export function mount(el, ctx) {
       const cell = row.cells.get(day);
       if (!cell) continue;
       for (const pill of cell.people.values()) {
-        people.push({ name: pill.name || 'Someone', status: pill.status, position: row.position, campus: ctx.campusById.get(row.campusId) });
+        people.push({ name: pill.name || 'Someone', status: pill.status, position: row.position, campus: ctx.campusById.get(row.campusId), group: groupOf(row) });
       }
     }
     const count = (st) => people.filter((x) => x.status === st).length;
     const plan = m.plans.find((p) => p._day === day);
-    return { m, day, plan, people, C: count('C'), U: count('U'), D: count('D'), total: people.length, isToday: day === m.today };
+    // CG, lighting and broadcast on their own: confirmed of scheduled.
+    const groups = GROUPS.map((g) => {
+      const list = people.filter((x) => x.group === g.id);
+      return { ...g, C: list.filter((x) => x.status === 'C').length, D: list.filter((x) => x.status === 'D').length, total: list.length };
+    }).filter((g) => g.total);
+    return { m, day, plan, people, groups, C: count('C'), U: count('U'), D: count('D'), total: people.length, isToday: day === m.today };
   }
 
   function draw() {
@@ -123,13 +158,35 @@ export function mount(el, ctx) {
           <span class="home-k">${icon('team')}Volunteers</span>
           <span class="home-status"><span class="home-mark">${mark(D ? 'D' : U ? 'U' : 'C')}</span><b class="home-msg">${esc(headline)}</b></span>
           <span class="home-sub">${esc(sub)}</span>
+          ${sun.groups.length ? `<span class="home-split">${sun.groups.map((g) => `<span class="${g.D ? 'is-D' : g.C < g.total ? 'is-U' : ''}"><small>${esc(g.label)}</small><b>${g.C} of ${g.total}</b><em>${esc(g.unit)}</em></span>`).join('')}</span>` : ''}
           ${needs.length ? `<ul class="home-who">${needs.map((x) => `<li class="is-${x.status}">
               <span class="home-dot" aria-hidden="true"></span><b>${esc(x.name)}</b>
               <small>${esc([x.position, x.campus?.short_name].filter(Boolean).join(' · '))}${x.status === 'D' ? ' · declined' : ' · not answered'}</small>
             </li>`).join('')}</ul>` : ''}
           <span class="home-go">Scheduling ${icon('chevron')}</span>
         </button>
+        ${cgCard()}
       </div>`;
+  }
+
+  /** CG uploads: how many campuses are done for the coming Sunday, each campus a chip. */
+  function cgCard() {
+    if (!s.cg) return '';
+    const campuses = ctx.campuses;
+    const st = (id) => s.cg.get(id) || 'not_started';
+    const done = campuses.filter((c) => st(c.id) === 'done').length;
+    const working = campuses.filter((c) => st(c.id) === 'working').length;
+    const rest = campuses.length - done - working;
+    const all = done === campuses.length;
+    const msg = all ? `All ${campuses.length} campuses uploaded` : `${done} of ${campuses.length} campuses uploaded`;
+    const sub = all ? 'CG is ready everywhere.' : [working ? `${working} working on it` : '', rest ? `${rest} not started` : ''].filter(Boolean).join(' · ');
+    return `<button type="button" class="home-card ${all ? 'is-good' : 'is-wait'}" data-go="cg-uploads" aria-label="CG uploads: ${esc(msg)}. Open CG uploads">
+        <span class="home-k">${icon('upload')}CG uploads</span>
+        <span class="home-status"><span class="home-mark">${all ? icon('check') : `<i aria-hidden="true">${done}</i>`}</span><b class="home-msg">${esc(msg)}</b></span>
+        <span class="home-sub">${esc(sub)}</span>
+        <span class="home-chips">${campuses.map((c) => `<span class="is-${st(c.id)}" title="${esc(`${c.short_name}: ${st(c.id) === 'done' ? 'done' : st(c.id) === 'working' ? 'working on it' : 'not started'}`)}">${esc(CAMPUS_SHORT[c.code] || c.code || c.short_name)}</span>`).join('')}</span>
+        <span class="home-go">CG uploads ${icon('chevron')}</span>
+      </button>`;
   }
 
   function head(when = '') {

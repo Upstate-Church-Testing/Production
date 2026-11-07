@@ -244,6 +244,13 @@ export async function createSupabaseStore(url, key) {
       if (data?.error) throw new Error(data.error);
       return data;
     },
+    /** CG uploads for one Sunday (2026-11-08): each campus's status, and who set it when. */
+    async cgUploads(sunday) {
+      return ok(await sb.from('cg_uploads').select('campus_id, status, updated_at, updated_by_name, who:profiles!cg_uploads_updated_by_fkey(full_name)').eq('sunday', sunday));
+    },
+    async cgSetUpload(sunday, campusId, status) {
+      ok(await sb.from('cg_uploads').upsert({ sunday, campus_id: campusId, status }, { onConflict: 'sunday,campus_id' }));
+    },
     /** Events › Live: what each person in an event is on (VOX 4), and the gear it is, when logged. */
     async eventGear(planId) {
       return ok(await sb.from('event_item_gear').select('item_id, label, device_ids').eq('plan_id', planId));
@@ -403,6 +410,7 @@ export async function createSupabaseStore(url, key) {
       }
       // Planning Center rosters: the sync touches one row whenever anything changed.
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'pco_live' }, () => cb('pco'));
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'cg_uploads' }, () => cb('cg'));
       ch.subscribe();
       return () => sb.removeChannel(ch);
     },

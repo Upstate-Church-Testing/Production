@@ -21,6 +21,14 @@ export const hiddenPosition = (name) =>
 export const teamServices = (t) => (t.service_type_ids?.length ? t.service_type_ids : [t.service_type_id]);
 
 /** Date and time formatting in the church's time zone, whatever the device's. */
+/** The Sunday the week is getting ready for, as 2026-11-08: today if it's Sunday (until the day
+ *  is over), else the coming one, so Monday moves on to the next. In the church's time zone. */
+export function comingSunday(timeZone = 'America/New_York', at = Date.now()) {
+  const d = new Date(`${clock(timeZone).day(at)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + ((7 - d.getUTCDay()) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
 export function clock(timeZone = 'America/New_York') {
   const safe = (opts) => {
     try { return new Intl.DateTimeFormat('en-US', { timeZone, ...opts }); } catch { return new Intl.DateTimeFormat('en-US', opts); }

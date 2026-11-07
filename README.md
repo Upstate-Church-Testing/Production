@@ -115,7 +115,17 @@ or "1 person declined" / "2 people haven't confirmed yet", with who and where li
 goes to Scheduling with those people outlined on the grid and a line over it saying who
 declined (or hasn't answered) and what to do; ✕ clears it. Home and Scheduling count with the
 same code (`js/roster.js`: the PCO model and the grid's rows, moved out of views/services.js
-unchanged), so the numbers always match. Next: CG and lighting.
+unchanged), so the numbers always match. Under the headline, **CG**, **Lighting** and
+**Broadcast** on their own (confirmed of scheduled): CG and Lighting by position, Broadcast by
+team (cameras, director, switcher…).
+
+**CG uploads** card: how many campuses' CG is uploaded for the coming Sunday ("3 of 10
+campuses uploaded"), each campus a chip (green done, yellow working on it). A tap opens
+**CG uploads** (second in the sidebar): every campus with Not started / Working on it / Done
+and who set it when. Always the coming Sunday (`comingSunday` in pco.js: today if it's
+Sunday, until midnight), so on Monday it moves on and everything reads Not started:
+`cg_uploads` is keyed by the Sunday, so nothing is wiped and last week's stay as they were.
+Staff change it; changes push live to every open screen.
 
 ## Events (staff)
 
@@ -488,6 +498,7 @@ js/config.js                   Supabase URL + publishable key (empty = preview m
 js/app.js                      sign-in, roles, the sidebar (NAV) and pages, sheets, toasts
 js/store-supabase.js           live data
 js/store-demo.js               preview data (same methods, in memory)
+js/views/cg.js                CG uploads: each campus's CG for the coming Sunday (not started, working, done)
 js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
 js/views/events.js            Events: one-off Planning Center services, with Live (the service clock), Flow and Team

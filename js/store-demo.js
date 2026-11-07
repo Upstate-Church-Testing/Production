@@ -470,6 +470,24 @@ export function createDemoStore() {
 
     async reference() { await wait(); return { campuses: clone(CAMPUSES), departments: clone(DEPARTMENTS) }; },
 
+    /** CG uploads for one Sunday: each campus's status (the preview starts with a few going). */
+    async cgUploads(sunday) {
+      await wait(60);
+      if (!db.cg) {
+        const first = CAMPUSES.slice(0, 3);
+        db.cg = first.map((c, i) => ({ sunday, campus_id: c.id, status: i < 2 ? 'done' : 'working', updated_at: new Date(Date.now() - (i + 1) * 3600e3).toISOString(), who: { full_name: me.full_name || 'Demo Admin' } }));
+      }
+      return clone(db.cg.filter((r) => r.sunday === sunday));
+    },
+    async cgSetUpload(sunday, campusId, status) {
+      await wait(120);
+      if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can change CG uploads.');
+      db.cg = db.cg || [];
+      const row = db.cg.find((r) => r.sunday === sunday && r.campus_id === campusId);
+      const now = { status, updated_at: new Date().toISOString(), who: { full_name: me.full_name || 'Demo Admin' } };
+      if (row) Object.assign(row, now); else db.cg.push({ sunday, campus_id: campusId, ...now });
+      changed('cg');
+    },
     /** Events › Live: what each person in an event is on (VOX 4), and the gear when it's logged.
      *  The preview's Women's Night: Speaker 1 is on VOX 4, linked to a handheld if there is one. */
     async eventGear(planId) {
