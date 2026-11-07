@@ -3043,17 +3043,20 @@ html.lv-full-on, html.lv-full-on body { overflow: hidden; }
 .lvx-ctl-err .ico { width: 16px; height: 16px; flex: none; margin-top: 1px; }
 html.lv-full-on #toast { z-index: 95; } /* toasts show over the Live view */
 
-/* Live header: red close on the left, the clock on the right, the event big and centered */
-.lvx-top { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "close wall" "title title" "badge badge"; align-items: center; gap: 4px 10px; min-height: 0; }
-.lvx-top .lvx-close { grid-area: close; margin: 0 0 0 -4px; width: 44px; height: 44px; background: var(--live); border-color: transparent; color: #fff; }
-.lvx-top .lvx-close .ico { width: 20px; height: 20px; stroke-width: 2.4; }
-.lvx-top .lvx-wall { grid-area: wall; justify-self: end; }
+/* Live header: a red close, then the event in capitals as big as the row allows (fitTitle
+   sets the size; --lvx-x matches the close to it) */
+.lvx-top {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "close title";
+  align-items: center; column-gap: 12px; min-height: 0; margin-top: 4px;
+}
+.lvx-top .lvx-close {
+  grid-area: close; width: var(--lvx-x, 40px); height: var(--lvx-x, 40px); margin: 0; border-radius: 12px;
+  background: transparent; border: 1.5px solid color-mix(in srgb, var(--live) 55%, transparent); color: var(--live);
+}
+.lvx-top .lvx-close .ico { width: 70%; height: 70%; stroke-width: 2.4; }
 .lvx-top .lvx-event {
-  grid-area: title; justify-self: center; text-align: center; max-width: 100%; margin: 2px 0 0;
-  font: 600 clamp(26px, 7.4vw, 44px)/1.12 var(--f-display); letter-spacing: -0.01em; color: var(--fg);
-  white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+  grid-area: title; min-width: 0; overflow: hidden; margin: 0; text-align: left; text-transform: uppercase;
+  font: 700 30px/1.05 var(--f-display); letter-spacing: 0.01em; color: var(--fg); white-space: nowrap;
 }
-.lvx-top .lv-badge { grid-area: badge; justify-self: center; margin-top: 2px; }
-@media (orientation: landscape) and (max-height: 500px) {
-  .lvx-top .lvx-event { font-size: clamp(20px, 6vh, 28px); margin: 0; }
-}
+.lvx-top .lvx-event > span { display: inline-block; }
+

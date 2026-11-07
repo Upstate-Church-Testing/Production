@@ -115,7 +115,8 @@ the last few past ones; an event opens on its times, a Live button and two panes
 
 - **Live** (the red button under the times): a full-screen production view of Planning
   Center Live, on its own layer over the whole app (`.lvx-root` on `<body>`: inside the page,
-  iPhone Safari clipped it to the event card). Close it with ✕ (or Esc).
+  iPhone Safari clipped it to the event card). Up top only a red ✕ (or Esc) and the event's
+  name in capitals, sized to fill the row (one line; two if it's very long).
   Before the service: what's on now from the plan's times (Doors Open), a countdown to the
   next thing (Worship Center Doors Open, then the service), what that is, and the item up
   first. Past the service time with Live not started: how late, counting up in red.

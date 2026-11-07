@@ -280,6 +280,8 @@ export function mount(el, ctx) {
       });
       document.body.appendChild(layer);
       document.documentElement.classList.add('lv-full-on');
+      window.addEventListener('resize', fitTitle);
+      document.fonts?.ready?.then(() => fitTitle()).catch(() => {});
       // Where the browser can (not iPhone Safari), the whole screen: no browser bars either.
       try {
         if (!document.fullscreenElement && document.documentElement.requestFullscreen && matchMedia('(hover: hover)').matches) {
@@ -301,7 +303,7 @@ export function mount(el, ctx) {
     clearTimeout(pollTimer); pollTimer = null;
     clearInterval(tickTimer); tickTimer = null;
     keepAwake(false);
-    if (layer) { layer.remove(); layer = null; }
+    if (layer) { layer.remove(); layer = null; window.removeEventListener('resize', fitTitle); }
     document.documentElement.classList.remove('lv-full-on');
     if (document.fullscreenElement && browserFull) { browserFull = false; document.exitFullscreen().catch(() => {}); }
     if (alive) $('[data-act="live"]', root)?.focus({ preventScroll: true });
@@ -365,6 +367,7 @@ export function mount(el, ctx) {
     if (sig === s.sig) { tick(); return; }
     s.sig = sig;
     layer.innerHTML = liveHtml(cur.m, cur.p, w);
+    fitTitle();
     tick();
   }
 
@@ -419,22 +422,18 @@ export function mount(el, ctx) {
   function liveHtml(m, p, w) {
     const st = s.live;
     const title = p.title || m.type(p).name;
-    // Close on the left, the clock on the right, and the event big and centered under them,
-    // so it's plain which event this is at a glance. A small Live / Ended tag under it.
-    const top = (badge) => `<header class="lvx-top">
+    // Close, then the event in capitals sized to fill the rest of the row (fitTitle), so it's
+    // plain which event this is at a glance. Nothing else up there.
+    const top = () => `<header class="lvx-top">
         <button type="button" class="lvx-close" data-act="close" aria-label="Close Live">${icon('close')}</button>
-        <span class="lvx-wall" data-tick="wall"></span>
-        <h1 class="lvx-event">${esc(title)}</h1>
-        ${badge}
+        <h1 class="lvx-event"><span>${esc(title)}</span></h1>
       </header>`;
     if (!st || st.available === false || !w) {
       const msg = !st ? (s.liveError ? `Couldn’t reach Planning Center Live: ${esc(s.liveError)}. Trying again.` : 'Reading Planning Center Live…')
         : `Planning Center Live isn’t available for this plan.${st.note ? ` ${esc(st.note)}` : ''}`;
-      return `<div class="lvx">${top('')}<p class="lvx-msg">${msg}</p></div>`;
+      return `<div class="lvx">${top()}<p class="lvx-msg">${msg}</p></div>`;
     }
     const hhmm = (ms) => m.c.time(ms);
-    const badge = w.state === 'live' ? '<span class="lv-badge is-live"><i></i>Live</span>'
-      : w.state === 'done' ? '<span class="lv-badge is-done">Ended</span>' : '';
     const meta = (it) => [it.kind === 'song' ? 'Song' : it.kind === 'media' ? 'Media' : null, it.key_name ? `Key ${it.key_name}` : null,
       it.description && it.description.length <= 40 && !/\n/.test(it.description) ? it.description : null].filter(Boolean).join(' · ');
     const itemCard = (r, k, opts = {}) => `<section class="lvx-card ${opts.cls || ''}">
@@ -494,12 +493,29 @@ export function mount(el, ctx) {
         <span><small>Ends about</small><b>${w.plannedStart ? esc(hhmm(w.plannedStart + w.planned)) : '—'}</b></span>
       </footer>` : '';
     return `<div class="lvx" data-state="${w.state}">
-        ${top(badge)}
+        ${top()}
         <div class="lvx-main">${main}</div>
         ${foot}
         ${isAdmin ? controlsHtml(st, w) : ''}
         ${s.liveError ? `<p class="lv-warn">${icon('warn')}Lost Planning Center Live for a moment: ${esc(s.liveError)}. Still trying.</p>` : ''}
       </div>`;
+  }
+
+  /** The event's name as big as the row allows on one line (two lines if it's very long),
+   *  with the close button matching its height. */
+  function fitTitle() {
+    const h = layer && $('.lvx-event', layer);
+    const span = h?.firstElementChild;
+    if (!h || !span) return;
+    h.style.whiteSpace = 'nowrap';
+    h.style.fontSize = '100px';
+    const avail = h.clientWidth;
+    const natural = span.getBoundingClientRect().width;
+    if (!avail || !natural) return;
+    let size = Math.min(60, Math.floor((100 * avail) / natural * 0.98));
+    if (size < 22) { size = 22; h.style.whiteSpace = 'normal'; }
+    h.style.fontSize = `${size}px`;
+    layer.style.setProperty('--lvx-x', `${Math.max(36, Math.min(54, Math.round(size * 1.05)))}px`);
   }
 
   /** Admins: Take control, then Back and Next (as Tally's Planning Center account). */
