@@ -151,7 +151,10 @@ the last few past ones; an event opens on its times, a Live button and two panes
   (`pco_live_cache` holds the last answer; items and their times are read again when the item
   moves, or every 20 seconds). Planning Center has no push for Live to a token like ours, so
   this is the fastest that stays well inside its rate limit. Counting uses the server's
-  clock, so every screen shows the same second. Times left from trying Live out earlier (a
+  clock, so every screen shows the same second: of the last 20 answers the one with the
+  quickest round trip sets it, and the time shown never steps back. The view is drawn again
+  only when what it shows changes (not each time Planning Center is read), and the bar and
+  clock are drawn at their place, so nothing jumps. Times left from trying Live out earlier (a
   rehearsal) don't count as the service having run.
 - **Flow**: the order of service as planned, with times from the service start and notes.
 - **Team**: who's on the production teams (audio left out, like everywhere else).

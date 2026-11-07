@@ -60,7 +60,19 @@ export function mount(el, ctx) {
   let wallFmt = null;
   let layer = null;          // the Live layer, on <body> while open
   let browserFull = false;   // the browser's own full screen (computers, iPads)
-  const now = () => Date.now() + s.offset;
+  // The server's clock, steadily: of the last 20 answers, the one with the quickest round trip
+  // sets the offset (a slow one's half-way guess is the least sure), and the time shown never
+  // steps backwards (a correction waits instead of jumping the countdown back).
+  const clockSamples = [];
+  let lastNow = 0;
+  const noteClock = (serverNow, asked, got) => {
+    const at = Date.parse(serverNow);
+    if (!Number.isFinite(at)) return;
+    clockSamples.push({ rtt: got - asked, off: at - (asked + got) / 2 });
+    if (clockSamples.length > 20) clockSamples.shift();
+    s.offset = clockSamples.reduce((a, b) => (b.rtt < a.rtt ? b : a)).off;
+  };
+  const now = () => { lastNow = Math.max(lastNow, Date.now() + s.offset); return lastNow; };
 
   el.innerHTML = `<div class="ev-page" id="ev"><div class="loading">${'<div class="sk tall"></div>'.repeat(2)}</div></div>`;
   const root = $('#ev', el);
@@ -331,7 +343,7 @@ export function mount(el, ctx) {
       if (!alive || nav.plan !== p.id) return;
       const got = Date.now();
       // The server's clock, so every screen counts the same second (half the round trip back).
-      if (st?.now) s.offset = Date.parse(st.now) - (asked + got) / 2;
+      if (st?.now) noteClock(st.now, asked, got);
       s.live = st; s.liveFor = p.id; s.liveError = null;
     } catch (e) {
       s.liveError = e.message;
@@ -395,7 +407,7 @@ export function mount(el, ctx) {
     try {
       const st = await ctx.store.pcoLive(cur.p.id, action);
       if (!alive || nav.plan !== cur.p.id) return;
-      if (st?.now) s.offset = Date.parse(st.now) - (asked + Date.now()) / 2;
+      if (st?.now) noteClock(st.now, asked, Date.now());
       s.live = st; s.liveError = null;
     } catch (e) {
       s.ctlError = e.message || 'That didn’t go through.';
@@ -407,8 +419,12 @@ export function mount(el, ctx) {
 
   /** What the layer shows, in short: a change means drawing it again. */
   function sigOf(w) {
-    return [s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.controller_id, s.live?.me_id, s.live?.full_read_at,
-      !!s.liveError, !!s.live, s.busy, s.ctlError, s.mics?.v, w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
+    // What the screen shows, not when Planning Center was last read: the items are read again
+    // every 20 seconds, and drawing it all again for nothing made the bar start over from zero.
+    const it = (r) => (r ? [r.it.id, r.it.title, r.it.length, r.t?.start].join('~') : '');
+    return [s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.controller_id, s.live?.me_id,
+      !!s.liveError, !!s.live, s.live?.available, s.busy, s.ctlError, s.mics?.v, w?.state, w?.block?.id, w?.nextBlock?.id,
+      w ? [it(w.item?.r), it(w.next), it(w.then), it(w.upFirst), it(w.run?.[1]), w.planned, w.plannedStart, w.first, w.lastEnd].join('|') : ''].join('|');
   }
 
   /** Redraw the layer when what it shows changed (the numbers tick on their own). */
@@ -503,9 +519,10 @@ export function mount(el, ctx) {
       // Now (its length is at the end of the bar), then the next two, each with its length at the bottom right.
       main = itemCard(r, 'Now', {
         cls: 'is-now',
-        // The bar with how far in on its left and the item's length on its right.
-        clock: `<div class="lvx-clock" data-tick="big">—</div>
-          <div class="lvx-barrow"><span class="lvx-t" data-tick="in"></span><div class="lv-bar"><i data-tick="bar"></i></div><span class="lvx-t">${esc(dur(w.item.length))}</span></div>`,
+        // The bar with how far in on its left and the item's length on its right, drawn where it
+        // already is (so a redraw doesn't run it up from zero); tick() keeps it moving.
+        clock: `<div class="lvx-clock ${w.item.left < 0 ? 'is-over' : w.item.left < 30000 ? 'is-close' : ''}" data-tick="big">${esc(w.item.left >= 0 ? dur(w.item.left) : `+${dur(-w.item.left)}`)}</div>
+          <div class="lvx-barrow"><span class="lvx-t" data-tick="in">${esc(dur(w.item.elapsed))}</span><div class="lv-bar"><i data-tick="bar" class="${w.item.left < 0 ? 'is-over' : ''}" style="width:${Math.min(100, w.item.length ? (w.item.elapsed / w.item.length) * 100 : 100).toFixed(1)}%"></i></div><span class="lvx-t">${esc(dur(w.item.length))}</span></div>`,
       }) + `<div class="lvx-stack">${w.next
         ? itemCard(w.next, 'Next', { cls: 'is-next', len: len(w.next) }) + (w.then ? itemCard(w.then, 'Then', { cls: 'is-next is-then', len: len(w.then) }) : '')
         : '<section class="lvx-card is-next"><div class="lvx-k"><span>Next</span></div><h2>End of the service</h2></section>'}</div>`;
