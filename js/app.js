@@ -217,7 +217,8 @@ async function startOnce() {
 
   try {
     const ref = await ctx.store.reference();
-    ctx.campuses = ref.campuses;
+    // Campuses in alphabetical order by the name shown (GCC before Greenville), everywhere they're listed.
+    ctx.campuses = [...ref.campuses].sort((a, b) => String(a.short_name || a.name).localeCompare(String(b.short_name || b.name), undefined, { sensitivity: 'base' }));
     ctx.departments = ref.departments;
     ctx.dep = Object.fromEntries(ref.departments.map((d) => [d.slug, d]));
     ctx.campusById = new Map(ref.campuses.map((c) => [c.id, c]));

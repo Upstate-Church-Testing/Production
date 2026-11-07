@@ -446,6 +446,12 @@ matters), "powercon 10", "purple".
 
 ## Data model
 
+Locations are listed in alphabetical order everywhere in the app (Anderson, Five Forks, Fountain
+Inn, GCC, Greenville, …): app.js sorts them by the name shown when it loads them, and
+campuses.sort_order is alphabetical too. Services at the same time go in that order;
+Settings › Planning Center lists each location's own folder ("05 UC GCC") in that order
+too, whatever its number in Planning Center.
+
 ```
 campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Wing Offices)
     │

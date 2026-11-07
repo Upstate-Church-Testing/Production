@@ -22,9 +22,12 @@ export function pcoModel(d, status, ctx, wantWeek) {
   // No audio, except on services an admin marked to keep their audio op (the midweeks).
   const keepAudio = (typeId) => !!typeById.get(typeId)?.show_audio;
   const shows = (typeId, position) => keepAudio(typeId) || !hiddenPosition(position);
+  // Same start time: by location (ctx.campuses is alphabetical), then Planning Center's order.
+  const campusRank = new Map(ctx.campuses.map((cp, i) => [cp.id, i]));
+  const rankOf = (p) => campusRank.get(typeById.get(p.service_type_id).campus_id) ?? 99;
   const plans = d.plans.filter((p) => typeById.has(p.service_type_id))
     .map((p) => ({ ...p, needed: (p.needed || []).filter((n) => shows(p.service_type_id, n.position)), _day: c.day(p.sort_date), _start: start(p) }))
-    .sort((a, b) => a._start - b._start || (typeById.get(a.service_type_id).sequence ?? 99) - (typeById.get(b.service_type_id).sequence ?? 99));
+    .sort((a, b) => a._start - b._start || rankOf(a) - rankOf(b) || (typeById.get(a.service_type_id).sequence ?? 99) - (typeById.get(b.service_type_id).sequence ?? 99));
   const planType = new Map(plans.map((p) => [p.id, p.service_type_id]));
   const people = new Map();
   for (const p of d.people) if (shows(planType.get(p.plan_id), p.position)) people.set(p.plan_id, [...(people.get(p.plan_id) || []), p]);

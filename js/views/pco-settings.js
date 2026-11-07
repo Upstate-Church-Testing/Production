@@ -123,7 +123,18 @@ export function mountPcoSettings(box, ctx) {
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(t);
     }
-    const order = [...groups.keys()].sort((a, b) => /archive/i.test(a) - /archive/i.test(b) || a.localeCompare(b, undefined, { numeric: true }));
+    // A location's own folder ("05 UC GCC": named for the location, every service in it there)
+    // goes in location order, which is alphabetical (GCC before Greenville), whatever its
+    // number in Planning Center; the other folders after, in Planning Center's order.
+    const campusRank = new Map(ctx.campuses.map((c, i) => [c.id, i]));
+    const folderRank = (g) => {
+      const ids = new Set(groups.get(g).map((t) => t.campus_id || ''));
+      const cp = ids.size === 1 && !ids.has('') ? ctx.campusById.get([...ids][0]) : null;
+      const named = cp && [cp.short_name, cp.code].some((n) => n && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(g));
+      return named ? campusRank.get(cp.id) ?? 99 : 99;
+    };
+    const order = [...groups.keys()].sort((a, b) => /archive/i.test(a) - /archive/i.test(b) || folderRank(a) - folderRank(b) || a.localeCompare(b, undefined, { numeric: true }));
+    const svcRank = (t) => campusRank.get(t.campus_id) ?? 99;
 
     return `
       <div class="pc-row">
@@ -139,7 +150,7 @@ export function mountPcoSettings(box, ctx) {
       <h3 class="pc-h">Who sees each service</h3>
       <p class="fine"><b>Everyone</b> includes volunteers. <b>Staff</b> is staff and admins. <b>Off</b> keeps it out of the app. <b>Scheduling</b> puts a shared service on PCO › Scheduling; turn it off to keep a service in the list but off the grid.</p>
       <div class="pc-groups">${order.map((g) => {
-        const list = groups.get(g).sort((a, b) => (a.path.length - b.path.length) || (a.sequence ?? 99) - (b.sequence ?? 99) || a.name.localeCompare(b.name));
+        const list = groups.get(g).sort((a, b) => (a.path.length - b.path.length) || svcRank(a) - svcRank(b) || (a.sequence ?? 99) - (b.sequence ?? 99) || a.name.localeCompare(b.name));
         const on = list.filter((t) => t.access !== 'hidden').length;
         const isOpen = opened.has(g);
         return `<details class="pc-group" data-group="${esc(g)}" ${isOpen ? 'open' : ''}>

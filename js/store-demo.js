@@ -19,8 +19,8 @@ const DEPARTMENTS = [
 
 const CAMPUSES = [
   ['Anderson Campus', 'Anderson', 'AND'], ['Five Forks Campus', 'Five Forks', 'FF'],
-  ['Fountain Inn Campus', 'Fountain Inn', 'FI'], ['Greenville Campus', 'Greenville', 'GVL'],
-  ['Greenville Convention Center (GCC) Campus', 'GCC', 'GCC'], ['Harrison Bridge Campus', 'Harrison Bridge', 'HB'],
+  ['Fountain Inn Campus', 'Fountain Inn', 'FI'], ['Greenville Convention Center (GCC) Campus', 'GCC', 'GCC'],
+  ['Greenville Campus', 'Greenville', 'GVL'], ['Harrison Bridge Campus', 'Harrison Bridge', 'HB'],
   ['Laurens Campus', 'Laurens', 'LAU'], ['Mauldin Campus', 'Mauldin', 'MAU'],
   ['Simpsonville Campus', 'Simpsonville', 'SVL'], ['Union Gathering', 'Union', 'UN'],
 ].map(([name, short_name, code], i) => ({ id: 'c-' + code, name, short_name, code, sort_order: i + 1, is_active: true }));

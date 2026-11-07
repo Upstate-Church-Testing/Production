@@ -148,13 +148,15 @@ export function mount(el, ctx) {
     const c = clock(s.status?.time_zone);
     const types = d.types.filter((t) => t.is_event && t.access !== 'hidden');
     const typeById = new Map(types.map((t) => [t.id, t]));
+    const campusRank = new Map(ctx.campuses.map((cp, i) => [cp.id, i]));
+    const rankOf = (p) => campusRank.get(typeById.get(p.service_type_id)?.campus_id) ?? 99;
     const start = (p) => {
       const svc = (p.times || []).filter((x) => x.kind === 'service' && x.starts_at).map((x) => Date.parse(x.starts_at)).sort((a, b) => a - b)[0];
       return svc ?? Date.parse(p.sort_date);
     };
     const plans = d.plans.filter((p) => typeById.has(p.service_type_id))
       .map((p) => ({ ...p, _start: start(p), _day: c.day(p.sort_date) }))
-      .sort((a, b) => a._start - b._start);
+      .sort((a, b) => a._start - b._start || rankOf(a) - rankOf(b));
     const today = c.day(Date.now());
     const people = d.people.filter((x) => plans.some((p) => p.id === x.plan_id));
     const teams = d.teams.filter((t) => t.shown && teamServices(t).some((id) => typeById.has(id)));

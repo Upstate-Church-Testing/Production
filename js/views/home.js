@@ -22,7 +22,7 @@ const GROUPS = [
   { id: 'broadcast', label: 'Broadcast', unit: 'positions' },
 ];
 const groupOf = (row) => (/broadcast/i.test(row.team) ? 'broadcast' : /\bcg\b/i.test(row.position) ? 'cg' : /light|\blx\b/i.test(row.position) ? 'lighting' : null);
-/** AN, FF, FI, GVL, GCC, HB, MLN, SVL, LAU, UN: as the team says them. */
+/** AN, FF, FI, GCC, GVL, HB, LAU, MLN, SVL, UN: as the team says them. */
 const CAMPUS_SHORT = { AND: 'AN', MAU: 'MLN' };
 
 export function mount(el, ctx) {
