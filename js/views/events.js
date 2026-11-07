@@ -33,7 +33,13 @@ const GEAR_EVERY_MS = 30000;   // Live: who's on which mic, read again this ofte
 export function mount(el, ctx) {
   let alive = true;
   const isAdmin = ctx.me.role === 'admin';
-  const nav = ctx.eventsNav || (ctx.eventsNav = { plan: null, pane: 'flow', live: false });
+  // Where you were (the event, Live open) lasts through a reload into a new version.
+  const NAV_KEY = 'ucp.events.nav';
+  const nav = ctx.eventsNav || (ctx.eventsNav = (() => {
+    try { const v = JSON.parse(sessionStorage.getItem(NAV_KEY) || 'null'); if (v && typeof v === 'object') return { plan: v.plan || null, pane: v.pane || 'flow', live: !!v.live }; } catch { /* none */ }
+    return { plan: null, pane: 'flow', live: false };
+  })());
+  const saveNav = () => { try { sessionStorage.setItem(NAV_KEY, JSON.stringify({ plan: nav.plan, pane: nav.pane, live: nav.live })); } catch { /* private mode */ } };
   const s = {
     status: undefined, data: null, error: null,
     items: new Map(),   // plan id -> its flow (from the sync), loaded when opened
@@ -63,7 +69,7 @@ export function mount(el, ctx) {
     const t = e.target.closest('[data-open], [data-pane], [data-act]');
     if (!t) return;
     if (t.dataset.open) { open(t.dataset.open); return; }
-    if (t.dataset.pane) { nav.pane = t.dataset.pane; draw(); return; }
+    if (t.dataset.pane) { nav.pane = t.dataset.pane; saveNav(); draw(); return; }
     const act = t.dataset.act;
     if (act === 'back') open(null);
     else if (act === 'live') openLive();
@@ -151,6 +157,7 @@ export function mount(el, ctx) {
     if (nav.plan !== planId) { s.live = null; s.liveFor = null; s.liveError = null; s.sig = ''; nav.pane = 'flow'; }
     if (!planId) closeLive();
     nav.plan = planId;
+    saveNav();
     draw();
     window.scrollTo(0, 0);
   }
@@ -263,6 +270,7 @@ export function mount(el, ctx) {
     const cur = current();
     if (!cur) return;
     nav.live = true;
+    saveNav();
     if (s.liveFor !== cur.p.id) { s.live = null; s.liveFor = cur.p.id; s.liveError = null; s.sig = ''; }
     if (!layer) {
       layer = document.createElement('div');
@@ -305,7 +313,9 @@ export function mount(el, ctx) {
     if (layer) { layer.remove(); layer = null; window.removeEventListener('resize', fitTitle); }
     document.documentElement.classList.remove('lv-full-on');
     if (document.fullscreenElement && browserFull) { browserFull = false; document.exitFullscreen().catch(() => {}); }
+    saveNav();
     if (alive) $('[data-act="live"]', root)?.focus({ preventScroll: true });
+    if (alive) ctx.updateNow?.(); // leaving Live: a good moment for a waiting new version
   }
 
   async function poll() {
@@ -328,6 +338,8 @@ export function mount(el, ctx) {
     }
     if (!alive || !layer || nav.plan !== p.id) return;
     paint();
+    // A new version waiting: take it now (Live comes straight back), unless a Next is on its way.
+    if (!s.busy && ctx.updateNow?.()) return;
     pollTimer = setTimeout(poll, p._day === m.today ? POLL_MS : SLOW_POLL_MS);
   }
 

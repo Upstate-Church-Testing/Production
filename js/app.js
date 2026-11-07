@@ -101,6 +101,9 @@ const ctx = {
   newDevice: (preset) => goWith('network', { newDevice: preset }),
   openType: (id) => goWith('gear', { type: id }),
   openSettings: (section) => goWith('account', { section }),
+  /** A page that's a good moment for a waiting new version (Events › Live, which comes back
+   *  where it was) can take it now. True when it's reloading. */
+  updateNow: () => takeUpdate(),
   openNetworkFlag: (flag) => goWith('network', { flag }),
   openGear: (filters) => goWith('gear', { filters }),
   openPatch: (universe) => goWith('patch', { patch: { universe } }),

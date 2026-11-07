@@ -132,6 +132,9 @@ the last few past ones; an event opens on its times, a Live button and two panes
   Live for now. Side by side (Now left, Next right) on a computer or a phone on its
   side. The screen stays awake while it's open, and computers and iPads go to the browser's
   full screen.
+  A new version is taken while Live is open (it comes straight back to the same event,
+  Live up: `sessionStorage` ucp.events.nav), and closing Live is a good moment for one too;
+  elsewhere the app waits for a quiet moment as before.
   **Admins can drive it from here**: Take control, then Back and Next (pinned to the bottom),
   and Let go. Tally drives as the Planning Center account its connection was made with (the
   person who made the token; Planning Center Live shows that name as driving). Taking control
