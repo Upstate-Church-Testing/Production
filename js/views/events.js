@@ -490,8 +490,9 @@ export function mount(el, ctx) {
       main = itemCard(r, 'Now', {
         cls: 'is-now',
         right: `<span class="lvx-len">${esc(dur(w.item.length))}</span>`,
-        clock: `<div class="lvx-clockrow"><div class="lvx-clock" data-tick="big">—</div><span class="lvx-in"><b data-tick="in"></b><small>in</small></span></div>
-          <div class="lv-bar"><i data-tick="bar"></i></div><p class="lvx-sub" data-tick="sub"></p>`,
+        // The bar with how far in on its left and the item's length on its right.
+        clock: `<div class="lvx-clock" data-tick="big">—</div>
+          <div class="lvx-barrow"><span class="lvx-t" data-tick="in"></span><div class="lv-bar"><i data-tick="bar"></i></div><span class="lvx-t">${esc(dur(w.item.length))}</span></div>`,
       }) + (w.next ? itemCard(w.next, 'Next', {
         cls: 'is-next',
         right: `<span class="lvx-len">${esc(dur(Math.max(0, w.next.it.length || 0) * 1000))}</span>`,
@@ -606,7 +607,7 @@ export function mount(el, ctx) {
       if (!x) return;
       if (x.textContent !== v) x.textContent = v;
       if (cls !== undefined) {
-        const c = k !== 'big' ? cls : v.length > 6 ? `${cls} is-long` : v.length > 5 ? `${cls} is-wide` : cls; // +10:37 a size down
+        const c = k !== 'big' ? cls : v.length > 6 ? `${cls} is-long` : cls;
         if (x.className !== c) x.className = c;
       }
     };
@@ -621,7 +622,6 @@ export function mount(el, ctx) {
       const bar = $('[data-tick="bar"]', layer);
       if (bar) { bar.style.width = `${Math.min(100, w.item.length ? (w.item.elapsed / w.item.length) * 100 : 100).toFixed(1)}%`; bar.classList.toggle('is-over', left < 0); }
       set('in', dur(w.item.elapsed));
-      set('sub', left >= 0 ? 'Left in this item' : 'Over the planned time');
       if (w.first) set('svc', dur(t - w.first));
       if (w.projected != null) {
         set('proj', m.c.time(w.projected));
