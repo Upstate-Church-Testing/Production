@@ -3083,3 +3083,10 @@ html.lv-full-on .sheet-root { z-index: 100; } /* Gear's item pop-up opens over L
 @media (orientation: landscape) and (max-height: 500px) {
   .lvx-card.is-now h2, .lvx-card.is-next h2 { font-size: clamp(20px, 6.5vh, 34px); }
 }
+
+/* Live: how long the item has run, small beside the big clock */
+.lvx-clockrow { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 4px 14px; min-width: 0; }
+.lvx-in { display: grid; justify-items: start; padding-bottom: 0.9em; font: 600 20px/1.05 var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.lvx-in small { font: 700 11px/1.2 var(--f-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); }
+.lvx-clock.is-wide { font-size: clamp(62px, 19vw, 176px); }
+@media (min-width: 900px), (orientation: landscape) and (min-width: 640px) { .lvx-clock.is-wide { font-size: clamp(72px, 11.5vw, 210px); } }

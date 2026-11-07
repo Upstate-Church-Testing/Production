@@ -489,8 +489,9 @@ export function mount(el, ctx) {
       const r = w.item.r;
       main = itemCard(r, 'Now', {
         cls: 'is-now',
-        right: `<span class="lvx-len">${esc(dur(w.item.length))} planned</span>`,
-        clock: `<div class="lvx-clock" data-tick="big">—</div><div class="lv-bar"><i data-tick="bar"></i></div><p class="lvx-sub" data-tick="sub"></p>`,
+        right: `<span class="lvx-len">${esc(dur(w.item.length))}</span>`,
+        clock: `<div class="lvx-clockrow"><div class="lvx-clock" data-tick="big">—</div><span class="lvx-in"><b data-tick="in"></b><small>in</small></span></div>
+          <div class="lv-bar"><i data-tick="bar"></i></div><p class="lvx-sub" data-tick="sub"></p>`,
       }) + (w.next ? itemCard(w.next, 'Next', {
         cls: 'is-next',
         right: `<span class="lvx-len">${esc(dur(Math.max(0, w.next.it.length || 0) * 1000))}</span>`,
@@ -604,7 +605,10 @@ export function mount(el, ctx) {
       const x = $(`[data-tick="${k}"]`, layer);
       if (!x) return;
       if (x.textContent !== v) x.textContent = v;
-      if (cls !== undefined) { const c = k === 'big' && v.length > 6 ? `${cls} is-long` : cls; if (x.className !== c) x.className = c; }
+      if (cls !== undefined) {
+        const c = k !== 'big' ? cls : v.length > 6 ? `${cls} is-long` : v.length > 5 ? `${cls} is-wide` : cls; // +10:37 a size down
+        if (x.className !== c) x.className = c;
+      }
     };
     if (!wallFmt) {
       const opts = { hour: 'numeric', minute: '2-digit', second: '2-digit' };
@@ -616,7 +620,8 @@ export function mount(el, ctx) {
       set('big', left >= 0 ? dur(left) : `+${dur(-left)}`, `lvx-clock ${left < 0 ? 'is-over' : left < 30000 ? 'is-close' : ''}`);
       const bar = $('[data-tick="bar"]', layer);
       if (bar) { bar.style.width = `${Math.min(100, w.item.length ? (w.item.elapsed / w.item.length) * 100 : 100).toFixed(1)}%`; bar.classList.toggle('is-over', left < 0); }
-      set('sub', left >= 0 ? `Left in this item · ${dur(w.item.elapsed)} in` : `Over by ${dur(-left)} · ${dur(w.item.elapsed)} in`);
+      set('in', dur(w.item.elapsed));
+      set('sub', left >= 0 ? 'Left in this item' : 'Over the planned time');
       if (w.first) set('svc', dur(t - w.first));
       if (w.projected != null) {
         set('proj', m.c.time(w.projected));
