@@ -3060,3 +3060,26 @@ html.lv-full-on #toast { z-index: 95; } /* toasts show over the Live view */
 }
 .lvx-top .lvx-event > span { display: inline-block; }
 
+
+/* Live: bigger names, and what each person is on beside them (VOX 4); underlined and
+   tappable only when it's linked to gear */
+.lvx-who { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 14px; min-width: 0; }
+.lvx-card.is-now h2 { font-size: clamp(32px, 9vw, 66px); }
+.lvx-card.is-next h2, .lvx-card.is-sched h2 { font-size: clamp(27px, 7.4vw, 50px); }
+.lvx-mic { font: 700 17px/1.2 var(--f-body); letter-spacing: 0.03em; color: var(--muted); white-space: nowrap; }
+.lvx-mic.is-link {
+  background: none; border: 0; padding: 0; color: var(--dep-audio); cursor: pointer;
+  text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px;
+}
+html.lv-full-on .sheet-root { z-index: 100; } /* Gear's item pop-up opens over Live */
+.lvx-gear { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.lvx-gear button {
+  display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; width: 100%;
+  text-align: left; padding: 12px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel-2); color: var(--fg);
+}
+.lvx-gear b { font-weight: 600; }
+.lvx-gear small { grid-row: 2; color: var(--muted); font-size: 13px; }
+.lvx-gear .ico { grid-row: 1 / 3; grid-column: 2; width: 18px; height: 18px; color: var(--faint); }
+@media (orientation: landscape) and (max-height: 500px) {
+  .lvx-card.is-now h2, .lvx-card.is-next h2 { font-size: clamp(20px, 6.5vh, 34px); }
+}

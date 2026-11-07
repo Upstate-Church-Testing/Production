@@ -10,8 +10,9 @@
 //     schedule, what that is, and the first item up with its notes.
 //   During: the item that's up, its time left in big numbers (amber near the end, red and
 //     counting up once over), what's next and after that, and the service clock.
-//   Every item shows its production notes: Audio, CG and Lighting always (a dash when
-//     there's none), then any other note category it has, by its Planning Center name.
+//   Next to each name, what that person is on for this event (Amy Bray · VOX 4), from
+//     event_item_gear: entered per event on purpose, not read from Planning Center notes.
+//     It opens the gear (the mic, an IEM pack) only when that's logged in Gear.
 // When someone hits Next in Planning Center Live, this follows within a couple of seconds
 // (pco-live reads Live for every screen at once). The screen stays awake while it's open.
 // Admins can drive Live from here: Take control, then Back and Next, as the Planning
@@ -20,19 +21,14 @@
 
 import { esc, icon, $, debounce, initials, pageTitle } from '../util.js';
 import { clock, realPhoto, teamKey, teamServices, hiddenPosition, STATUS_LABEL } from '../pco.js';
+import { buildIndex, openDeviceSheet } from './devices.js';
 
 const POLL_MS = 1500;         // Live: ask this often while it's open
 const SLOW_POLL_MS = 15000;   // …when the event isn't today
 const CHECK_MS = 20000;       // the event list: has Planning Center changed?
 const PAST_SHOWN = 6;         // past events listed (latest first)
 
-// Production notes on Live, by Planning Center note category (exact names this church uses).
-// These three always show; any other category an item has follows under its own name.
-const NOTE_COLS = [
-  { label: 'Audio', dep: 'audio', re: /^audio(\s*\(foh\))?$/i },
-  { label: 'CG', dep: 'video', re: /^cg$/i },
-  { label: 'Lighting', dep: 'lighting', re: /^lighting(\s+operator)?$/i },
-];
+const GEAR_EVERY_MS = 30000;   // Live: who's on which mic, read again this often
 
 export function mount(el, ctx) {
   let alive = true;
@@ -48,7 +44,9 @@ export function mount(el, ctx) {
     sig: '',            // what the Live layer was last drawn from
     busy: null,         // a Take control / Next / Back on its way to Planning Center
     ctlError: null,     // why the last one didn't go through (shown in the Live view itself)
+    mics: null,         // { plan, map: item id -> { label, device_ids }, at }: what each person is on
   };
+  let gearData = null;  // Gear (items, models, rooms), read the first time a mic is opened
   let pollTimer = null;
   let checkTimer = null;
   let tickTimer = null;
@@ -273,8 +271,9 @@ export function mount(el, ctx) {
       layer.setAttribute('aria-modal', 'true');
       layer.setAttribute('aria-label', `Live: ${cur.p.title || 'event'}`);
       layer.addEventListener('click', (e) => {
-        const b = e.target.closest('[data-act]');
+        const b = e.target.closest('[data-act], [data-gear]');
         if (!b) return;
+        if (b.dataset.gear) { openGear(b.dataset.gear); return; }
         if (b.dataset.act === 'close') closeLive();
         else if (['take', 'release', 'next', 'previous'].includes(b.dataset.act)) drive(b.dataset.act);
       });
@@ -315,6 +314,7 @@ export function mount(el, ctx) {
     if (!alive || !layer || !cur) return;
     if (document.visibilityState === 'hidden') return; // onVisible starts it again
     const { m, p } = cur;
+    if (!s.mics || s.mics.plan !== p.id || Date.now() - s.mics.at > GEAR_EVERY_MS) loadMics(p.id);
     const asked = Date.now();
     try {
       const st = await ctx.store.pcoLive(p.id);
@@ -329,6 +329,47 @@ export function mount(el, ctx) {
     if (!alive || !layer || nav.plan !== p.id) return;
     paint();
     pollTimer = setTimeout(poll, p._day === m.today ? POLL_MS : SLOW_POLL_MS);
+  }
+
+  /** What each person in this event is on (VOX 4), and its gear when logged. */
+  async function loadMics(planId) {
+    const at = Date.now();
+    if (s.mics?.plan === planId) s.mics.at = at; // don't ask twice while this one's out
+    try {
+      const rows = (await ctx.store.eventGear?.(planId)) || [];
+      if (!alive || nav.plan !== planId) return;
+      const map = new Map(rows.map((r) => [String(r.item_id), { label: r.label, device_ids: r.device_ids || [] }]));
+      const changed = JSON.stringify([...map]) !== JSON.stringify([...(s.mics?.map || [])]);
+      s.mics = { plan: planId, map, at, v: (s.mics?.v || 0) + (changed ? 1 : 0) };
+      if (changed) paint();
+    } catch { /* next time */ }
+  }
+
+  /** The gear someone's on: straight to it when it's one item, a short list when it's more (mic and pack). */
+  async function openGear(itemId) {
+    const g = s.mics?.map.get(String(itemId));
+    if (!g?.device_ids?.length) return;
+    try {
+      if (!gearData) { const data = await ctx.store.networkData(); gearData = { data, ix: buildIndex(data), campus: ctx.campus }; }
+    } catch (e) { ctx.toast(`Couldn’t open Gear: ${e.message}`); return; }
+    const reload = async () => { try { const data = await ctx.store.networkData(); gearData.data = data; gearData.ix = buildIndex(data); } catch { /* keep what's there */ } };
+    const host = { s: gearData, load: reload, setOpen: () => {} };
+    const devs = g.device_ids.map((id) => gearData.ix.dev.get(id)).filter(Boolean);
+    if (!devs.length) { ctx.toast(`The gear for ${g.label} isn’t in Gear any more.`); return; }
+    if (devs.length === 1) { openDeviceSheet(ctx, host, devs[0].id); return; }
+    const sheet = ctx.openSheet({
+      label: g.label,
+      render: (api) => api.render(`<header class="sh-head"><div class="sh-title"><h2>${esc(g.label)}</h2></div>
+          <button type="button" class="btn icon ghost" data-close aria-label="Close">${icon('close')}</button></header>
+        <div class="sh-body"><ul class="lvx-gear">${devs.map((d) => {
+          const t = gearData.ix.type.get(d.type_id);
+          return `<li><button type="button" data-dev="${esc(d.id)}"><b>${esc(d.name || t?.name || 'Item')}</b><small>${esc([t?.manufacturer, t?.name].filter(Boolean).join(' '))}</small>${icon('chevron')}</button></li>`;
+        }).join('')}</ul></div>`),
+    });
+    sheet.el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dev]');
+      if (b) { sheet.close(true); openDeviceSheet(ctx, host, b.dataset.dev); }
+    });
   }
 
   /** Admins: drive Planning Center Live as Tally's Planning Center account. */
@@ -355,7 +396,7 @@ export function mount(el, ctx) {
   /** What the layer shows, in short: a change means drawing it again. */
   function sigOf(w) {
     return [s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.controller_id, s.live?.me_id, s.live?.full_read_at,
-      !!s.liveError, !!s.live, s.busy, s.ctlError, w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
+      !!s.liveError, !!s.live, s.busy, s.ctlError, s.mics?.v, w?.state, w?.block?.id, w?.nextBlock?.id].join('|');
   }
 
   /** Redraw the layer when what it shows changed (the numbers tick on their own). */
@@ -438,10 +479,9 @@ export function mount(el, ctx) {
       it.description && it.description.length <= 40 && !/\n/.test(it.description) ? it.description : null].filter(Boolean).join(' · ');
     const itemCard = (r, k, opts = {}) => `<section class="lvx-card ${opts.cls || ''}">
         <div class="lvx-k"><span>${esc(k)}</span>${opts.right || ''}</div>
-        <h2>${esc(r.it.title || 'Untitled')}</h2>
+        <div class="lvx-who"><h2>${esc(r.it.title || 'Untitled')}</h2>${micHtml(r.it)}</div>
         ${meta(r.it) ? `<p class="lvx-meta">${esc(meta(r.it))}</p>` : ''}
         ${opts.clock || ''}
-        ${notesHtml(r.it)}
         ${opts.after || ''}
       </section>`;
     let main = '';
@@ -541,19 +581,13 @@ export function mount(el, ctx) {
       </div>`;
   }
 
-  /** Audio, CG and Lighting always; then any other category the item has, by its own name. */
-  function notesHtml(it) {
-    const notes = it?.notes || [];
-    const used = new Set();
-    const rows = NOTE_COLS.map((col) => {
-      const hit = notes.filter((n) => col.re.test(String(n.category || '').trim()));
-      hit.forEach((n) => used.add(n));
-      return { label: col.label, dep: col.dep, text: hit.map((n) => n.content).join('\n') };
-    });
-    const extra = notes.filter((n) => !used.has(n)).map((n) => ({ label: n.category || 'Note', dep: null, text: n.content }));
-    return `<dl class="lvx-notes">${[...rows, ...extra].map((r) => `<div class="${r.text ? '' : 'is-empty'}">
-        <dt ${r.dep ? `data-dep="${r.dep}"` : ''}>${esc(r.label)}</dt><dd>${r.text ? esc(r.text).replace(/\n/g, '<br>') : '—'}</dd>
-      </div>`).join('')}</dl>`;
+  /** What this person is on for this event (VOX 4): opens its gear when that's logged. */
+  function micHtml(it) {
+    const g = s.mics?.plan === nav.plan ? s.mics.map.get(String(it.id)) : null;
+    if (!g?.label) return '';
+    return g.device_ids?.length
+      ? `<button type="button" class="lvx-mic is-link" data-gear="${esc(it.id)}">${esc(g.label)}</button>`
+      : `<span class="lvx-mic">${esc(g.label)}</span>`;
   }
 
   /** Every quarter second: the numbers only. */

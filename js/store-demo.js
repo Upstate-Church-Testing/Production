@@ -470,6 +470,20 @@ export function createDemoStore() {
 
     async reference() { await wait(); return { campuses: clone(CAMPUSES), departments: clone(DEPARTMENTS) }; },
 
+    /** Events › Live: what each person in an event is on (VOX 4), and the gear when it's logged.
+     *  The preview's Women's Night: Speaker 1 is on VOX 4, linked to a handheld if there is one. */
+    async eventGear(planId) {
+      await wait(60);
+      if (!/^st-svl-e-e0$/.test(planId)) return [];
+      const mic = db.devices.find((d) => /handheld|mic/i.test(d.name || ''))
+        || db.devices.find((d) => d.campus_id === 'c-SVL') || null;
+      return clone([
+        { item_id: `${planId}-i10`, label: 'VOX 4', device_ids: mic ? [mic.id] : [] },
+        { item_id: `${planId}-i11`, label: 'VOX 5', device_ids: [] },
+        { item_id: `${planId}-i12`, label: 'VOX 6', device_ids: [] },
+        { item_id: `${planId}-i13`, label: 'VOX 3', device_ids: [] },
+      ]);
+    },
     async networkData() {
       await wait(160);
       return clone({ rooms: db.rooms, networks: db.networks, devices: db.devices, ips: db.ips, positions: db.positions, software: db.software, installs: db.installs,

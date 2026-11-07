@@ -124,10 +124,12 @@ the last few past ones; an event opens on its times, a Live button and two panes
   seconds, red and counting up once it's over), a bar, what's next and the one after; along
   the bottom how long the service has run, the planned length, the time it's on pace to end
   (long or short against the plan) and who's driving. After: when it started and ended.
-  Every item shows its **production notes**: Audio (Planning Center's "Audio" and "Audio
-  (FOH)" note categories), CG ("CG") and Lighting ("Lighting", "Lighting Operator") always, a
-  dash when there's none; then any other category the item has (Video, Media, Producer…)
-  under its own name. Side by side (Now left, Next right) on a computer or a phone on its
+  Beside each name, **what that person is on for this event** (Amy Bray · VOX 4), from
+  `event_item_gear` (plan, item, label, `device_ids`): entered per event on purpose, not read
+  from Planning Center notes (Engage's were entered by hand from its plan). Underlined and
+  tappable only when `device_ids` has the gear (the mic, an IEM pack): one item opens its Gear
+  pop-up over Live, more than one lists them first. Planning Center's notes aren't shown on
+  Live for now. Side by side (Now left, Next right) on a computer or a phone on its
   side. The screen stays awake while it's open, and computers and iPads go to the browser's
   full screen.
   **Admins can drive it from here**: Take control, then Back and Next (pinned to the bottom),

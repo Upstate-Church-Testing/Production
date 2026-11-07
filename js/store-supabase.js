@@ -244,6 +244,10 @@ export async function createSupabaseStore(url, key) {
       if (data?.error) throw new Error(data.error);
       return data;
     },
+    /** Events › Live: what each person in an event is on (VOX 4), and the gear it is, when logged. */
+    async eventGear(planId) {
+      return ok(await sb.from('event_item_gear').select('item_id, label, device_ids').eq('plan_id', planId));
+    },
     async pcoSetEvent(typeId, on) {
       ok(await sb.rpc('pco_set_event', { p_type: typeId, p_on: !!on }));
     },
