@@ -119,18 +119,22 @@ unchanged), so the numbers always match. Under the headline, **CG**, **Lighting*
 **Broadcast** on their own (confirmed of scheduled): CG and Lighting by position, Broadcast by
 team (cameras, director, switcher…).
 
-**CG uploads** card: how many campuses' CG is uploaded for the coming Sunday ("3 of 10
-campuses uploaded"), each campus a chip (green done, yellow working on it). A tap opens
-**CG uploads** (second in the sidebar): every campus with Not started / Working on it / Done
-and who set it when. Always the coming Sunday (`comingSunday` in pco.js: today if it's
+**CG uploads** card: how many CGs are uploaded for the coming Sunday ("3 of 11 uploaded":
+one per campus, plus Simpsonville's CG2), each a chip (green done, yellow working on it). A
+tap opens **CG uploads** (second in the sidebar): every campus with Not started / Working on
+it / Done and who set it when. A campus with another CG computer in Gear (location CG2, or
+"(CG2)" in its name: Simpsonville's Mac mini (CG2) in A Control) gets a row of its own for it,
+uploaded on its own, and its main one is then tagged CG1 (`js/cg-rows.js`, shared with Home;
+`cg_uploads.station` is '' for the main CG, 'CG2' for the other). Always the coming Sunday (`comingSunday` in pco.js: today if it's
 Sunday, until midnight), so on Monday it moves on and everything reads Not started:
 `cg_uploads` is keyed by the Sunday, so nothing is wiped and last week's stay as they were.
 Staff change it; changes push live to every open screen. Beside each campus, its CG
 computer's **macOS**, **ProPresenter** and **Desktop Video** versions from Gear (macOS from the
 computer's Firmware / OS field, the others from its software): the campus's computer at CG
 (location CG or CG1, or "(CG)" / "(CG1)" in its name; CG1's, else the Worship Center's, when
-there's more than one), blank where Gear doesn't have it. Simpsonville's Worship Center CG is
-**CG1**, Mac mini (CG1); CG2 is the second one in A Control and isn't the one shown. On a computer they're columns, the logo once on top and the column
+there's more than one), blank where Gear doesn't have it; the CG2 row shows CG2's.
+Simpsonville's Worship Center CG is **CG1**, Mac mini (CG1). On a computer they're columns,
+the logo once on top and the column
 outlined in the logo's color (white, ProPresenter orange, Blackmagic gold); on a phone each
 campus is a card with the versions as outlined chips.
 
@@ -514,6 +518,7 @@ js/store-demo.js               preview data (same methods, in memory)
 js/views/cg.js                CG uploads: each campus's CG for the coming Sunday (not started, working, done)
 js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
+js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
 js/views/events.js            Events: one-off Planning Center services, with Live (the service clock), Flow and Team
 js/views/network.js            the IP sheet
 js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, area / spot, operator position, category, used as and brand; Items is a card per room › area › spot. Grid (models × locations or rooms) is built but not offered for now

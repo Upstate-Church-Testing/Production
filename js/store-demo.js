@@ -175,7 +175,7 @@ function buildExample() {
   dev('SVL', W, { name: 'Switcher', departments: ['video'], category: 'Switcher', manufacturer: 'Blackmagic', model: 'ATEM 2 M/E Production Studio 4K', location: 'A-Control Rack' }, [{ net: 'ctl', ip: '10.50.10.202/24' }]);
   dev('SVL', W, { name: 'Switcher Panel', departments: ['video'], category: 'Control Panel', manufacturer: 'Blackmagic', location: 'A-Control Desk' }, [{ net: 'ctl', ip: '10.50.10.205/24', gw: '10.50.10.101' }]);
   const dirMac = dev('SVL', W, { name: 'Director’s Mac', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'A-Control Desk', firmware: 'macOS Sequoia 15.6', positions: ['Director'] }, [{ net: 'ctl', ip: '10.50.10.217/24', gw: '10.50.10.101' }]);
-  const cg1 = dev('SVL', W, { name: 'CG1', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'FOH Desk', firmware: 'macOS Tahoe 26.1', positions: ['CG'] },
+  const cg1 = dev('SVL', W, { name: 'CG1', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini', location: 'CG1', firmware: 'macOS Tahoe 26.1', positions: ['CG'] },
     [{ net: 'ctl', ip: '10.50.10.234/24', gw: '10.50.10.101', label: 'Production' }, { net: 'house', ip: '10.60.20.79/24', label: 'House', mode: 'dhcp' }]);
   const ql = dev('SVL', W, { name: 'FOH Console', departments: ['audio'], category: 'Console', manufacturer: 'Yamaha', model: 'QL5', location: 'FOH' }, [{ net: 'dante', ip: '192.168.50.35/24', label: 'Dante Primary' }]);
   dev('SVL', W, { name: 'Stage Box', departments: ['audio'], category: 'Stagebox', manufacturer: 'Yamaha', model: 'Rio3224-D2', location: 'Amp Room' }, [{ net: 'dante', ip: '192.168.50.32/24', label: 'Dante Primary' }]);
@@ -299,6 +299,7 @@ function buildExample() {
   const cgFF = dev('FF', W, { name: 'Mac mini (CG)', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini (M2, 2023)', location: 'FOH desk', firmware: 'macOS Tahoe 26.0.1', positions: ['CG'], notes: '16 GB memory.' });
   const cgHB = dev('HB', W, { name: 'Mac mini (CG)', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini (M4, 2024)', location: 'CG', firmware: 'macOS Tahoe 26.0.1', positions: ['CG'], notes: '16 GB memory.' });
   const cgAND = dev('AND', W, { name: 'Mac mini (CG)', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini (M2 Pro, 2023)', location: 'CG', firmware: 'macOS Tahoe 26.0', positions: ['CG'] });
+  const cg2 = dev('SVL', 'A Control', { name: 'Mac mini (CG2)', departments: ['video'], category: 'Computer', manufacturer: 'Apple', model: 'Mac mini (M4, 2024)', location: 'CG2', firmware: 'macOS Sequoia 15.6', positions: ['CG'], notes: '24 GB memory.' });
   dev('HB', W, { name: 'Lighting computer', departments: ['lighting'], category: 'Computer', manufacturer: 'Lenovo', model: 'ThinkCentre M75q-1', location: 'FOH', positions: ['Lighting'] });
   const software = [
     { id: 'sw-pp', name: 'ProPresenter', maker: 'Renewed Vision', logo: 'propresenter.svg', notes: null },
@@ -310,7 +311,7 @@ function buildExample() {
     ['sw-pp', cgFF, '22', '369098928', day(0), 'Testing at Five Forks only this Sunday. Not on the other locations yet.'],
     ['sw-pp', cgHB, '21.4', null, day(2), null], ['sw-pp', cg1, '21.4', null, day(8), null], ['sw-pp', cgAND, '21.4', null, day(1), null],
     ['sw-dv', cgFF, '15.0', null, day(1), null], ['sw-dv', cgHB, '15.0', null, day(2), 'SDI and HDMI out at 1080i59.94.'], ['sw-dv', cg1, '14.3', null, day(8), null],
-    ['sw-comp', cg1, '3.3.1', null, day(8), null], ['sw-comp', dirMac, '3.3.1', null, day(8), null],
+    ['sw-pp', cg2, '21.4', '352583705', day(1), null], ['sw-comp', cg1, '3.3.1', null, day(8), null], ['sw-comp', dirMac, '3.3.1', null, day(8), null],
   ].map(([software_id, device_id, version, build, seen_on, notes]) => ({ id: uid(), software_id, device_id, version, build, seen_on, notes, created_at: ago(60 * 24), updated_at: ago(60 * 24) }));
 
   // A little history so the device screen shows how it works.
@@ -475,18 +476,24 @@ export function createDemoStore() {
       await wait(60);
       if (!db.cg) {
         const first = CAMPUSES.slice(0, 3);
-        db.cg = first.map((c, i) => ({ sunday, campus_id: c.id, status: i < 2 ? 'done' : 'working', updated_at: new Date(Date.now() - (i + 1) * 3600e3).toISOString(), who: { full_name: me.full_name || 'Demo Admin' } }));
+        db.cg = first.map((c, i) => ({ sunday, campus_id: c.id, station: '', status: i < 2 ? 'done' : 'working', updated_at: new Date(Date.now() - (i + 1) * 3600e3).toISOString(), who: { full_name: me.full_name || 'Demo Admin' } }));
       }
       return clone(db.cg.filter((r) => r.sunday === sunday));
     },
-    async cgSetUpload(sunday, campusId, status) {
+    async cgSetUpload(sunday, campusId, status, station = '') {
       await wait(120);
       if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can change CG uploads.');
       db.cg = db.cg || [];
-      const row = db.cg.find((r) => r.sunday === sunday && r.campus_id === campusId);
+      const row = db.cg.find((r) => r.sunday === sunday && r.campus_id === campusId && (r.station || '') === (station || ''));
       const now = { status, updated_at: new Date().toISOString(), who: { full_name: me.full_name || 'Demo Admin' } };
-      if (row) Object.assign(row, now); else db.cg.push({ sunday, campus_id: campusId, ...now });
+      if (row) Object.assign(row, now); else db.cg.push({ sunday, campus_id: campusId, station: station || '', ...now });
       changed('cg');
+    },
+    /** Gear's computers (campus, name, location): which CGs there are. */
+    async cgComputers() {
+      await wait(40);
+      const cat = new Map(db.types.map((t) => [t.id, t.category]));
+      return clone(db.devices.filter((d) => cat.get(d.type_id) === 'Computer').map((d) => ({ campus_id: d.campus_id, name: d.name, location: d.location })));
     },
     /** Events › Live: what each person in an event is on (VOX 4), and the gear when it's logged.
      *  The preview's Women's Night: Speaker 1 is on VOX 4, linked to a handheld if there is one. */

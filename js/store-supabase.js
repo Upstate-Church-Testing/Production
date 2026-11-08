@@ -244,12 +244,17 @@ export async function createSupabaseStore(url, key) {
       if (data?.error) throw new Error(data.error);
       return data;
     },
-    /** CG uploads for one Sunday (2026-11-08): each campus's status, and who set it when. */
+    /** CG uploads for one Sunday (2026-11-08): each campus's status (and each extra CG's, by
+     *  station: 'CG2'), and who set it when. */
     async cgUploads(sunday) {
-      return ok(await sb.from('cg_uploads').select('campus_id, status, updated_at, updated_by_name, who:profiles!cg_uploads_updated_by_fkey(full_name)').eq('sunday', sunday));
+      return ok(await sb.from('cg_uploads').select('campus_id, station, status, updated_at, updated_by_name, who:profiles!cg_uploads_updated_by_fkey(full_name)').eq('sunday', sunday));
     },
-    async cgSetUpload(sunday, campusId, status) {
-      ok(await sb.from('cg_uploads').upsert({ sunday, campus_id: campusId, status }, { onConflict: 'sunday,campus_id' }));
+    async cgSetUpload(sunday, campusId, status, station = '') {
+      ok(await sb.from('cg_uploads').upsert({ sunday, campus_id: campusId, station: station || '', status }, { onConflict: 'sunday,campus_id,station' }));
+    },
+    /** Gear's computers (campus, name, location): which CGs there are (js/cg-rows.js). */
+    async cgComputers() {
+      return all(() => sb.from('devices').select('campus_id, name, location, device_types!inner(category)').eq('device_types.category', 'Computer'));
     },
     /** Events › Live: what each person in an event is on (VOX 4), and the gear it is, when logged. */
     async eventGear(planId) {

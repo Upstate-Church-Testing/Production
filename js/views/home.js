@@ -4,14 +4,16 @@
 //     aren't counted, only the people scheduled. Everyone confirmed says so plainly; otherwise
 //     who has declined or not answered yet. Then CG, lighting and broadcast on their own
 //     (confirmed of scheduled). A tap goes to Scheduling with those people marked.
-//   CG uploads: how many campuses' CG is uploaded for the coming Sunday (views/cg.js), each
-//     campus's state in a row of chips. A tap goes to CG uploads.
+//   CG uploads: how many CGs are uploaded for the coming Sunday (views/cg.js): one per campus,
+//     plus Simpsonville's CG2 (the same rows as CG uploads, js/cg-rows.js), each one's state in
+//     a row of chips. A tap goes to CG uploads.
 // Staff and up.
 
 import { esc, icon, $, debounce } from '../util.js';
 import { ALL } from '../picker.js';
 import { pcoModel, rosterData } from '../roster.js';
 import { comingSunday } from '../pco.js';
+import { cgRows, cgKey } from '../cg-rows.js';
 
 const CHECK_MS = 30000; // has Planning Center changed? (the live push does most of it)
 /** The Volunteers card's breakdown: Broadcast by team (cameras, director, switcher…), CG and
@@ -27,7 +29,7 @@ const CAMPUS_SHORT = { AND: 'AN', MAU: 'MLN' };
 
 export function mount(el, ctx) {
   let alive = true;
-  const s = { status: undefined, data: null, error: null, cg: null, cgFor: null };
+  const s = { status: undefined, data: null, error: null, cg: null, cgFor: null, computers: [] };
   let timer = null;
 
   el.innerHTML = `<div class="home" id="home"><div class="loading"><div class="sk tall"></div></div></div>`;
@@ -91,8 +93,9 @@ export function mount(el, ctx) {
   async function loadCg(redraw = true) {
     const sunday = comingSunday(tz());
     try {
-      const rows = (await ctx.store.cgUploads?.(sunday)) || [];
-      s.cg = new Map(rows.map((r) => [r.campus_id, r.status]));
+      const [rows, computers] = await Promise.all([ctx.store.cgUploads?.(sunday), ctx.store.cgComputers?.().catch(() => null)]);
+      s.cg = new Map((rows || []).map((r) => [cgKey(r.campus_id, r.station), r.status]));
+      if (computers) s.computers = computers;
       s.cgFor = sunday;
     } catch { if (s.cgFor !== sunday) s.cg = null; }
     if (redraw && alive) draw();
@@ -169,22 +172,26 @@ export function mount(el, ctx) {
       </div>`;
   }
 
-  /** CG uploads: how many campuses are done for the coming Sunday, each campus a chip. */
+  /** CG uploads: how many are done for the coming Sunday, each one a chip. */
   function cgCard() {
     if (!s.cg) return '';
-    const campuses = ctx.campuses;
-    const st = (id) => s.cg.get(id) || 'not_started';
-    const done = campuses.filter((c) => st(c.id) === 'done').length;
-    const working = campuses.filter((c) => st(c.id) === 'working').length;
-    const rest = campuses.length - done - working;
-    const all = done === campuses.length;
-    const msg = all ? `All ${campuses.length} campuses uploaded` : `${done} of ${campuses.length} campuses uploaded`;
+    const list = cgRows(ctx.campuses, s.computers);
+    const st = (key) => s.cg.get(key) || 'not_started';
+    const done = list.filter((x) => st(x.key) === 'done').length;
+    const working = list.filter((x) => st(x.key) === 'working').length;
+    const rest = list.length - done - working;
+    const all = done === list.length;
+    const msg = all ? `All ${list.length} uploaded` : `${done} of ${list.length} uploaded`;
     const sub = all ? 'CG is ready everywhere.' : [working ? `${working} working on it` : '', rest ? `${rest} not started` : ''].filter(Boolean).join(' · ');
     return `<button type="button" class="home-card ${all ? 'is-good' : 'is-wait'}" data-go="cg-uploads" aria-label="CG uploads: ${esc(msg)}. Open CG uploads">
         <span class="home-k">${icon('upload')}CG uploads</span>
         <span class="home-status"><span class="home-mark">${all ? icon('check') : `<i aria-hidden="true">${done}</i>`}</span><b class="home-msg">${esc(msg)}</b></span>
         <span class="home-sub">${esc(sub)}</span>
-        <span class="home-chips">${campuses.map((c) => `<span class="is-${st(c.id)}" title="${esc(`${c.short_name}: ${st(c.id) === 'done' ? 'done' : st(c.id) === 'working' ? 'working on it' : 'not started'}`)}">${esc(CAMPUS_SHORT[c.code] || c.code || c.short_name)}</span>`).join('')}</span>
+        <span class="home-chips">${list.map((x) => {
+          const c = x.campus;
+          const v = st(x.key);
+          return `<span class="is-${v}" title="${esc(`${c.short_name}${x.tag ? ` ${x.tag}` : ''}: ${v === 'done' ? 'done' : v === 'working' ? 'working on it' : 'not started'}`)}">${esc(CAMPUS_SHORT[c.code] || c.code || c.short_name)}${x.station ? ` ${esc(x.station)}` : ''}</span>`;
+        }).join('')}</span>
         <span class="home-go">CG uploads ${icon('chevron')}</span>
       </button>`;
   }

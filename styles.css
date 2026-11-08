@@ -3179,6 +3179,9 @@ button.home-card:hover { border-color: color-mix(in srgb, var(--tone) 45%, var(-
 .cgu-row.is-done .cgu-name { border-left-color: var(--ok); }
 .cgu-name b { display: block; font: 600 16.5px/1.2 var(--f-body); }
 .cgu-name small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+/* Which CG at a campus with more than one (Simpsonville CG1 / CG2). */
+.cgu-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border: 1px solid var(--line-2); border-radius: 6px;
+  font: 600 11.5px/1.35 var(--f-body); font-style: normal; letter-spacing: .03em; color: var(--muted); vertical-align: 2px; }
 .cgu-seg { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 4px; padding: 3px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
 .cgu-seg button {
   display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 36px; padding: 0 12px; border-radius: 9px;
