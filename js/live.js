@@ -8,6 +8,11 @@
 //     schedule, what that is, and the first item up with its notes.
 //   During: the item that's up, its time left in big numbers (amber near the end, red and
 //     counting up once over), what's next and after that, and the service clock.
+//   Pre-service items (Planning Center's "Pre-service": Online Welcome Host, Campus
+//     Countdown Video) lead up to the service time, the way Planning Center times them: with
+//     2:15 of them and the service at 11:30, the first is due at 11:27:45. Post-service items
+//     follow the end. The service's length (Planned) and when it's on pace to end count the
+//     service itself, like Planning Center.
 //   Next to each name, what that person is on for this plan (Amy Bray · VOX 4), from
 //     event_item_gear: entered per plan on purpose, not read from Planning Center notes.
 //     It opens the gear (the mic, an IEM pack) only when that's logged in Gear.
@@ -65,6 +70,15 @@ export function createLive(ctx, opts = {}) {
   };
   const now = () => { lastNow = Math.max(lastNow, Date.now() + s.offset); return lastNow; };
   const cl = () => clock(tz());
+  const wall = () => {
+    if (!wallFmt) {
+      const o = { hour: 'numeric', minute: '2-digit', second: '2-digit' };
+      try { wallFmt = new Intl.DateTimeFormat('en-US', { ...o, timeZone: tz() }); } catch { wallFmt = new Intl.DateTimeFormat('en-US', o); }
+    }
+    return wallFmt;
+  };
+  /** 11:30 AM, or 11:27:45 AM when it isn't on the minute (a pre-service lead-in). */
+  const hms = (ms) => (Math.floor(ms / 1000) % 60 ? wall().format(ms) : cl().time(ms));
 
   const onKey = (e) => { if (e.key === 'Escape' && layer) close(); };
   document.addEventListener('keydown', onKey);
@@ -235,7 +249,7 @@ export function createLive(ctx, opts = {}) {
     const it = (r) => (r ? [r.it.id, r.it.title, r.it.length, r.t?.start].join('~') : '');
     return [plan?.id, plan?.title, s.live?.current_id, s.live?.current?.start, s.live?.controller, s.live?.controller_id, s.live?.me_id,
       !!s.liveError, !!s.live, s.live?.available, s.busy, s.ctlError, s.mics?.v, w?.state, w?.block?.id, w?.nextBlock?.id,
-      w ? [it(w.item?.r), it(w.next), it(w.then), it(w.upFirst), it(w.run?.[1]), w.planned, w.plannedStart, w.first, w.lastEnd].join('|') : ''].join('|');
+      w ? [it(w.item?.r), it(w.next), it(w.then), it(w.upFirst), it(w.run?.[1]), w.planned, w.pre, w.post, w.plannedStart, w.first, w.svcBegan, w.svcEnded, w.lastEnd].join('|') : ''].join('|');
   }
 
   /** Redraw the layer when what it shows changed (the numbers tick on their own). */
@@ -264,8 +278,15 @@ export function createLive(ctx, opts = {}) {
       .filter((r) => !r.t?.exclude && (r.t || !timesFor.size));
     const cur = st.current ? run.findIndex((r) => r.it.id === st.current.item_id) : -1;
     const len = (r) => Math.max(0, r.it.length || 0) * 1000;
-    const planned = run.reduce((n, r) => n + len(r), 0);
+    const sum = (list) => list.reduce((n, r) => n + len(r), 0);
+    // Planning Center's sections: pre-service items lead up to the service time, the service
+    // runs from it, post-service items follow its end.
+    const pos = (r) => (r.it.position === 'pre' || r.it.position === 'post' ? r.it.position : 'during');
+    const pre = sum(run.filter((r) => pos(r) === 'pre'));
+    const post = sum(run.filter((r) => pos(r) === 'post'));
+    const planned = sum(run.filter((r) => pos(r) === 'during')); // the service's own length
     const plannedStart = pt?.starts_at ? Date.parse(pt.starts_at) : null;
+    const firstDue = plannedStart != null ? plannedStart - pre : null; // when the first item is due
     const starts = (list) => list.filter((r) => r.t?.start).map((r) => Date.parse(r.t.start));
     // Over: Live ended this service time, or it ran around the service time. Times left from
     // trying Live out earlier (a rehearsal) don't count: that's still "not started".
@@ -280,18 +301,36 @@ export function createLive(ctx, opts = {}) {
       const begun = Date.parse(st.current.start || r.t?.start || t);
       item = { r, begun, elapsed: t - begun, length: len(r), left: len(r) - (t - begun) };
     }
-    const rest = state === 'live' ? run.slice(cur + 1) : state === 'wait' ? run : [];
-    const restMs = rest.reduce((n, r) => n + len(r), 0);
-    const projected = state === 'live' ? t + Math.max(0, item.left) + restMs : null;
+    // When the service actually began: the first service item's start (not the pre-service ones).
+    const duringStarts = starts(run.filter((r, k) => pos(r) === 'during' && (state !== 'live' || k <= cur)));
+    const svcBegan = duringStarts.length ? Math.min(...duringStarts) : null;
+    // On pace to end: the service's end (the rest of pre-service, then the service), against the
+    // service time plus its length. Once into post-service, the end of that.
+    let projected = null;
+    let target = null;
+    if (state === 'live') {
+      const after = run.slice(cur + 1);
+      const base = plannedStart ?? svcBegan ?? first;
+      if (pos(run[cur]) === 'post') {
+        projected = t + Math.max(0, item.left) + sum(after.filter((r) => pos(r) === 'post'));
+        target = base + planned + post;
+      } else {
+        projected = t + Math.max(0, item.left) + sum(after.filter((r) => pos(r) !== 'post'));
+        target = base + planned;
+      }
+    }
     const lastEnd = (pt?.live_ends_at ? Date.parse(pt.live_ends_at) : null)
       ?? run.map((r) => (r.t?.end ? Date.parse(r.t.end) : null)).filter(Boolean).sort((a, b) => b - a)[0] ?? null;
+    const duringEnds = run.filter((r) => pos(r) === 'during' && r.t?.end).map((r) => Date.parse(r.t.end));
+    const svcEnded = duringEnds.length ? Math.max(...duringEnds) : lastEnd;
     // Before the service: the plan's schedule (Doors Open, then the service). What's on now
     // (the latest-starting block under way) and the next thing to start.
     const blocks = shownTimes(pts).map((x) => ({ ...x, s: Date.parse(x.starts_at), e: x.ends_at ? Date.parse(x.ends_at) : null }));
     const block = state === 'wait' ? blocks.filter((x) => x.kind !== 'service' && x.s <= t && (x.e == null || x.e > t)).sort((a, b) => b.s - a.s)[0] || null : null;
     const nextBlock = state === 'wait' ? blocks.find((x) => x.s > t) || null : null;
     return {
-      pt, run, cur, item, state, planned, plannedStart, first, projected, lastEnd, block, nextBlock,
+      pt, run, cur, item, state, planned, pre, post, plannedStart, firstDue, first, svcBegan, svcEnded, projected, target, lastEnd, block, nextBlock,
+      pos,
       next: state === 'live' ? run[cur + 1] || null : null,
       then: state === 'live' ? run[cur + 2] || null : null,
       upFirst: state === 'wait' ? run[0] || null : null,
@@ -314,7 +353,8 @@ export function createLive(ctx, opts = {}) {
       return `<div class="lvx">${top()}<p class="lvx-msg">${msg}</p></div>`;
     }
     const hhmm = (ms) => c.time(ms);
-    const meta = (it) => [it.kind === 'song' ? 'Song' : it.kind === 'media' ? 'Media' : null, it.key_name ? `Key ${it.key_name}` : null,
+    const meta = (it) => [it.position === 'pre' ? 'Pre-service' : it.position === 'post' ? 'Post-service' : null,
+      it.kind === 'song' ? 'Song' : it.kind === 'media' ? 'Media' : null, it.key_name ? `Key ${it.key_name}` : null,
       it.description && it.description.length <= 40 && !/\n/.test(it.description) ? it.description : null].filter(Boolean).join(' · ');
     const itemCard = (r, k, o = {}) => `<section class="lvx-card ${o.cls || ''}">
         <div class="lvx-k"><span>${esc(k)}</span>${o.right || ''}</div>
@@ -338,7 +378,7 @@ export function createLive(ctx, opts = {}) {
         ? itemCard(w.next, 'Next', { cls: 'is-next', len: len(w.next) }) + (w.then ? itemCard(w.then, 'Then', { cls: 'is-next is-then', len: len(w.then) }) : '')
         : '<section class="lvx-card is-next"><div class="lvx-k"><span>Next</span></div><h2>End of the service</h2></section>'}</div>`;
     } else if (w.state === 'wait') {
-      const late = w.plannedStart != null && now() >= w.plannedStart;
+      const late = w.firstDue != null && now() >= w.firstDue;
       const nowCard = `<section class="lvx-card is-now">
           <div class="lvx-k"><span>Now</span>${w.block ? `<span class="lvx-len">${esc(hhmm(w.block.s))}${w.block.e ? `–${esc(hhmm(w.block.e))}` : ''}</span>` : ''}</div>
           <h2>${esc(late ? 'Waiting for Planning Center Live' : w.block ? timeName(w.block) : 'Before the service')}</h2>
@@ -351,7 +391,7 @@ export function createLive(ctx, opts = {}) {
         </section>` : '';
       const first = w.upFirst ? itemCard(w.upFirst, 'Up first', {
         cls: 'is-next',
-        right: w.plannedStart ? `<span class="lvx-len">${esc(hhmm(w.plannedStart))}</span>` : '',
+        right: w.firstDue != null ? `<span class="lvx-len">${esc(hms(w.firstDue))}</span>` : '',
         len: dur(Math.max(0, w.upFirst.it.length || 0) * 1000),
         after: w.run[1] ? `<p class="lvx-then">Then <b>${esc(w.run[1].it.title || 'Untitled')}</b></p>` : '',
       }) : '';
@@ -360,8 +400,8 @@ export function createLive(ctx, opts = {}) {
       main = `<section class="lvx-card is-now">
           <div class="lvx-k"><span>Service</span></div>
           <h2>Over</h2>
-          <div class="lvx-clock is-small">${w.first && w.lastEnd ? esc(dur(w.lastEnd - w.first)) : '—'}</div>
-          <p class="lvx-sub">${w.first ? `Started ${esc(hhmm(w.first))}` : ''}${w.lastEnd ? ` · ended ${esc(hhmm(w.lastEnd))}` : ''} · planned ${esc(dur(w.planned))}</p>
+          <div class="lvx-clock is-small">${(w.svcBegan ?? w.first) && w.svcEnded ? esc(dur(w.svcEnded - (w.svcBegan ?? w.first))) : '—'}</div>
+          <p class="lvx-sub">${(w.svcBegan ?? w.first) ? `Started ${esc(hhmm(w.svcBegan ?? w.first))}` : ''}${w.svcEnded ? ` · ended ${esc(hhmm(w.svcEnded))}` : ''} · planned ${esc(dur(w.planned))}</p>
         </section>`;
     }
     const foot = w.state === 'live' ? `<footer class="lvx-foot">
@@ -450,32 +490,38 @@ export function createLive(ctx, opts = {}) {
         if (x.className !== cn) x.className = cn;
       }
     };
-    if (!wallFmt) {
-      const o = { hour: 'numeric', minute: '2-digit', second: '2-digit' };
-      try { wallFmt = new Intl.DateTimeFormat('en-US', { ...o, timeZone: tz() }); } catch { wallFmt = new Intl.DateTimeFormat('en-US', o); }
-    }
-    set('wall', wallFmt.format(t));
+    set('wall', wall().format(t));
     if (w.state === 'live') {
       const left = w.item.left;
       set('big', left >= 0 ? dur(left) : `+${dur(-left)}`, `lvx-clock ${left < 0 ? 'is-over' : left < 30000 ? 'is-close' : ''}`);
       const bar = $('[data-tick="bar"]', layer);
       if (bar) { bar.style.width = `${Math.min(100, w.item.length ? (w.item.elapsed / w.item.length) * 100 : 100).toFixed(1)}%`; bar.classList.toggle('is-over', left < 0); }
       set('in', dur(w.item.elapsed));
-      if (w.first) set('svc', dur(t - w.first));
+      // The service clock: from when the service began; in pre-service, counting down to it.
+      if (w.svcBegan != null) set('svc', dur(t - w.svcBegan));
+      else if (w.plannedStart != null) set('svc', t < w.plannedStart ? `−${dur(w.plannedStart - t)}` : '0:00');
       if (w.projected != null) {
         set('proj', c.time(w.projected));
-        const target = (w.plannedStart ?? w.first) + w.planned;
-        const d = w.projected - target;
+        const d = w.projected - w.target;
         set('delta', Math.abs(d) < 30000 ? 'on time' : `${d > 0 ? '+' : '−'}${dur(Math.abs(d))} ${d > 0 ? 'long' : 'short'}`, Math.abs(d) < 30000 ? 'is-ok' : d > 0 ? 'is-over' : 'is-under');
       }
     } else if (w.state === 'wait') {
-      const target = w.nextBlock ? w.nextBlock.s : w.plannedStart;
+      // Counting down to the next thing on the schedule before then (Doors Open), else to the
+      // first item: the first pre-service one, due before the service time.
+      const due = w.firstDue;
+      const block = w.nextBlock && w.nextBlock.kind !== 'service' && (due == null || w.nextBlock.s < due) ? w.nextBlock : null;
+      const target = block ? block.s : due;
+      const leadIn = w.pre > 0 && w.upFirst;
       if (target != null && target > t) {
         set('big', dur(target - t), 'lvx-clock is-wait');
-        set('sub', w.nextBlock?.kind === 'service' || !w.nextBlock ? `Until the service · ${c.time(target)}` : `Until ${timeName(w.nextBlock)} · ${c.time(target)}`);
+        set('sub', block ? `Until ${timeName(block)} · ${c.time(target)}`
+          : leadIn ? `Until ${w.upFirst.it.title || 'the first item'} · ${hms(target)} · service at ${c.time(w.plannedStart)}`
+            : `Until the service · ${c.time(target)}`);
       } else {
-        set('big', w.plannedStart != null ? `+${dur(t - w.plannedStart)}` : '—', 'lvx-clock is-over');
-        set('sub', w.plannedStart != null ? `Past the service time (${c.time(w.plannedStart)}) · starts when someone starts Planning Center Live` : 'Starts when someone starts Planning Center Live');
+        set('big', due != null ? `+${dur(t - due)}` : '—', 'lvx-clock is-over');
+        set('sub', due == null ? 'Starts when someone starts Planning Center Live'
+          : leadIn ? `${w.upFirst.it.title || 'The first item'} was due at ${hms(due)} (service at ${c.time(w.plannedStart)}) · starts when someone starts Planning Center Live`
+            : `Past the service time (${c.time(w.plannedStart)}) · starts when someone starts Planning Center Live`);
       }
     }
   }

@@ -316,10 +316,11 @@ export function createPcoDemo({ wait, clone, me, changed }) {
       const plan = db.plans.find((p) => p.id === planId);
       if (!plan) throw new Error('That service isn’t shared in the app.');
       if (action && !isAdmin()) throw new Error('Only an admin can drive Live from here.');
-      const items = eventItems(planId);
+      const items = plan.service_type_id === 'st-svl-e' ? eventItems(planId) : (await this.pcoItems(planId)).map(({ plan_id: _p, ...x }) => x);
       const svc = plan.times.find((x) => x.kind === 'service') || { starts_at: plan.sort_date };
       const pt = `${planId}-svc`;
-      const start = Date.parse(svc.starts_at);
+      // Pre-service items lead up to the service time, as Planning Center times them.
+      const start = Date.parse(svc.starts_at) - items.filter((x) => x.position === 'pre').reduce((n, x) => n + (x.length || 0) * 1000, 0);
       const t = Date.now();
       const iso = (ms) => new Date(ms).toISOString();
       const run = items.filter((x) => x.kind !== 'header');

@@ -198,6 +198,13 @@ the last few past ones; an event opens on its times, a Live button and two panes
   only when what it shows changes (not each time Planning Center is read), and the bar and
   clock are drawn at their place, so nothing jumps. Times left from trying Live out earlier (a
   rehearsal) don't count as the service having run.
+  **Pre-service and post-service items** (Planning Center's sections, `items.position` pre /
+  during / post) are timed the way Planning Center times them: pre-service items lead up to
+  the service time (Online Welcome Host 1:30 and Campus Countdown Video 0:45 before an 11:30
+  service: the first is due at 11:27:45, and that's what the countdown before the service
+  counts to), post-service items follow its end. Planned, Ends about and On pace to end count
+  the service itself (the during items), and the Service clock runs from the first service
+  item, counting down to the service time during pre-service.
 - **Flow**: the order of service as planned, with times from the service start and notes.
 - **Team**: who's on the production teams (audio left out, like everywhere else).
 
