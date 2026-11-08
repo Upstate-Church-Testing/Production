@@ -5,8 +5,10 @@
 // show up live. Home shows how many are done. Staff and up.
 // Beside each campus, its CG computer's macOS, ProPresenter and Desktop Video versions, from
 // Gear (the OS from the computer's Firmware / OS field, the rest from its software). The CG
-// computer is the campus's computer at CG (location CG, or "(CG)" in its name), the Worship
-// Center's when there's more than one. A version Gear doesn't have is left blank.
+// computer is the campus's computer at CG (location CG or CG1, or "(CG)" / "(CG1)" in its name;
+// Simpsonville's Worship Center CG is CG1, and CG2 in A Control is a second one, not this),
+// CG1's or the Worship Center's when there's more than one. A version Gear doesn't have is
+// left blank.
 
 import { esc, icon, $, debounce, pageTitle } from '../util.js';
 import { clock, comingSunday } from '../pco.js';
@@ -82,12 +84,14 @@ export function mount(el, ctx) {
       const rooms = new Map(data.rooms.map((r) => [r.id, r]));
       const types = new Map(data.types.map((t) => [t.id, t]));
       const installs = installsByDevice(data);
-      const atCg = (d) => types.get(d.type_id)?.category === 'Computer' && (/^cg$/i.test(String(d.location || '').trim()) || /\(cg\)/i.test(d.name || ''));
+      const atCg = (d) => types.get(d.type_id)?.category === 'Computer' && (/^cg\s*1?$/i.test(String(d.location || '').trim()) || /\(cg\s*1?\)/i.test(d.name || ''));
+      // CG1 first, then the Worship Center's, then any other.
+      const rank = (x) => (/^cg\s*1$/i.test(String(x.location || '').trim()) || /\(cg\s*1\)/i.test(x.name || '') ? 0
+        : /worship center/i.test(rooms.get(x.room_id)?.name || '') ? 1 : 2);
       const byCampus = new Map();
       for (const d of data.devices.filter(atCg)) {
         const was = byCampus.get(d.campus_id);
-        const wc = (x) => /worship center/i.test(rooms.get(x.room_id)?.name || '');
-        if (!was || (wc(d) && !wc(was))) byCampus.set(d.campus_id, d);
+        if (!was || rank(d) < rank(was)) byCampus.set(d.campus_id, d);
       }
       s.gear = new Map([...byCampus].map(([campus, d]) => {
         const os = osOf(d);

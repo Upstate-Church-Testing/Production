@@ -128,8 +128,9 @@ Sunday, until midnight), so on Monday it moves on and everything reads Not start
 Staff change it; changes push live to every open screen. Beside each campus, its CG
 computer's **macOS**, **ProPresenter** and **Desktop Video** versions from Gear (macOS from the
 computer's Firmware / OS field, the others from its software): the campus's computer at CG
-(location CG or "(CG)" in its name; the Worship Center's when there's more than one), blank
-where Gear doesn't have it. On a computer they're columns, the logo once on top and the column
+(location CG or CG1, or "(CG)" / "(CG1)" in its name; CG1's, else the Worship Center's, when
+there's more than one), blank where Gear doesn't have it. Simpsonville's Worship Center CG is
+**CG1**, Mac mini (CG1); CG2 is the second one in A Control and isn't the one shown. On a computer they're columns, the logo once on top and the column
 outlined in the logo's color (white, ProPresenter orange, Blackmagic gold); on a phone each
 campus is a card with the versions as outlined chips.
 
