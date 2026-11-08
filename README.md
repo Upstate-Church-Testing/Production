@@ -57,6 +57,12 @@ service's flow and teams), **Scheduling** (the roster grid, once called Roster),
 each page opening on its own part; a jump from one to another (a plan on My schedule,
 a pill on Scheduling) goes to that page.
 
+**Live on any service** (staff): a service on Services has the same red **Live** button as an
+event (under its times), opening the same full-screen Live (`js/live.js`, below under
+Events), titled with the location and service ("SIMPSONVILLE VINTAGE"). Admins can Take
+control, Back and Next there too. A reload into a new version comes straight back to the
+same service with Live up (`sessionStorage` ucp.services.live); leaving the page forgets it.
+
 **Sunday mornings | Wednesdays.** Scheduling shows one or the other, picked up top (the
 choice lasts while the app is open). Wednesdays are the student midweeks, Mauldin then
 Simpsonville: front of house only (CG, Lighting and Audio), every position on their FOH
@@ -170,6 +176,8 @@ the last few past ones; an event opens on its times, a Live button and two panes
   browser's kept index.html (GitHub Pages lets it keep it 10 minutes) knows it's behind and takes
   the new version right away; the reload goes by a new address (?u=version, removed again once
   loaded) so the kept page can't come back, and it never reloads twice for the same version.
+  The same Live opens from any service on PCO › Services: it's its own module (`js/live.js`,
+  `createLive`), and Events and Services each open it for a plan.
   A new version is taken while Live is open (it comes straight back to the same event,
   Live up: `sessionStorage` ucp.events.nav), and closing Live is a good moment for one too;
   elsewhere the app waits for a quiet moment as before.
@@ -193,8 +201,7 @@ the last few past ones; an event opens on its times, a Live button and two panes
 - **Flow**: the order of service as planned, with times from the service start and notes.
 - **Team**: who's on the production teams (audio left out, like everywhere else).
 
-Next steps: prep for an event (tasks, files, who's doing what) as a project, and driving
-Live (Next / Previous) from here.
+Next steps: prep for an event (tasks, files, who's doing what) as a project.
 
 ## People (production volunteers)
 
@@ -520,6 +527,7 @@ js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the 
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
 js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
 js/views/events.js            Events: one-off Planning Center services, with Live (the service clock), Flow and Team
+js/live.js                    Live: the full-screen Planning Center Live view, opened from Events and from any service
 js/views/network.js            the IP sheet
 js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, area / spot, operator position, category, used as and brand; Items is a card per room › area › spot. Grid (models × locations or rooms) is built but not offered for now
 js/views/haze.js               Gear › Haze: hazers, tank checks, fluid bottles per location
@@ -551,7 +559,7 @@ js/views/pco-settings.js       Settings › Planning Center (connect, who sees w
 js/pco.js                      Planning Center helpers (times in the church's time zone, labels)
 js/pco-demo.js                 made-up Planning Center data for the preview
 supabase/functions/pco/        edge function: connect/disconnect/sync/candidates/schedule/unschedule (index.ts), API client (pco.ts), sync (sync.ts), scheduling (schedule.ts), database (db.ts)
-supabase/functions/pco-live/   edge function: Planning Center Live for Events › Live (index.ts: auth, the shared read; live.ts: reading Live and the item times)
+supabase/functions/pco-live/   edge function: Planning Center Live for Live (Events, Services) (index.ts: auth, the shared read; live.ts: reading Live and the item times)
 supabase/migrations/*.sql      database, permissions, history
 supabase/seed.sql              the 10 campuses, matched to Planning Center
 tools/stamp.py                 run before each publish; open copies reload themselves

@@ -7,6 +7,8 @@
 // scope.mode says which. Planning Center is connected once for the whole church
 // (Settings › Planning Center); nobody signs in to it here. What each person
 // sees comes from their role in this app and the services an admin shares.
+// Staff can open a service's Live (js/live.js, the same view as Events): where the service is
+// in Planning Center Live, the clock, what's next, and for admins Take control, Back and Next.
 
 import { esc, icon, $, $$, debounce, plural, timeAgo, initials, pageTitle } from '../util.js';
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
@@ -14,6 +16,7 @@ import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js
 import { peopleView, LANYARDS } from './volunteers.js';
 import { openScheduleSheet, takeOff } from './schedule-sheet.js';
 import { pcoModel, rosterData as sharedRosterData } from '../roster.js';
+import { createLive, liveButtonHtml } from '../live.js';
 
 const POLL_MS = 20000; // backup for the live push (a phone that slept, a dropped connection)
 const LETTER_NAME = { V: 'Vintage', M: 'Modern', N: 'North Modern', T: 'Traditional', E: 'Español', W: 'Midweek' };
@@ -95,6 +98,16 @@ export function mount(el, ctx) {
   if (nav.mode === 'people' && !isStaff) nav.mode = 'services';
   if (s.campus !== ALL && !ctx.campusById.has(s.campus)) s.campus = ALL;
   let timer = null;
+  // Live for the service that's open. Which one is kept for the session, so a reload into a
+  // new version comes straight back to it.
+  const LIVE_KEY = 'ucp.services.live';
+  const liveSaved = () => { try { return sessionStorage.getItem(LIVE_KEY); } catch { return null; } };
+  const liveSave = (id) => { try { if (id) sessionStorage.setItem(LIVE_KEY, id); else sessionStorage.removeItem(LIVE_KEY); } catch { /* private mode */ } };
+  let liveRestored = false;
+  const live = createLive(ctx, {
+    tz: () => s.status?.time_zone,
+    onClose: () => { liveSave(null); if (alive) $('[data-act="live"]', el)?.focus({ preventScroll: true }); },
+  });
 
   el.innerHTML = `
     <div class="page-head">
@@ -162,6 +175,7 @@ export function mount(el, ctx) {
     else if (act === 'mine') setMode('mine');
     else if (act === 'all-places') pickCampus(ALL);
     else if (act === 'attn-off') { attn = null; draw(); }
+    else if (act === 'live') openLive(nav.plan);
   });
 
   const onVisible = () => { if (document.visibilityState === 'visible') checkStatus(); };
@@ -179,6 +193,8 @@ export function mount(el, ctx) {
   return {
     unmount() {
       alive = false;
+      if (live.isOpen()) liveSave(null); // left the page with Live open: don't bring it back next time
+      live.destroy();
       clearTimeout(timer); clearInterval(clockTimer);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('resize', onResize);
@@ -193,6 +209,18 @@ export function mount(el, ctx) {
     if (nav.mode === 'mine' && !fixed) nav.mode = 'services';
     nav.date = null; nav.plan = null;
     draw();
+  }
+
+  /** Live for a service (staff): its location and name up top, "Simpsonville Vintage". */
+  function openLive(planId) {
+    const m = model();
+    const p = m?.plans.find((x) => x.id === planId);
+    if (!isStaff || !p) return;
+    const t = m.type(p);
+    const campus = t.campus_id ? ctx.campusById.get(t.campus_id)?.short_name : null;
+    const name = kindName(t, p);
+    liveSave(p.id);
+    live.open({ id: p.id, title: campus && !name.toLowerCase().includes(campus.toLowerCase()) ? `${campus} ${name}` : name, day: p._day });
   }
 
   /** Jump straight to one plan (from My schedule or "You're on"). */
@@ -230,6 +258,13 @@ export function mount(el, ctx) {
     }
     draw();
     schedule();
+    // Live was open before a reload (a new version): straight back to that service and its Live.
+    if (!liveRestored) {
+      liveRestored = true;
+      const id = liveSaved();
+      if (id && isStaff && nav.mode === 'services' && model()?.plans.some((x) => x.id === id)) { openPlan(id); openLive(id); }
+      else if (id) liveSave(null);
+    }
   }
 
   /** Staff: the volunteer list (lanyards, tags, notes) and who's on which team. */
@@ -464,6 +499,7 @@ export function mount(el, ctx) {
       ${times.length ? `<ol class="svc-times-list">${times.map((x) => `<li class="${x.kind === 'service' ? 'is-service' : ''}">
           <b>${esc(m.c.time(x.starts_at))}</b><span>${esc(x.name || (x.kind === 'service' ? 'Service' : x.kind === 'rehearsal' ? 'Rehearsal' : 'Other'))}</span>
         </li>`).join('')}</ol>` : ''}
+      ${isStaff ? liveButtonHtml() : ''}
       <div class="seg svc-panes" role="tablist" aria-label="Show">
         <button type="button" role="tab" data-pane="flow" aria-selected="${pane === 'flow'}">${icon('list')}Flow${items?.length ? `<small>${items.filter((x) => x.kind !== 'header').length}</small>` : ''}</button>
         <button type="button" role="tab" data-pane="team" aria-selected="${pane === 'team'}">${icon('team')}Team<small>${crewCount}</small></button>
