@@ -2993,6 +2993,52 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
 .page-scheduling.is-roster .ros .rp:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: 1px; }
 .page-scheduling.is-roster .ros-attn { border-radius: 4px; }
 
+/* the Team column: who's on each team in Planning Center, by position, as initials beside
+   the position. It opens out from the Team button in the Position header: the column widens
+   and each row's initials come in down the grid; closing folds it away. (.crew-anim is only
+   on while it's opening or closing, so a redraw never replays it.) */
+.ros .pos-in { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ros .pos-l { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ros.crew-on .ros-pos, .ros.crew-on .ros-pos-h { max-width: none; }
+.ros .crew { display: inline-flex; gap: 3px; flex: none; max-width: 0; margin-left: -8px; overflow: hidden; opacity: 0; }
+.ros.crew-on .crew { max-width: calc(var(--n, 3) * 31px); margin-left: 0; opacity: 1; }
+.ros .crew i {
+  flex: none; display: grid; place-items: center; width: 28px; height: 21px; border-radius: 2px;
+  font: 600 11px/1 var(--f-hud, var(--f-body)); font-style: normal; letter-spacing: 0.04em;
+  transform: translateX(-12px) scale(0.6); opacity: 0;
+}
+.ros.crew-on .crew i { transform: none; opacity: 1; }
+.ros.crew-anim .crew { transition: max-width 0.46s cubic-bezier(0.2, 0.8, 0.2, 1), margin-left 0.46s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease; transition-delay: calc(var(--r, 0) * 18ms); }
+.ros.crew-anim .crew i { transition: transform 0.4s cubic-bezier(0.2, 0.9, 0.25, 1.25), opacity 0.26s ease; transition-delay: calc(var(--r, 0) * 18ms + var(--k, 0) * 60ms + 140ms); }
+/* folding away: the initials go first, quickly, then the column closes */
+.ros.crew-anim:not(.crew-on) .crew { transition-duration: 0.34s, 0.34s, 0.22s; transition-delay: calc(140ms + var(--r, 0) * 8ms); }
+.ros.crew-anim:not(.crew-on) .crew i { transition-duration: 0.18s; transition-delay: calc(var(--r, 0) * 8ms + var(--k, 0) * 25ms); }
+@media (prefers-reduced-motion: reduce) {
+  .ros.crew-anim .crew, .ros.crew-anim .crew i { transition: none; }
+}
+.page-scheduling.is-roster .ros .crew i { background: color-mix(in srgb, var(--hud-ink) 9%, var(--hud-bg)); box-shadow: inset 0 0 0 1px var(--hud-line-2); color: var(--hud-ink); }
+.page-scheduling.is-roster .ros .crew i.is-open { background: none; box-shadow: none; border: 1px dashed var(--hud-line-2); }
+.ros-crew-btn {
+  display: inline-flex; align-items: center; gap: 4px; flex: none; height: 22px; padding: 0 5px 0 6px;
+  border: 1px solid var(--line-2); border-radius: 3px; background: none; color: inherit;
+  font: 600 10px/1 var(--f-hud, var(--f-body)); letter-spacing: 0.12em; text-transform: uppercase;
+}
+.ros-crew-btn .ico { width: 13px; height: 13px; }
+.ros-crew-btn .ico:last-child { width: 11px; height: 11px; transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ros-crew-btn[aria-expanded="true"] .ico:last-child { transform: rotate(180deg); }
+.ros-crew-btn.is-busy { opacity: 0.5; }
+.page-scheduling.is-roster .ros-crew-btn { border-color: var(--hud-line-2); color: var(--hud-dim); }
+.page-scheduling.is-roster .ros-crew-btn:hover { color: var(--hud-ink); border-color: var(--hud-dim); }
+.page-scheduling.is-roster .ros-crew-btn[aria-expanded="true"] { background: var(--hud-ink); border-color: var(--hud-ink); color: var(--hud-bg); }
+@media (max-width: 699px) {
+  .ros-crew-btn { padding: 0 3px; gap: 1px; height: 20px; }
+  .ros-pos-h .pos-in:has(.ros-crew-btn) .pos-l { display: none; } /* "Pos" goes; the rows say it */
+  .ros-crew-btn .ico:last-child { width: 9px; height: 9px; }
+  .ros .crew { gap: 2px; }
+  .ros.crew-on .crew { max-width: calc(var(--n, 3) * 25px); }
+  .ros .crew i { width: 23px; height: 19px; font-size: 10px; letter-spacing: 0.02em; }
+}
+
 @media (max-width: 699px) {
   .page-scheduling.is-roster .page-title h1 { font-size: 24px; }
   .page-scheduling.is-roster .ros .rp { gap: 5px; min-height: 24px; padding-right: 5px; font-size: 12.5px; letter-spacing: 0; }

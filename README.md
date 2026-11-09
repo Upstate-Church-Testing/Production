@@ -641,6 +641,15 @@ declined, dashed = open. An inverted block is "now" (the selected week, the next
 header, with a line down its left side); your own spot has corner brackets. Light and dark
 both have their own palette. Other pages keep the app's usual look for now.
 
+**Team column** (staff): the **Team** button in the Position header opens out each row's
+team from Planning Center beside its position, as initials (Hayden Wood → HW; the full name
+on hover): everyone on that location's team for that position (`pco_team_people`, the
+positions each person is assigned on the team, across that location's services on the grid).
+At least three spots show, an empty dashed one for each spot nobody's assigned; more than
+three all show. It opens with the column widening and each row's initials coming in down the
+grid, and folds away the same way (`.crew-anim` is only on while it moves, so the grid's
+refreshes don't replay it). Whether it's open lasts while the app is open (`servicesNav.crew`).
+
 **iPads (home-screen app).** The sidebar sits clear of the status bar and the home indicator,
 and the Scheduling grid stops level with it (`fitRoster` takes the home indicator off, and adds
 back what iOS 26.0 leaves off the bottom). The background glow reaches the real bottom too.
