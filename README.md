@@ -538,6 +538,7 @@ js/store-demo.js               preview data (same methods, in memory)
 js/views/cg.js                CG uploads: each campus's CG for the coming Sunday (not started, working, done)
 js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
+js/input.js                   full screen button (computers); hiding the pointer while touching
 js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
 js/views/events.js            Events: one-off Planning Center services, with Live (the service clock), Flow and Team
 js/live.js                    Live: the full-screen Planning Center Live view, opened from Events and from any service
@@ -659,6 +660,18 @@ every row at once), then the initials come in from top left to bottom right. Clo
 initials go in that same order, then the column pulls back in. `.crew-anim` is only on while
 it moves, so the grid's refreshes don't replay it. Whether it's open lasts while the app is
 open (`servicesNav.crew`).
+
+**Full screen** (computers, `js/input.js`): a small button in the top right corner, in the
+margin beside every page's head, puts Tally in the browser's full screen and takes it out
+(Esc too). Only where the browser offers it and there's a mouse or trackpad: not on phones,
+iPads or the home-screen app. It sits under sheets and menus, and Live hides it.
+
+**Touch screens** (`js/input.js`): touching doesn't leave a mouse pointer sitting over Tally.
+While you're touching, the pointer is hidden over the app (`html.is-touch`); it comes back as
+soon as a mouse or trackpad moves (a few small moves with nothing pressed). A touch screen the
+browser reports as touch is known for sure; one the computer passes on as a mouse (most touch
+monitors on a Mac) is told by the pointer jumping somewhere new and pressing at once. The
+computer still moves its own pointer; Tally only keeps it out of sight.
 
 **iPads (home-screen app).** The sidebar sits clear of the status bar and the home indicator,
 and the Scheduling grid stops level with it (`fitRoster` takes the home indicator off, and adds

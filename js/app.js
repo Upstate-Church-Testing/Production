@@ -2,6 +2,7 @@
 // hosts each page (Gear, Software, Audio, Video, Lighting, Network, Logistics, Settings).
 
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, APP_NAME, ORG_NAME } from './config.js';
+import { watchInput, fullscreenButton } from './input.js';
 import { esc, icon, $, $$, storage, store as save } from './util.js';
 import { createDemoStore } from './store-demo.js';
 import * as NetworkView from './views/network.js';
@@ -166,6 +167,8 @@ async function boot() {
   blockZoom();
   fitBottom();
   applyTheme();
+  watchInput();
+  fullscreenButton();
   // Filters used to be remembered between launches; they now reset every time.
   for (const k of ['ucp.campus', 'ucp.geardep', 'ucp.geartags', 'ucp.gearcat', 'ucp.gearbrand', 'ucp.netdep', 'ucp.tags']) {
     try { localStorage.removeItem(k); } catch { /* private mode */ }

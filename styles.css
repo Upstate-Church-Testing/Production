@@ -2872,6 +2872,22 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { vertical-align: top; padding-top: 4px; }
 }
 
+/* ------------------------------------------------- full screen, touch -- */
+/* Full screen (computers): in the top right corner, in the margin right of every page's
+   head, under sheets and menus (js/input.js). */
+.fs-btn {
+  position: fixed; z-index: 42; top: 8px; right: 6px; width: 24px; height: 24px; padding: 0;
+  display: none; place-items: center; border: 1px solid var(--line-2); border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent); color: var(--muted); cursor: pointer;
+}
+.fs-btn .ico { width: 14px; height: 14px; }
+.fs-btn:hover { color: var(--fg); border-color: var(--muted); }
+.fs-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (min-width: 860px) { .fs-btn { display: grid; } }
+html.lv-full-on .fs-btn { display: none; }
+/* Touching: no mouse pointer left sitting where you touched. */
+html.is-touch, html.is-touch * { cursor: none !important; }
+
 /* ------------------------------------------- Scheduling: the console look -- */
 /* PCO › Scheduling only (#view.page-scheduling.is-roster): a squared-off crew board. Each
    spot's state is a texture as well as a colour, so it reads at a glance (and without
