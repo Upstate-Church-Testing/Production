@@ -109,7 +109,7 @@ export function mount(el, ctx) {
   // Sundays ⇄ Wednesdays: the board stays, what's on it goes out top left to bottom right,
   // then the other week's comes in the same way (styles.css, "Sundays ⇄ Wednesdays").
   let weekBusy = false;
-  let weekEntering = false; // the next grid drawn starts hidden, to come in
+  let weekWant = null; // tapped while one was still moving: go there once it's done
   const live = createLive(ctx, {
     tz: () => s.status?.time_zone,
     onClose: () => { liveSave(null); if (alive) $('[data-act="live"]', el)?.focus({ preventScroll: true }); },
@@ -193,7 +193,7 @@ export function mount(el, ctx) {
   }, 300));
   const clockTimer = setInterval(drawHead, 30000); // keeps "updated 3 min ago" honest
   // Wednesdays take their size from the Sunday grid, so a resize works both out again.
-  const onResize = debounce(() => { if (nav.mode === 'roster') { if (model()?.week === 'mid') draw(); else fitRoster(); } }, 120);
+  const onResize = debounce(() => { if (nav.mode === 'roster' && !weekBusy) draw(); }, 120);
   window.addEventListener('resize', onResize);
 
   load();
@@ -387,26 +387,30 @@ export function mount(el, ctx) {
     }
     if (nav.mode === 'mine') { box.innerHTML = mySchedule(m); return; }
     if (nav.mode === 'roster') {
-      // Planning Center refreshes redraw the grid every few seconds: stay where you were.
-      const view = `${m.week}|${rosterCampus(m)}`;
-      const was = $('.ros-wrap', box);
-      const keep = was && nav.rosAt === view ? { left: was.scrollLeft, top: was.scrollTop } : null;
-      // Wednesdays is a few rows: draw them the size they are on Sunday mornings (every
-      // location), not blown up to fill the screen. Sundays is laid out first to find that
-      // size, then replaced before anything is painted.
+      // Sundays and Wednesdays are both drawn and laid out, one over the other on the same
+      // stage, so switching between them only moves what's already there (switchWeek).
+      // Planning Center refreshes redraw them every few seconds: each stays where it was.
+      const keep = new Map($$('.ros-wrap', box).map((w) => [w.dataset.wk, { left: w.scrollLeft, top: w.scrollTop }]));
+      const weeks = ['sun', 'mid'].filter((w) => m.rosterIn(w).length);
+      if (!weeks.includes(m.week)) weeks.push(m.week);
+      pills = new Map();
+      opens = new Map();
+      box.innerHTML = (attn && m.week === 'sun' ? attentionHtml(m) : '')
+        + `<div class="ros-stage">${weeks.map((w) => roster(m, w, rosterCampus(m), w === m.week)).join('')}</div>`;
+      // Wednesdays is a few rows: the size they are on Sundays (every location), not blown up
+      // to fill the screen.
+      const wrapOf = (w) => $(`.ros-wrap[data-wk="${w}"]`, box);
       let size = null;
-      if (m.week === 'mid') {
-        if (m.rosterIn('sun').length) { box.innerHTML = roster(m, 'sun', ALL); size = fitRoster(); }
-        size = size || { z: null, extra: 0 };
+      if (wrapOf('sun')) size = fitRoster(null, wrapOf('sun'));
+      if (wrapOf('mid')) fitRoster(size || { z: null, extra: 0 }, wrapOf('mid'));
+      for (const w of weeks) {
+        const wrap = wrapOf(w);
+        if (!wrap) continue;
+        const k = keep.get(w);
+        if (k) { wrap.scrollLeft = k.left; wrap.scrollTop = k.top; } else scrollToNext(wrap);
+        if (attn && w === 'sun' && m.week === 'sun') markAttention(wrap, !k);
       }
-      box.innerHTML = (attn && m.week === 'sun' ? attentionHtml(m) : '') + roster(m, m.week, rosterCampus(m));
-      fitRoster(size);
-      const wrap = $('.ros-wrap', box);
-      if (wrap) {
-        if (keep) { wrap.scrollLeft = keep.left; wrap.scrollTop = keep.top; } else scrollToNext(wrap);
-        nav.rosAt = view;
-        if (attn && m.week === 'sun') markAttention(wrap, !keep);
-      }
+      fitStage();
       return;
     }
     if (nav.mode === 'people') { people.draw(box); return; }
@@ -618,14 +622,12 @@ export function mount(el, ctx) {
     return k && k.toLowerCase() !== String(p.title || '').replace(/[^A-Za-z]/g, '').toLowerCase() ? k[0].toUpperCase() : '';
   }
 
-  function roster(m, week, where) {
+  function roster(m, week, where, active = true) {
     const { days, rows } = rosterData(m, week, where);
-    pills = new Map();
-    opens = new Map();
     const campus = where === ALL ? null : ctx.campusById.get(where);
     const letters = new Set();
     if (!rows.length) {
-      return `<div class="empty"><h3>No one scheduled yet</h3><p>Nobody is on the shared teams${campus ? ` at ${esc(campus.short_name)}` : ''} in the next ${plural(s.status.weeks_ahead || 6, 'week')}.</p></div>`;
+      return `<div class="ros-wrap ros-none ${active ? 'is-active' : ''}" data-wk="${week}"><div class="empty"><h3>No one scheduled yet</h3><p>Nobody is on the shared teams${campus ? ` at ${esc(campus.short_name)}` : ''} in the next ${plural(s.status.weeks_ahead || 6, 'week')}.</p></div></div>`;
     }
     const today = m.today;
     const next = days.find((d) => d >= today); // where coming up starts: a line down its left side
@@ -684,8 +686,8 @@ export function mount(el, ctx) {
     ].join('')}</span></td>`).join('');
 
     return `
-      <div class="ros-wrap">
-        <table class="ros ${campus ? 'one-place' : ''} ${nav.crew && s.vol ? 'crew-on' : ''} ${weekEntering ? 'wk-hide' : ''}" style="--cn:${crewMax};--rows:${rowNo};--cols:${colOf(days.length - 1)}">
+      <div class="ros-wrap ${active ? 'is-active' : ''}" data-wk="${week}">
+        <table class="ros ${campus ? 'one-place' : ''} ${nav.crew && s.vol ? 'crew-on' : ''}" style="--cn:${crewMax};--rows:${rowNo};--cols:${colOf(days.length - 1)}">
           <thead><tr style="--r:0">${campus ? '' : `<th class="ros-corner ros-loc-h" scope="col">${both('Location', 'Loc')}</th>`}<th class="ros-corner ros-pos-h" scope="col"><div class="pos-in"><span class="pos-l">${both('Position', 'Pos')}</span>${isStaff ? `<button type="button" class="ros-crew-btn" data-act="crew" aria-expanded="${nav.crew ? 'true' : 'false'}" title="Who's on each team" aria-label="Show who's on each team">${icon('team')}<span class="cb-l">Team</span>${icon('chevron')}</button>` : ''}</div></th>${head}</tr></thead>
           <tbody>${body}</tbody>
           <tfoot><tr style="--r:${rowNo + 1}"><th class="ros-foot-h" ${campus ? '' : 'colspan="2"'}>${campus ? both('Totals', 'Tot') : 'Totals'}</th>${foot}</tr></tfoot>
@@ -791,29 +793,70 @@ export function mount(el, ctx) {
    *  Returns the size it settled on ({ z: zoom, extra: px added to each row }). Given one,
    *  it uses that instead (Wednesdays at the Sunday size); given { z: null }, it fits
    *  without making rows taller. */
+  /** The stage (the grid's frame) the height of the week that's showing. */
+  function fitStage() {
+    const stage = $('.ros-stage', el);
+    const wrap = stage && $('.ros-wrap.is-active', stage);
+    if (!stage || !wrap) return;
+    const edges = stage.offsetHeight - stage.clientHeight; // its top and bottom border
+    stage.style.height = `${wrap.offsetHeight + edges}px`;
+  }
+
+  /** Sundays ⇄ Wednesdays, with both already laid out: what's on this one goes out (top left
+   *  to bottom right), the frame eases to the other's height while their lines cross over,
+   *  then the other's comes in the same way. Reduced motion: straight across. */
   function switchWeek(w) {
-    if (nav.week === w || weekBusy) return;
+    if (weekBusy) {
+      weekWant = w;
+      $$('#s-week [data-week]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.week === w)));
+      return;
+    }
+    if (nav.week === w) return;
+    const stage = $('.ros-stage', el);
+    const from = stage && $('.ros-wrap.is-active', stage);
+    const to = stage && $(`.ros-wrap[data-wk="${w}"]`, stage);
+    nav.week = w;
     $$('#s-week [data-week]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.week === w)));
-    const old = $('.ros', el);
-    if (!old || matchMedia('(prefers-reduced-motion: reduce)').matches) { nav.week = w; draw(); return; }
+    if (!from || !to || from === to || matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(); return; }
     weekBusy = true;
-    const span = (t) => ({ rows: Number(t.style.getPropertyValue('--rows')) || 20, cols: Number(t.style.getPropertyValue('--cols')) || 8 });
-    const a = span(old);
-    old.classList.add('wk-out');
+    const span = (wrap) => {
+      const t = $('.ros', wrap);
+      return { t, rows: Number(t?.style.getPropertyValue('--rows')) || 6, cols: Number(t?.style.getPropertyValue('--cols')) || 6 };
+    };
+    const a = span(from);
+    const b = span(to);
+    a.t?.classList.add('wk-out');
     setTimeout(() => {
       if (!alive) return;
-      nav.week = w;
-      weekEntering = true;
-      draw();
-      weekEntering = false;
-      const t = $('.ros', el);
-      if (!t) { weekBusy = false; return; }
-      const b = span(t);
-      void t.offsetWidth; // start from hidden
-      t.classList.add('wk-in');
-      t.classList.remove('wk-hide');
-      setTimeout(() => { t.classList.remove('wk-in'); weekBusy = false; }, b.rows * 14 + b.cols * 26 + 420);
-    }, a.rows * 8 + a.cols * 14 + 200);
+      // The frame to the new height; the old lines fade as the new ones (still empty) come up.
+      b.t?.classList.add('wk-hide');
+      to.classList.add('is-active', 'is-entering');
+      from.classList.remove('is-active');
+      from.classList.add('is-leaving');
+      stage.classList.add('is-moving');
+      void stage.offsetWidth;
+      to.classList.remove('is-entering');
+      fitStage();
+      setTimeout(() => {
+        if (!alive) return;
+        from.classList.remove('is-leaving');
+        a.t?.classList.remove('wk-out');
+        stage.classList.remove('is-moving');
+        if (b.t) {
+          b.t.classList.add('wk-in');
+          void b.t.offsetWidth;
+          b.t.classList.remove('wk-hide');
+        }
+        setTimeout(() => {
+          b.t?.classList.remove('wk-in');
+          weekBusy = false;
+          const next = weekWant;
+          weekWant = null;
+          if (next && next !== nav.week && alive) switchWeek(next);
+          else $$('#s-week [data-week]', el).forEach((x) => x.setAttribute('aria-selected', String(x.dataset.week === nav.week)));
+        }, b.rows * 14 + b.cols * 26 + 420);
+      }, 400);
+    }, a.rows * 8 + a.cols * 14 + 180);
   }
 
   /** A row's team in Planning Center: everyone on that location's team (any of its services
@@ -848,7 +891,12 @@ export function mount(el, ctx) {
     }
     const on = !nav.crew;
     nav.crew = on;
-    const table = $('.ros', el);
+    const table = $('.ros-wrap.is-active .ros', el);
+    // The other week's grid just takes the new state (it isn't showing).
+    $$('.ros', el).filter((t) => t !== table).forEach((t) => {
+      t.classList.toggle('crew-on', on);
+      $$('[data-act="crew"]', t).forEach((b) => b.setAttribute('aria-expanded', String(on)));
+    });
     if (!table) return;
     table.classList.add('crew-anim');
     void table.offsetWidth; // start from where it is now
@@ -872,8 +920,7 @@ export function mount(el, ctx) {
   /** What iOS 26.0 leaves off the bottom of a home-screen app (app.js fitBottom; 0 elsewhere). */
   function vgapPx() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vgap')) || 0; }
 
-  function fitRoster(size = null) {
-    const wrap = $('.ros-wrap', el);
+  function fitRoster(size = null, wrap = $('.ros-wrap.is-active', el)) {
     const table = wrap && $('.ros', wrap);
     if (!wrap || !table) return null;
     const rows = $$('tbody tr', table);

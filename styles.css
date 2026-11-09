@@ -1914,10 +1914,15 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .rk-l { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
 .rk-l i { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 50%; background: var(--panel-3); color: var(--fg); font: 800 9.5px/1 var(--f-body); font-style: normal; }
 
-.ros-wrap {
-  overflow: auto; overscroll-behavior: contain;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
-}
+/* The grid's frame (.ros-stage) holds Sundays and Wednesdays, one over the other, both laid
+   out; only the one showing is visible (.is-active). Switching moves what's already there:
+   the frame eases to the other's height while their lines cross over (.is-moving). */
+.ros-stage { position: relative; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
+.ros-wrap { position: absolute; top: 0; left: 0; right: 0; overflow: auto; overscroll-behavior: contain; }
+.ros-wrap:not(.is-active):not(.is-leaving) { visibility: hidden; pointer-events: none; }
+.ros-wrap.is-entering, .ros-wrap.is-leaving { opacity: 0; pointer-events: none; }
+.ros-stage.is-moving { transition: height 0.4s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.ros-stage.is-moving > .ros-wrap { transition: opacity 0.3s ease; }
 .ros { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
 .ros th, .ros td { border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); }
 .ros tr.ros-first > * { border-top: 2px solid var(--line-2); }
@@ -2828,7 +2833,7 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 @media (max-width: 699px) {
   .ros .lf, .ros-week .lf { display: none; }
   .ros .ls, .ros-week .ls { display: inline; }
-  .ros-wrap { margin-left: calc(-1 * var(--gutter-l)); margin-right: calc(-1 * var(--gutter-r)); border-left: 0; border-right: 0; border-radius: 0; }
+  .ros-stage { margin-left: calc(-1 * var(--gutter-l)); margin-right: calc(-1 * var(--gutter-r)); border-left: 0; border-right: 0; border-radius: 0; }
   .ros .ros-loc, .ros .ros-loc-h { width: 42px; min-width: 42px; max-width: 42px; }
   .ros .ros-loc { padding: 2px 4px 2px 10px; font-size: 12px; letter-spacing: 0.02em; }
   .ros .ros-pos, .ros .ros-pos-h { left: 42px; min-width: 40px; max-width: 64px; }
@@ -2863,7 +2868,7 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   /* a phone: the grid runs to the bottom edge, its totals clear of the home bar (wider
      screens stop the grid above the home indicator instead: fitRoster) */
   html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { padding-bottom: env(safe-area-inset-bottom, 0px); }
-  html.ros-lock .ros-wrap { border-bottom: 0; }
+  html.ros-lock .ros-stage { border-bottom: 0; }
   html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { vertical-align: top; padding-top: 4px; }
 }
 
@@ -2916,7 +2921,7 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
 .page-scheduling.is-roster .rk-note { color: var(--hud-dim); text-transform: none; letter-spacing: 0.01em; font-weight: 500; }
 
 /* the board */
-.page-scheduling.is-roster .ros-wrap { background: var(--hud-bg); border: 1px solid var(--hud-line-2); border-radius: 4px; }
+.page-scheduling.is-roster .ros-stage { background: var(--hud-bg); border: 1px solid var(--hud-line-2); border-radius: 4px; }
 .page-scheduling.is-roster .ros th, .page-scheduling.is-roster .ros td { border-color: var(--hud-line); }
 .page-scheduling.is-roster .ros tr.ros-first > * { border-top: 2px solid var(--hud-line-2); }
 .page-scheduling.is-roster .ros tbody tr.ros-first:first-child > * { border-top: 0; }
@@ -3088,7 +3093,7 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   .page-scheduling.is-roster .ros-tot { gap: 2px; }
   .page-scheduling.is-roster .ros-tot span { min-width: 19px; height: 16px; padding: 0 4px; font-size: 11px; }
   .page-scheduling.is-roster .ros-key { gap: 3px 10px; font-size: 10px; }
-  .page-scheduling.is-roster .ros-wrap { border-left: 0; border-right: 0; border-radius: 0; }
+  .page-scheduling.is-roster .ros-stage { border-left: 0; border-right: 0; border-radius: 0; }
 }
 
 /* ---------------------------------------------------------------- events -- */

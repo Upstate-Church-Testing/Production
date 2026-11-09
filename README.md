@@ -64,11 +64,13 @@ control, Back and Next there too. A reload into a new version comes straight bac
 same service with Live up (`sessionStorage` ucp.services.live); leaving the page forgets it.
 
 **Sundays | Wednesdays.** Scheduling shows one or the other, picked with the toggle that
-sits on the grid's top right edge (the choice lasts while the app is open). Switching
-animates: what's on the grid goes out from top left to bottom right, then the other week's
-comes in the same way, while the grid's frame, headers' backgrounds and the Location /
-Position header stay put (`switchWeek`; `--r` row, `--c` column counted from the labels and
-the next date, so what's on screen moves first; reduced motion switches straight away). Wednesdays are the student midweeks, Mauldin then
+sits on the grid's top right edge (the choice lasts while the app is open). Both are
+drawn and laid out at once, one over the other in the grid's frame (`.ros-stage`), so
+switching never waits on drawing: what's on the grid goes out from top left to bottom right,
+the frame eases to the other week's height while the two grids' lines cross over, then the
+other week's comes in the same way (`switchWeek`; `--r` row, `--c` column counted from the
+labels and the next date, so what's on screen moves first). A tap while it's moving is kept
+and done next; reduced motion switches straight away. Wednesdays are the student midweeks, Mauldin then
 Simpsonville: front of house only (CG, Lighting and Audio), every position on their FOH
 teams listed whether or not anyone's on it yet. Its rows are the size the Sunday grid
 (all locations) has on the same screen, so six rows take the space of about three
