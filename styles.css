@@ -78,7 +78,7 @@
 /* ---------------------------------------------------------------- base -- */
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; background: var(--bg); }
 body {
   margin: 0;
   background: var(--bg);
@@ -87,8 +87,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
-body::before { /* the faint accent glow behind everything */
-  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+body::before { /* the faint accent glow behind everything (to the real bottom: --vgap, below) */
+  content: ""; position: fixed; inset: 0; bottom: calc(-1 * var(--vgap, 0px)); z-index: 0; pointer-events: none;
   background:
     radial-gradient(900px 520px at 88% -8%, var(--glow), transparent 62%),
     radial-gradient(700px 420px at -10% 108%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 60%);
@@ -347,8 +347,11 @@ code { font-size: 0.9em; background: var(--panel-3); border-radius: 6px; padding
   .topbar { display: none; }
   .main { margin-left: calc(var(--rail-mini) + 16px); }
   #view { padding-bottom: 64px; }
+  /* The sidebar clear of the status bar and the home indicator (an iPad's home-screen app;
+     both are 0 elsewhere), and down to the real bottom where iOS 26.0 lays the app out short. */
   .nav {
-    top: 16px; left: max(16px, env(safe-area-inset-left, 0px)); bottom: 16px;
+    top: calc(16px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px) - var(--vgap, 0px));
     width: var(--rail-mini); overflow: hidden;
     padding: 18px 12px 12px; border: 1px solid var(--line); border-radius: var(--r-xl); box-shadow: none;
     transform: none; visibility: visible;
@@ -2855,10 +2858,153 @@ button.rp.is-open:hover { border-color: var(--accent); color: var(--accent-ink);
 html.ros-lock { padding-bottom: 0; }
 html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan-x; }
 .ros-wrap.fits { overflow-y: hidden; overscroll-behavior: none; touch-action: pan-x; }
-html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.sab-probe { position: fixed; visibility: hidden; pointer-events: none; padding-bottom: env(safe-area-inset-bottom, 0px); }
 @media (max-width: 699px) {
+  /* a phone: the grid runs to the bottom edge, its totals clear of the home bar (wider
+     screens stop the grid above the home indicator instead: fitRoster) */
+  html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { padding-bottom: env(safe-area-inset-bottom, 0px); }
   html.ros-lock .ros-wrap { border-bottom: 0; }
   html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { vertical-align: top; padding-top: 4px; }
+}
+
+/* ------------------------------------------- Scheduling: the console look -- */
+/* PCO › Scheduling only (#view.page-scheduling.is-roster): a squared-off crew board. Each
+   spot's state is a texture as well as a colour, so it reads at a glance (and without
+   colour): solid = confirmed, hollow = asked and waiting, hatched = declined, dashed = open.
+   The same four marks are used in the key, the pills, each service's square and the totals.
+   An inverted block means "now": the selected week, and the next date's header. Your own
+   spot has corner brackets. Type is Chakra Petch, squared like the rest of it. */
+.page-scheduling.is-roster {
+  --hud-bg: #07090b;      /* the board */
+  --hud-head: #0c1014;    /* header, footer and label columns */
+  --hud-line: #192026;    /* hairlines */
+  --hud-line-2: #2b353d;  /* a location's top edge, the frame */
+  --hud-ink: #e8edf0;
+  --hud-dim: #7b868f;
+  --hud-c: #2fe08b; --hud-c-ink: #03140a;
+  --hud-u: #ffb547; --hud-u-ink: #1d1200;
+  --hud-d: #ff4a5c; --hud-d-ink: #ffffff;
+  --f-hud: "Chakra Petch", var(--f-body);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .page-scheduling.is-roster {
+    --hud-bg: #ffffff; --hud-head: #f3f5f6; --hud-line: #e2e6e9; --hud-line-2: #c6cdd3; --hud-ink: #0c1013; --hud-dim: #66717a;
+    --hud-c: #0e9a57; --hud-c-ink: #ffffff; --hud-u: #c27800; --hud-u-ink: #ffffff; --hud-d: #d72a3c; --hud-d-ink: #ffffff;
+  }
+}
+:root[data-theme="light"] .page-scheduling.is-roster {
+  --hud-bg: #ffffff; --hud-head: #f3f5f6; --hud-line: #e2e6e9; --hud-line-2: #c6cdd3; --hud-ink: #0c1013; --hud-dim: #66717a;
+  --hud-c: #0e9a57; --hud-c-ink: #ffffff; --hud-u: #c27800; --hud-u-ink: #ffffff; --hud-d: #d72a3c; --hud-d-ink: #ffffff;
+}
+
+/* the head: title, Sunday mornings | Wednesdays, the key */
+.page-scheduling.is-roster .page-title h1 { font: 600 30px/1 var(--f-hud); letter-spacing: 0.04em; text-transform: uppercase; }
+.page-scheduling.is-roster .page-title span { font-family: var(--f-hud); letter-spacing: 0.06em; text-transform: uppercase; }
+.page-scheduling.is-roster .seg { border-radius: 4px; padding: 2px; background: var(--hud-head); border: 1px solid var(--hud-line-2); box-shadow: none; }
+.page-scheduling.is-roster .seg button { border-radius: 2px; font: 600 12px/1 var(--f-hud); letter-spacing: 0.08em; text-transform: uppercase; color: var(--hud-dim); }
+.page-scheduling.is-roster .seg button[aria-selected="true"] { background: var(--hud-ink); color: var(--hud-bg); box-shadow: none; }
+.page-scheduling.is-roster .ros-key { gap: 4px 16px; font: 600 11px/1 var(--f-hud); letter-spacing: 0.07em; text-transform: uppercase; color: var(--hud-dim); }
+.page-scheduling.is-roster .rk { gap: 7px; color: var(--hud-ink); font-weight: 600; }
+.page-scheduling.is-roster .rk i { width: 16px; height: 11px; border-radius: 1px; background: none; box-shadow: none; }
+.page-scheduling.is-roster .rk i.st-C { background: var(--hud-c); }
+.page-scheduling.is-roster .rk i.st-U { box-shadow: inset 0 0 0 1.5px var(--hud-u); }
+.page-scheduling.is-roster .rk i.st-D { background: repeating-linear-gradient(-45deg, var(--hud-d) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 1px var(--hud-d); }
+.page-scheduling.is-roster .rk i.is-open { box-shadow: none; border: 1px dashed var(--hud-dim); }
+.page-scheduling.is-roster .rk-sep { background: var(--hud-line-2); }
+.page-scheduling.is-roster .rk-l { gap: 6px; color: var(--hud-dim); }
+.page-scheduling.is-roster .rk-l i { border-radius: 1px; width: 15px; height: 13px; background: var(--hud-head); box-shadow: inset 0 0 0 1px var(--hud-line-2); color: var(--hud-ink); font: 700 9px/1 var(--f-hud); }
+.page-scheduling.is-roster .rk-note { color: var(--hud-dim); text-transform: none; letter-spacing: 0.01em; font-weight: 500; }
+
+/* the board */
+.page-scheduling.is-roster .ros-wrap { background: var(--hud-bg); border: 1px solid var(--hud-line-2); border-radius: 4px; }
+.page-scheduling.is-roster .ros th, .page-scheduling.is-roster .ros td { border-color: var(--hud-line); }
+.page-scheduling.is-roster .ros tr.ros-first > * { border-top: 2px solid var(--hud-line-2); }
+.page-scheduling.is-roster .ros tbody tr.ros-first:first-child > * { border-top: 0; }
+.page-scheduling.is-roster .ros thead th {
+  height: 34px; background: var(--hud-head); border-bottom-color: var(--hud-line-2);
+  font: 600 11px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase; color: var(--hud-dim);
+}
+.page-scheduling.is-roster .ros-day b { margin-left: 5px; font: 600 14px/1 var(--f-hud); letter-spacing: 0.06em; color: var(--hud-ink); }
+.page-scheduling.is-roster .ros-day.is-past, .page-scheduling.is-roster .ros-day.is-past b { color: var(--hud-dim); opacity: 0.7; }
+/* the next date: its header inverted, and a line down its left side */
+.page-scheduling.is-roster .ros thead .ros-day.is-up { background: var(--hud-ink); color: color-mix(in srgb, var(--hud-bg) 70%, var(--hud-ink)); }
+.page-scheduling.is-roster .ros thead .ros-day.is-up b { color: var(--hud-bg); }
+.page-scheduling.is-roster .ros .is-next { border-left: 2px solid color-mix(in srgb, var(--hud-ink) 70%, transparent); }
+.page-scheduling.is-roster .ros td.is-today { background: color-mix(in srgb, var(--hud-ink) 4%, transparent); }
+.page-scheduling.is-roster .ros .ros-corner { font-size: 10px; letter-spacing: 0.14em; }
+.page-scheduling.is-roster .ros .ros-loc, .page-scheduling.is-roster .ros .ros-pos { background: var(--hud-head); color: var(--hud-ink); }
+.page-scheduling.is-roster .ros .ros-loc { font: 600 13.5px/1.15 var(--f-hud); letter-spacing: 0.02em; }
+.page-scheduling.is-roster .ros .ros-pos { font: 500 13px/1.1 var(--f-hud); letter-spacing: 0.01em; box-shadow: 1px 0 0 var(--hud-line-2); }
+.page-scheduling.is-roster .ros .ros-pos-h { box-shadow: 1px 0 0 var(--hud-line-2); }
+@media (min-width: 700px) { /* room for "Simpsonville" in this type */
+  .page-scheduling.is-roster .ros .ros-loc, .page-scheduling.is-roster .ros .ros-loc-h { width: 112px; min-width: 112px; max-width: 112px; }
+  .page-scheduling.is-roster .ros .ros-pos, .page-scheduling.is-roster .ros .ros-pos-h { left: 112px; }
+  .page-scheduling.is-roster .ros.one-place .ros-pos, .page-scheduling.is-roster .ros.one-place .ros-pos-h { left: 0; }
+}
+.page-scheduling.is-roster .ros tfoot th, .page-scheduling.is-roster .ros tfoot td { background: var(--hud-head); box-shadow: 0 -1px 0 var(--hud-line-2); }
+.page-scheduling.is-roster .ros .ros-foot-h { font: 600 10px/1 var(--f-hud); letter-spacing: 0.14em; color: var(--hud-dim); }
+
+/* totals: the same four marks, as counters */
+.page-scheduling.is-roster .ros-tot { gap: 4px; }
+.page-scheduling.is-roster .ros-tot span { min-width: 24px; height: 18px; padding: 0 5px; border-radius: 2px; background: none; box-shadow: none; font: 700 12px/1 var(--f-hud); }
+.page-scheduling.is-roster .ros-tot .st-C { background: var(--hud-c); color: var(--hud-c-ink); }
+.page-scheduling.is-roster .ros-tot .st-U { box-shadow: inset 0 0 0 1.5px var(--hud-u); color: var(--hud-u); }
+.page-scheduling.is-roster .ros-tot .st-D { background: repeating-linear-gradient(-45deg, var(--hud-d) 0 3px, color-mix(in srgb, var(--hud-d) 55%, transparent) 3px 6px); color: var(--hud-d-ink); }
+.page-scheduling.is-roster .ros-tot .is-open { border: 1px dashed var(--hud-line-2); color: var(--hud-dim); }
+
+/* a person on a spot */
+.page-scheduling.is-roster .ros .rp {
+  --rp-c: var(--hud-dim);
+  position: relative; gap: 8px; min-height: 26px; padding: 0 9px 0 0; border-radius: 2px; border: 1px solid transparent;
+  font: 500 13.5px/1.1 var(--f-hud); letter-spacing: 0.01em; color: var(--hud-ink);
+}
+.page-scheduling.is-roster .ros .rp b { font-weight: 500; }
+.page-scheduling.is-roster .ros .rp.st-C { --rp-c: var(--hud-c); background: color-mix(in srgb, var(--hud-c) 15%, var(--hud-bg)); border-color: color-mix(in srgb, var(--hud-c) 55%, transparent); }
+.page-scheduling.is-roster .ros .rp.st-U {
+  --rp-c: var(--hud-u); background: var(--hud-bg); border-color: var(--hud-u);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hud-u) 30%, transparent); color: color-mix(in srgb, var(--hud-u) 60%, var(--hud-ink));
+}
+.page-scheduling.is-roster .ros .rp.st-D {
+  --rp-c: var(--hud-d); border-color: var(--hud-d);
+  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--hud-d) 34%, var(--hud-bg)) 0 5px, color-mix(in srgb, var(--hud-d) 12%, var(--hud-bg)) 5px 10px);
+}
+.page-scheduling.is-roster .ros .rp.is-open {
+  justify-content: center; padding: 0 6px; background: none; border: 1px dashed var(--hud-line-2); box-shadow: none;
+  font: 600 10.5px/1 var(--f-hud); letter-spacing: 0.16em; text-transform: uppercase; color: var(--hud-dim);
+}
+.page-scheduling.is-roster .ros button.rp.is-open:hover { border-color: var(--hud-dim); color: var(--hud-ink); filter: none; }
+/* each service as a square on the left edge, first service on top */
+.page-scheduling.is-roster .ros .rp-dots {
+  align-self: stretch; justify-content: center; gap: 1px; padding: 2px;
+  background: color-mix(in srgb, var(--rp-c) 18%, transparent); border-right: 1px solid color-mix(in srgb, var(--rp-c) 50%, transparent);
+}
+.page-scheduling.is-roster .ros .rp-dots i { width: 14px; height: 11px; border-radius: 1px; box-shadow: none; font: 700 8.5px/1 var(--f-hud); }
+.page-scheduling.is-roster .ros .rp-dots i.st-C { background: var(--hud-c); color: var(--hud-c-ink); }
+.page-scheduling.is-roster .ros .rp-dots i.st-U { background: var(--hud-bg); box-shadow: inset 0 0 0 1px var(--hud-u); color: var(--hud-u); }
+.page-scheduling.is-roster .ros .rp-dots i.st-D { background: var(--hud-d); color: var(--hud-d-ink); }
+.page-scheduling.is-roster .ros .rp-mail { color: var(--rp-c); }
+/* your own spot: corner brackets, not a glow */
+.page-scheduling.is-roster .ros .rp.is-me { outline: 0; }
+.page-scheduling.is-roster .ros .rp.is-me::before, .page-scheduling.is-roster .ros .rp.is-me::after {
+  content: ""; position: absolute; width: 9px; height: 9px; border: 2px solid var(--hud-ink); pointer-events: none;
+}
+.page-scheduling.is-roster .ros .rp.is-me::before { top: -3px; left: -3px; border-right: 0; border-bottom: 0; }
+.page-scheduling.is-roster .ros .rp.is-me::after { bottom: -3px; right: -3px; border-left: 0; border-top: 0; }
+.page-scheduling.is-roster .ros .rp:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: 1px; }
+.page-scheduling.is-roster .ros-attn { border-radius: 4px; }
+
+@media (max-width: 699px) {
+  .page-scheduling.is-roster .page-title h1 { font-size: 24px; }
+  .page-scheduling.is-roster .ros .rp { gap: 5px; min-height: 24px; padding-right: 5px; font-size: 12.5px; letter-spacing: 0; }
+  .page-scheduling.is-roster .ros .rp-dots { padding: 2px 1.5px; }
+  .page-scheduling.is-roster .ros .rp-dots i { width: 11px; height: 10px; font-size: 7.5px; }
+  .page-scheduling.is-roster .ros-day b { margin-left: 0; font-size: 13px; }
+  .page-scheduling.is-roster .ros .ros-loc { font-size: 12px; letter-spacing: 0.04em; }
+  .page-scheduling.is-roster .ros .ros-pos { font-size: 12px; }
+  .page-scheduling.is-roster .ros-tot { gap: 2px; }
+  .page-scheduling.is-roster .ros-tot span { min-width: 19px; height: 16px; padding: 0 4px; font-size: 11px; }
+  .page-scheduling.is-roster .ros-key { gap: 3px 10px; font-size: 10px; }
+  .page-scheduling.is-roster .ros-wrap { border-left: 0; border-right: 0; border-radius: 0; }
 }
 
 /* ---------------------------------------------------------------- events -- */

@@ -624,7 +624,7 @@ export function mount(el, ctx) {
     }
     const today = m.today;
     const next = days.find((d) => d >= today); // where coming up starts: a line down its left side
-    const when = (d) => `${d === today ? 'is-today' : d < today ? 'is-past' : ''}${d === next && next !== days[0] ? ' is-next' : ''}`; // past columns are dimmed
+    const when = (d) => `${d === today ? 'is-today' : d < today ? 'is-past' : ''}${d === next && next !== days[0] ? ' is-next' : ''}${d === next ? ' is-up' : ''}`; // past columns are dimmed
     const totals = days.map(() => ({ C: 0, U: 0, D: 0, open: 0 }));
     const groups = [];
     for (const row of rows) {
@@ -665,7 +665,7 @@ export function mount(el, ctx) {
     // The key, up top beside the location picker.
     const used = [...letters].filter((l) => LETTER_NAME[l]).sort((a, b) => 'VMNTEW'.indexOf(a) - 'VMNTEW'.indexOf(b));
     $('#s-rkey', el).innerHTML = `
-      <span class="rk"><i class="st-C"></i>Confirmed</span><span class="rk"><i class="st-U"></i>Requested</span><span class="rk"><i class="st-D"></i>Declined</span>
+      <span class="rk"><i class="st-C"></i>Confirmed</span><span class="rk"><i class="st-U"></i>Requested</span><span class="rk"><i class="st-D"></i>Declined</span><span class="rk is-open-k"><i class="is-open"></i>Open</span>
       <span class="rk-sep"></span>
       ${used.map((l) => `<span class="rk-l"><i>${l}</i>${esc(LETTER_NAME[l])}</span>`).join('')}
       <span class="rk-note">Any decline makes the whole pill red; any open request makes it yellow.</span>`;
@@ -778,6 +778,18 @@ export function mount(el, ctx) {
    *  Returns the size it settled on ({ z: zoom, extra: px added to each row }). Given one,
    *  it uses that instead (Wednesdays at the Sunday size); given { z: null }, it fits
    *  without making rows taller. */
+  /** The home indicator's strip (an iPad's or iPhone's home-screen app; 0 elsewhere). */
+  function safeBottom() {
+    const probe = document.createElement('div');
+    probe.className = 'sab-probe';
+    document.body.append(probe);
+    const v = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    probe.remove();
+    return v;
+  }
+  /** What iOS 26.0 leaves off the bottom of a home-screen app (app.js fitBottom; 0 elsewhere). */
+  function vgapPx() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vgap')) || 0; }
+
   function fitRoster(size = null) {
     const wrap = $('.ros-wrap', el);
     const table = wrap && $('.ros', wrap);
@@ -791,7 +803,11 @@ export function mount(el, ctx) {
     const top = wrap.getBoundingClientRect().top + window.scrollY;
     const tabs = document.querySelector('.nav')?.getBoundingClientRect();
     const below = tabs && tabs.top > window.innerHeight / 2 ? window.innerHeight - tabs.top + 8 : 0; // the phone tab bar
-    const room = Math.max(220, window.innerHeight - top - below - (window.innerWidth < 700 ? 0 : 14)); // a phone: down to the bottom edge
+    // A phone: down to the bottom edge. Wider (iPads, computers): level with the sidebar's
+    // bottom, clear of an iPad's home indicator, reaching the real bottom where iOS 26.0 lays
+    // the home-screen app out short (--vgap).
+    const room = Math.max(220, window.innerWidth < 700 ? window.innerHeight - top - below
+      : window.innerHeight + vgapPx() - safeBottom() - top - below - 16);
     // On a phone, never so big that fewer than three weeks fit across beside the labels.
     let MAX = window.innerWidth < 600 ? 1.25 : 1.5;
     if (window.innerWidth < 700) {

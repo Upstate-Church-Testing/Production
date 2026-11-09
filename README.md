@@ -633,6 +633,19 @@ sized so the next three weeks fit across; a name that doesn't fit its pill shows
 (`scrollToNext` re-measures, since Safari and Chrome measure inside a zoomed table differently).
 Wider screens keep the full labels.
 
+**Scheduling's console look** (PCO › Scheduling only; the "Scheduling: the console look" block
+in `styles.css`, scoped to `#view.page-scheduling.is-roster`): squared-off, Chakra Petch type,
+and each spot's state as a texture as well as a colour, the same in the key, the pills, each
+service's square and the totals: solid = confirmed, hollow = asked and waiting, hatched =
+declined, dashed = open. An inverted block is "now" (the selected week, the next date's
+header, with a line down its left side); your own spot has corner brackets. Light and dark
+both have their own palette. Other pages keep the app's usual look for now.
+
+**iPads (home-screen app).** The sidebar sits clear of the status bar and the home indicator,
+and the Scheduling grid stops level with it (`fitRoster` takes the home indicator off, and adds
+back what iOS 26.0 leaves off the bottom). The background glow reaches the real bottom too.
+Totals only pad for the home bar on phones, where the grid runs to the edge.
+
 **iOS 26.0 bottom gap.** iOS 26.0 lays out home-screen apps about a status bar too short
 (fixed in 26.1), so panels pinned to the bottom stopped that far above the screen edge.
 `fitBottom()` in `js/app.js` measures the shortfall in the home-screen app on an iPhone
