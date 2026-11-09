@@ -63,8 +63,12 @@ Events), titled with the location and service ("SIMPSONVILLE VINTAGE"). Admins c
 control, Back and Next there too. A reload into a new version comes straight back to the
 same service with Live up (`sessionStorage` ucp.services.live); leaving the page forgets it.
 
-**Sunday mornings | Wednesdays.** Scheduling shows one or the other, picked up top (the
-choice lasts while the app is open). Wednesdays are the student midweeks, Mauldin then
+**Sundays | Wednesdays.** Scheduling shows one or the other, picked with the toggle that
+sits on the grid's top right edge (the choice lasts while the app is open). Switching
+animates: what's on the grid goes out from top left to bottom right, then the other week's
+comes in the same way, while the grid's frame, headers' backgrounds and the Location /
+Position header stay put (`switchWeek`; `--r` row, `--c` column counted from the labels and
+the next date, so what's on screen moves first; reduced motion switches straight away). Wednesdays are the student midweeks, Mauldin then
 Simpsonville: front of house only (CG, Lighting and Audio), every position on their FOH
 teams listed whether or not anyone's on it yet. Its rows are the size the Sunday grid
 (all locations) has on the same screen, so six rows take the space of about three
@@ -635,9 +639,10 @@ Wider screens keep the full labels.
 
 **Scheduling's console look** (PCO › Scheduling only; the "Scheduling: the console look" block
 in `styles.css`, scoped to `#view.page-scheduling.is-roster`): squared-off, Chakra Petch type,
-and each spot's state as a texture as well as a colour, the same in the key, the pills, each
-service's square and the totals: solid = confirmed, hollow = asked and waiting, hatched =
-declined, dashed = open. An inverted block is "now" (the selected week, the next date's
+and each spot's state as a texture as well as a colour, the same in the pills, each service's
+square and the totals: solid = confirmed, hollow = asked and waiting, hatched = declined,
+dashed = open. There's no key above the grid (taken off on purpose); the head is just the
+title and Sundays | Wednesdays. An inverted block is "now" (the selected week, the next date's
 header, with a line down its left side); your own spot has corner brackets. Light and dark
 both have their own palette. Other pages keep the app's usual look for now.
 

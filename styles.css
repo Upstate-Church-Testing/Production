@@ -3042,6 +3042,8 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
 .ros-crew-btn .ico:last-child { width: 11px; height: 11px; transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .ros-crew-btn[aria-expanded="true"] .ico:last-child { transform: rotate(180deg); }
 .ros-crew-btn.is-busy { opacity: 0.5; }
+.ros-crew-btn .cb-l { display: none; } /* "Team" only once it's open and there's room beside it */
+@media (min-width: 700px) { .ros.crew-on .ros-crew-btn .cb-l { display: inline; } }
 .page-scheduling.is-roster .ros-crew-btn { border-color: var(--hud-line-2); color: var(--hud-dim); }
 .page-scheduling.is-roster .ros-crew-btn:hover { color: var(--hud-ink); border-color: var(--hud-dim); }
 .page-scheduling.is-roster .ros-crew-btn[aria-expanded="true"] { background: var(--hud-ink); border-color: var(--hud-ink); color: var(--hud-bg); }
@@ -3052,6 +3054,28 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   .ros { --cw: 23px; --cg: 2px; }
   .ros .crew .cw { height: 19px; font-size: 10px; letter-spacing: 0.02em; }
 }
+
+/* the head: just the title and Sundays | Wednesdays, which sits down on the board's top edge */
+.page-scheduling.is-roster .page-head { padding-bottom: 5px; }
+.page-scheduling.is-roster .mode-row { align-items: flex-end; }
+.page-scheduling.is-roster .ros-week { margin-left: auto; margin-bottom: 0; }
+.page-scheduling.is-roster .results { padding-top: 0; }
+
+/* Sundays ⇄ Wednesdays: the board (lines, labels' columns, headers) stays put; what's on it
+   goes out from top left to bottom right, then the other week's comes in the same way.
+   --r is the row, --c the column counted from the labels and the next date (what's on screen). */
+.ros.wk-out :is(.ros-cell, tbody .pos-in, .ros-loc > span, .dh, .ros-tot) {
+  opacity: 0; transform: translateX(-8px);
+  transition: opacity 0.15s ease, transform 0.18s ease-in;
+  transition-delay: calc(var(--r, 0) * 8ms + var(--c, 0) * 14ms);
+}
+.ros.wk-hide :is(.ros-cell, tbody .pos-in, .ros-loc > span, .dh, .ros-tot) { opacity: 0; transform: translateX(10px); }
+.ros.wk-in :is(.ros-cell, tbody .pos-in, .ros-loc > span, .dh, .ros-tot) {
+  transition: opacity 0.26s ease, transform 0.34s cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  transition-delay: calc(var(--r, 0) * 14ms + var(--c, 0) * 26ms);
+}
+.ros .dh { display: inline-block; }
+.ros .ros-loc > span, .ros .ros-tot { display: inline-flex; }
 
 @media (max-width: 699px) {
   .page-scheduling.is-roster .page-title h1 { font-size: 24px; }
