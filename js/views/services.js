@@ -104,10 +104,9 @@ export function mount(el, ctx) {
   const liveSaved = () => { try { return sessionStorage.getItem(LIVE_KEY); } catch { return null; } };
   const liveSave = (id) => { try { if (id) sessionStorage.setItem(LIVE_KEY, id); else sessionStorage.removeItem(LIVE_KEY); } catch { /* private mode */ } };
   let liveRestored = false;
-  // Scheduling's Team column (staff): who's on each team in Planning Center, by position.
-  // Read once when it's first opened; whether it's open lasts while the app is open.
-  let crew = null;         // { names: person id -> name, members: [{ team_id, person_id, positions }] }
-  let crewLoading = null;
+  // Scheduling's Team column (staff): who's on each team in Planning Center, by position,
+  // from the volunteer list (s.vol). Whether it's open lasts while the app is open.
+  let crewIx = null;       // { vol, byPco: Planning Center person id -> volunteer }
   const live = createLive(ctx, {
     tz: () => s.status?.time_zone,
     onClose: () => { liveSave(null); if (alive) $('[data-act="live"]', el)?.focus({ preventScroll: true }); },
@@ -181,6 +180,7 @@ export function mount(el, ctx) {
     else if (act === 'attn-off') { attn = null; draw(); }
     else if (act === 'live') openLive(nav.plan);
     else if (act === 'crew') toggleCrew(t);
+    else if (act === 'crew-p') people.openPerson(t.dataset.v); // their full profile, as on People
   });
 
   const onVisible = () => { if (document.visibilityState === 'visible') checkStatus(); };
@@ -263,7 +263,6 @@ export function mount(el, ctx) {
     }
     draw();
     schedule();
-    if (nav.crew && isStaff && !crew) loadCrew().then(() => { if (alive && nav.mode === 'roster') draw(); });
     // Live was open before a reload (a new version): straight back to that service and its Live.
     if (!liveRestored) {
       liveRestored = true;
@@ -638,6 +637,7 @@ export function mount(el, ctx) {
       groups[groups.length - 1].rows.push(row);
     }
     let rowNo = 0;
+    let crewMax = 3; // the Team column's width: the biggest team (three spots at least)
     const body = groups.map((g) => g.rows.map((row, ri) => {
       const r = rowNo++;
       const cells = days.map((d, i) => {
@@ -658,10 +658,14 @@ export function mount(el, ctx) {
       const loc = !campus && ri === 0
         ? `<th class="ros-loc" rowspan="${g.rows.length}" scope="rowgroup" title="${esc(place?.short_name || 'Other')}"><span>${both(place?.short_name || 'Other', campusShort(place))}</span></th>` : '';
       // The team: initials, three spots at least (an empty one is a spot nobody's assigned).
-      const team = isStaff && crew ? crewFor(m, row, week) : null;
-      const crewHtml = team ? `<span class="crew" style="--r:${r};--n:${Math.max(3, team.length)}" aria-label="${esc(`Team: ${team.length ? team.join(', ') : 'nobody assigned'}`)}">${
-        team.map((n, k) => `<i style="--k:${k}" title="${esc(n)}">${esc(initials(n))}</i>`).join('')}${
-        Array.from({ length: Math.max(0, 3 - team.length) }, (_, k) => `<i class="is-open" style="--k:${team.length + k}" title="Nobody else on the team for this"></i>`).join('')}</span>` : '';
+      // Each one opens their full profile (as on People).
+      const team = isStaff && s.vol ? crewFor(m, row, week) : null;
+      if (team) crewMax = Math.max(crewMax, team.length);
+      const crewHtml = team ? `<span class="crew" style="--r:${r}" role="group" aria-label="${esc(`${row.position} team`)}">${
+        team.map((x, k) => (x.id
+          ? `<button type="button" class="cw" data-act="crew-p" data-v="${esc(x.id)}" style="--k:${k}" title="${esc(x.name)}" aria-label="${esc(x.name)}">${esc(initials(x.name))}</button>`
+          : `<i class="cw" style="--k:${k}" title="${esc(x.name)}">${esc(initials(x.name))}</i>`)).join('')}${
+        Array.from({ length: Math.max(0, 3 - team.length) }, (_, k) => `<i class="cw is-open" style="--k:${team.length + k}" title="Nobody else on the team for this"></i>`).join('')}</span>` : '';
       return `<tr class="${ri === 0 ? 'ros-first' : ''}">${loc}<th class="ros-pos" scope="row" title="${esc(`${row.position} · ${row.team}`)}"><div class="pos-in"><span class="pos-l">${both(label, short)}</span>${crewHtml}</div></th>${cells}</tr>`;
     }).join('')).join('');
     const head = days.map((d) => {
@@ -685,7 +689,7 @@ export function mount(el, ctx) {
 
     return `
       <div class="ros-wrap">
-        <table class="ros ${campus ? 'one-place' : ''} ${nav.crew && crew ? 'crew-on' : ''}">
+        <table class="ros ${campus ? 'one-place' : ''} ${nav.crew && s.vol ? 'crew-on' : ''}" style="--cn:${crewMax};--rows:${rowNo}">
           <thead><tr>${campus ? '' : `<th class="ros-corner ros-loc-h" scope="col">${both('Location', 'Loc')}</th>`}<th class="ros-corner ros-pos-h" scope="col"><div class="pos-in"><span class="pos-l">${both('Position', 'Pos')}</span>${isStaff ? `<button type="button" class="ros-crew-btn" data-act="crew" aria-expanded="${nav.crew ? 'true' : 'false'}" title="Who's on each team" aria-label="Show who's on each team">${icon('team')}<span class="lf">Team</span>${icon('chevron')}</button>` : ''}</div></th>${head}</tr></thead>
           <tbody>${body}</tbody>
           <tfoot><tr><th class="ros-foot-h" ${campus ? '' : 'colspan="2"'}>${campus ? both('Totals', 'Tot') : 'Totals'}</th>${foot}</tr></tfoot>
@@ -791,56 +795,48 @@ export function mount(el, ctx) {
    *  Returns the size it settled on ({ z: zoom, extra: px added to each row }). Given one,
    *  it uses that instead (Wednesdays at the Sunday size); given { z: null }, it fits
    *  without making rows taller. */
-  /** Who's on each team in Planning Center (Services › People's data): read once. */
-  async function loadCrew() {
-    if (crew) return crew;
-    crewLoading ||= (async () => {
-      try {
-        const { people: vols, members } = await ctx.store.volunteers();
-        crew = { names: new Map((vols || []).filter((v) => v.pco_person_id).map((v) => [String(v.pco_person_id), v.name])), members: members || [] };
-      } catch (e) { ctx.toast(`Couldn’t load the teams: ${e.message}`); }
-      crewLoading = null;
-      return crew;
-    })();
-    return crewLoading;
-  }
-
   /** A row's team in Planning Center: everyone on that location's team (any of its services
-   *  on this grid) who's assigned that position, by name. */
+   *  on this grid) who's assigned that position, by name, with their volunteer record. */
   function crewFor(m, row, week) {
-    if (!crew) return [];
+    const vol = s.vol;
+    if (!vol) return [];
+    if (crewIx?.vol !== vol) crewIx = { vol, byPco: new Map((vol.people || []).filter((v) => v.pco_person_id).map((v) => [String(v.pco_person_id), v])) };
     const types = new Set(m.rosterTypes(week).filter((t) => t.campus_id === row.campusId).map((t) => t.id));
     const tk = teamKey(row.team);
     const teams = new Set(m.teams.filter((t) => teamKey(t.name) === tk && teamServices(t).some((id) => types.has(id))).map((t) => String(t.id)));
     const pk = teamKey(row.position);
     const who = new Map();
-    for (const x of crew.members) {
+    for (const x of vol.members || []) {
       if (!teams.has(String(x.team_id)) || !(x.positions || []).some((p) => teamKey(p) === pk)) continue;
-      who.set(String(x.person_id), crew.names.get(String(x.person_id)) || 'Someone');
+      const v = crewIx.byPco.get(String(x.person_id));
+      who.set(String(x.person_id), { name: v?.name || 'Someone', id: v?.id || null });
     }
-    return [...who.values()].sort((a, b) => a.localeCompare(b));
+    return [...who.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /** The Team column opens out (each row's initials come in down the grid) or folds away. */
+  /** The Team column. Opening: the column slides out to its full width, then the initials
+   *  come in, top left to bottom right. Closing: the initials go in that same order, then the
+   *  column pulls back in. (The timing is in styles.css; .crew-anim is only on while it moves.) */
   async function toggleCrew(btn) {
     if (!isStaff) return;
-    const on = !nav.crew;
-    if (on && !crew) {
+    if (!s.vol) {
       btn.classList.add('is-busy');
-      await loadCrew();
-      if (!alive || !crew) { btn.classList.remove('is-busy'); return; }
-      draw(); // with the names in, still folded
+      await loadPeople(false);
+      if (!alive || !s.vol) { btn.classList.remove('is-busy'); return; }
+      draw();
     }
+    const on = !nav.crew;
     nav.crew = on;
     const table = $('.ros', el);
     if (!table) return;
     table.classList.add('crew-anim');
-    requestAnimationFrame(() => {
-      table.classList.toggle('crew-on', on);
-      $$('[data-act="crew"]', table).forEach((b) => b.setAttribute('aria-expanded', String(on)));
-    });
+    void table.offsetWidth; // start from where it is now
+    table.classList.toggle('crew-on', on);
+    $$('[data-act="crew"]', table).forEach((b) => b.setAttribute('aria-expanded', String(on)));
+    const rows = Number(table.style.getPropertyValue('--rows')) || 20;
+    const cn = Number(table.style.getPropertyValue('--cn')) || 3;
     clearTimeout(toggleCrew.t);
-    toggleCrew.t = setTimeout(() => table.classList.remove('crew-anim'), 1400);
+    toggleCrew.t = setTimeout(() => table.classList.remove('crew-anim'), 1000 + rows * 22 + cn * 60);
   }
 
   /** The home indicator's strip (an iPad's or iPhone's home-screen app; 0 elsewhere). */

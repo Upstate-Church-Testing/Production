@@ -646,9 +646,12 @@ team from Planning Center beside its position, as initials (Hayden Wood → HW; 
 on hover): everyone on that location's team for that position (`pco_team_people`, the
 positions each person is assigned on the team, across that location's services on the grid).
 At least three spots show, an empty dashed one for each spot nobody's assigned; more than
-three all show. It opens with the column widening and each row's initials coming in down the
-grid, and folds away the same way (`.crew-anim` is only on while it moves, so the grid's
-refreshes don't replay it). Whether it's open lasts while the app is open (`servicesNav.crew`).
+three all show. Tapping someone opens their full profile (the same sheet as People), not the
+quick look a pill opens. Opening: the column slides out to its full width (the biggest team's,
+every row at once), then the initials come in from top left to bottom right. Closing: the
+initials go in that same order, then the column pulls back in. `.crew-anim` is only on while
+it moves, so the grid's refreshes don't replay it. Whether it's open lasts while the app is
+open (`servicesNav.crew`).
 
 **iPads (home-screen app).** The sidebar sits clear of the status bar and the home indicator,
 and the Scheduling grid stops level with it (`fitRoster` takes the home indicator off, and adds
