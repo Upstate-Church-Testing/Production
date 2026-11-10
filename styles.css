@@ -2989,43 +2989,56 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   .rp .lan-micro { margin-right: -1px; }
 }
 
-/* --------------------------------------------- a person, full screen -- */
-/* views/person-full.js. The console look, full screen; it powers up (a scan line runs down,
-   the name tears in with its colours split, the photo resolves in steps, the badge drops in
-   on its lanyard, the panels boot one by one) and collapses to a line when it closes.
-   .is-in: the entrance is over (redraws don't replay it); .is-still: reduced motion. */
+/* ------------------------------------------------ a person, pop-up -- */
+/* views/person-full.js. A box in the console look over Scheduling, which stays behind it
+   dimmed and blurred (tap it to close). It powers up (the box opens out from a line, a scan
+   line runs down it, the name tears in with its colours split, the photo resolves in steps,
+   the badge drops in on its lanyard, the panels boot one by one) and collapses to a line when
+   it closes. Sized by the box, not the screen (container queries). .is-in: the entrance is
+   over (redraws don't replay it); .is-still: reduced motion. */
 html.pv-on, html.pv-on body { overflow: hidden; }
 html.pv-on #toast { z-index: 95; }
 html.pv-on .fs-btn { display: none; }
 .pv-root {
   position: fixed; inset: 0; bottom: calc(-1 * var(--vgap, 0px)); z-index: 85;
-  background: var(--hud-bg); color: var(--hud-ink); font-family: var(--f-body);
+  display: grid; place-items: center;
+  padding: calc(28px + env(safe-area-inset-top, 0px)) max(28px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px) + var(--vgap, 0px)) max(28px, env(safe-area-inset-left, 0px));
+  background: rgb(3 5 7 / 0.58); backdrop-filter: blur(8px) saturate(0.85); -webkit-backdrop-filter: blur(8px) saturate(0.85);
+  color: var(--hud-ink); font-family: var(--f-body);
+}
+:root[data-theme="light"] .pv-root { background: rgb(12 16 19 / 0.3); }
+@media (max-width: 699px) {
+  .pv-root { padding: calc(12px + env(safe-area-inset-top, 0px)) 10px calc(12px + env(safe-area-inset-bottom, 0px) + var(--vgap, 0px)); }
+  .pv-page { padding: 12px 14px 18px; }
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .pv-root { background: rgb(12 16 19 / 0.3); } }
+.pv-panel {
+  position: relative; display: flex; flex-direction: column; width: min(1060px, 100%); max-height: 100%; min-height: 0;
+  background: var(--hud-bg); border: 1px solid var(--hud-line-2); border-radius: 3px; overflow: hidden;
+  box-shadow: 0 30px 90px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.25);
+  container-type: inline-size; container-name: pv;
 }
 .pv-fx {
   position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden;
   background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--hud-ink) 2.5%, transparent) 0 1px, transparent 1px 3px);
 }
 .pv-scan { position: absolute; left: 0; right: 0; top: 0; height: 2px; opacity: 0; background: var(--hud-ink); box-shadow: 0 0 22px 5px color-mix(in srgb, var(--hud-ink) 30%, transparent); }
-.pv-page {
-  position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain;
-  padding: calc(18px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(40px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
-}
-.pv-page > * { max-width: 1160px; margin-left: auto; margin-right: auto; }
-.pv-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.pv-page { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 24px 24px; }
+.pv-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 2px; min-height: 40px; }
 .pv-crumb { font: 600 11.5px/1.2 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hud-dim); }
 .pv-x {
-  display: grid; place-items: center; width: 42px; height: 42px; padding: 0; flex: none;
+  display: grid; place-items: center; width: 40px; height: 40px; padding: 0; flex: none;
   border: 1px solid var(--hud-line-2); border-radius: 2px; background: var(--hud-head); color: var(--hud-ink); cursor: pointer;
 }
 .pv-x:hover { background: var(--hud-ink); color: var(--hud-bg); }
 .pv-x:focus-visible, .pv-root button:focus-visible, .pv-root a:focus-visible, .pv-root textarea:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: 2px; }
 
 /* who: the photo, the name, the badge */
-.pv-id { display: grid; grid-template-columns: 172px minmax(0, 1fr) 230px; align-items: end; gap: 28px; margin-bottom: 28px; }
+.pv-id { display: grid; grid-template-columns: 140px minmax(0, 1fr) 210px; align-items: end; gap: 24px; margin-bottom: 22px; }
 .pv-photo {
-  position: relative; width: 172px; height: 172px; display: grid; place-items: center; overflow: visible;
+  position: relative; width: 140px; height: 140px; display: grid; place-items: center; overflow: visible;
   background: var(--hud-head); box-shadow: inset 0 0 0 1px var(--hud-line-2);
-  font: 600 54px/1 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim);
+  font: 600 46px/1 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim);
 }
 .pv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pv-br { position: absolute; width: 16px; height: 16px; border: 2px solid var(--hud-ink); pointer-events: none; }
@@ -3034,12 +3047,12 @@ html.pv-on .fs-btn { display: none; }
 .pv-who { min-width: 0; padding-bottom: 6px; }
 .pv-name {
   position: relative; margin: 0; overflow-wrap: anywhere;
-  font: 600 clamp(34px, 5.4vw, 66px)/0.98 var(--f-hud); letter-spacing: 0.02em; text-transform: uppercase;
+  font: 600 clamp(28px, 5.2cqi, 54px)/0.98 var(--f-hud); letter-spacing: 0.02em; text-transform: uppercase;
 }
 .pv-you { font-style: normal; font-size: 0.32em; vertical-align: 0.9em; padding: 3px 7px; margin-left: 6px; background: var(--hud-ink); color: var(--hud-bg); letter-spacing: 0.1em; }
 .pv-places { margin: 12px 0 0; font: 500 15px/1.3 var(--f-hud); letter-spacing: 0.06em; color: var(--hud-dim); }
 .pv-lan { display: grid; justify-items: center; gap: 10px; }
-.pv-badge { width: 98px; height: 168px; transform-origin: 50% 0; color: var(--hud-dim); }
+.pv-badge { width: 72px; height: 123px; transform-origin: 50% 0; color: var(--hud-dim); }
 .pv-badge svg { display: block; width: 100%; height: 100%; }
 .pv-fine { margin: 0; font: 500 11.5px/1.3 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim); text-align: center; }
 /* the lanyard dropdown */
@@ -3074,11 +3087,11 @@ html.pv-on .fs-btn { display: none; }
 .pv-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .pv-grid.has-spot { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr); }
 .pv-col { display: grid; gap: 14px; min-width: 0; }
-@media (max-width: 1100px) {
+@container pv (max-width: 940px) {
   .pv-grid.has-spot { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pv-grid.has-spot .pv-col:last-child { grid-column: 1 / -1; }
 }
-@media (max-width: 760px) { .pv-grid, .pv-grid.has-spot { grid-template-columns: minmax(0, 1fr); } }
+@container pv (max-width: 640px) { .pv-grid, .pv-grid.has-spot { grid-template-columns: minmax(0, 1fr); } }
 .pv-block { padding: 16px 16px 14px; background: var(--hud-head); border: 1px solid var(--hud-line-2); border-radius: 2px; min-width: 0; }
 .pv-block h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; font: 600 11.5px/1.2 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hud-dim); }
 .pv-block h2::before { content: ""; width: 7px; height: 7px; background: var(--hud-ink); flex: none; }
@@ -3127,19 +3140,19 @@ html.pv-on .fs-btn { display: none; }
   width: 100%; resize: vertical; padding: 10px 12px; margin: 0 0 10px; border: 1px solid var(--hud-line-2); border-radius: 2px;
   background: var(--hud-bg); color: var(--hud-ink); font: 400 14.5px/1.5 var(--f-body);
 }
-.pv-foot { margin-top: 18px; }
+.pv-foot { margin-top: 16px; }
 .pv-foot a { display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase; color: var(--hud-dim); text-decoration: none; }
 .pv-foot a:hover { color: var(--hud-ink); }
 .pv-foot .ico { width: 14px; height: 14px; }
 
-@media (max-width: 860px) {
-  .pv-id { grid-template-columns: 120px minmax(0, 1fr); gap: 20px; }
-  .pv-photo { width: 120px; height: 120px; font-size: 40px; }
+@container pv (max-width: 760px) {
+  .pv-id { grid-template-columns: 110px minmax(0, 1fr); gap: 20px; }
+  .pv-photo { width: 110px; height: 110px; font-size: 38px; }
   .pv-lan { grid-column: 1 / -1; grid-template-columns: 70px minmax(0, 1fr); justify-items: stretch; align-items: center; column-gap: 16px; }
   .pv-lan .pv-badge { grid-row: span 2; width: 70px; height: 120px; }
   .pv-fine { text-align: left; }
 }
-@media (max-width: 560px) {
+@container pv (max-width: 520px) {
   .pv-id { grid-template-columns: 84px minmax(0, 1fr); gap: 16px; align-items: center; }
   .pv-photo { width: 84px; height: 84px; font-size: 28px; }
   .pv-places { margin-top: 8px; font-size: 13px; }
@@ -3148,22 +3161,30 @@ html.pv-on .fs-btn { display: none; }
 }
 
 /* powering up (once; not with reduced motion) */
-.pv-root:not(.is-still) { animation: pv-on 0.16s ease-out both; }
-.pv-root:not(.is-still) .pv-scan { animation: pv-scan 0.64s cubic-bezier(0.45, 0, 0.25, 1) 0.04s both; }
-.pv-root:not(.is-in):not(.is-still) .pv-in { animation: pv-boot 0.5s steps(3, end) both; animation-delay: calc(0.22s + var(--i, 0) * 0.075s); }
-.pv-root:not(.is-in):not(.is-still) .pv-photo.pv-in { animation: pv-pix 0.62s steps(7, end) 0.16s both; }
-.pv-root:not(.is-in):not(.is-still) .pv-name { animation: pv-tear 0.72s steps(1, end) 0.1s both; }
+.pv-root:not(.is-still) { animation: pv-on 0.2s ease-out both; }
+.pv-root:not(.is-still) .pv-panel { animation: pv-crt 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.pv-root:not(.is-still) .pv-scan { animation: pv-scan 0.6s cubic-bezier(0.45, 0, 0.25, 1) 0.2s both; }
+.pv-root:not(.is-in):not(.is-still) .pv-in { animation: pv-boot 0.5s steps(3, end) both; animation-delay: calc(0.34s + var(--i, 0) * 0.075s); }
+.pv-root:not(.is-in):not(.is-still) .pv-photo.pv-in { animation: pv-pix 0.62s steps(7, end) 0.28s both; }
+.pv-root:not(.is-in):not(.is-still) .pv-name { animation: pv-tear 0.72s steps(1, end) 0.22s both; }
 .pv-root:not(.is-in):not(.is-still) .pv-name::before,
 .pv-root:not(.is-in):not(.is-still) .pv-name::after {
   content: attr(data-text); position: absolute; inset: 0; pointer-events: none; opacity: 0;
-  animation: pv-split 0.86s steps(1, end) 0.1s both;
+  animation: pv-split 0.86s steps(1, end) 0.22s both;
 }
 .pv-root:not(.is-in):not(.is-still) .pv-name::before { color: var(--hud-d); transform: translateX(-4px); mix-blend-mode: screen; }
-.pv-root:not(.is-in):not(.is-still) .pv-name::after { color: #3aa0ff; transform: translateX(4px); mix-blend-mode: screen; animation-delay: 0.16s; }
-.pv-root:not(.is-in):not(.is-still) .pv-badge { animation: pv-drop 0.8s cubic-bezier(0.3, 1.5, 0.45, 1) 0.42s both; }
+.pv-root:not(.is-in):not(.is-still) .pv-name::after { color: #3aa0ff; transform: translateX(4px); mix-blend-mode: screen; animation-delay: 0.28s; }
+.pv-root:not(.is-in):not(.is-still) .pv-badge { animation: pv-drop 0.8s cubic-bezier(0.3, 1.5, 0.45, 1) 0.54s both; }
 .pv-badge.is-swap { animation: pv-swap 0.5s steps(1, end) both; }
-.pv-root.is-out { animation: pv-off 0.26s cubic-bezier(0.6, 0, 0.4, 1) forwards; }
+.pv-root.is-out { animation: pv-undim 0.26s ease-in forwards; }
+.pv-root.is-out .pv-panel { animation: pv-off 0.24s cubic-bezier(0.6, 0, 0.4, 1) forwards; }
 @keyframes pv-on { from { opacity: 0; } }
+@keyframes pv-undim { to { opacity: 0; } }
+@keyframes pv-crt {
+  0% { transform: scale(0.96, 0.006); filter: brightness(2.6); }
+  45% { transform: scale(1, 0.006); filter: brightness(2.2); }
+  100% { transform: none; filter: none; }
+}
 @keyframes pv-scan { 0% { top: 0; opacity: 0; } 8% { opacity: 0.85; } 90% { opacity: 0.85; } 100% { top: 100%; opacity: 0; } }
 @keyframes pv-boot {
   0% { opacity: 0; clip-path: inset(0 0 100% 0); transform: translateX(-6px); }

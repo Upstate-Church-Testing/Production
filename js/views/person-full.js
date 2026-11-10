@@ -1,7 +1,8 @@
-// A person, full screen (Scheduling: a name on the grid, or someone in the Team column).
-// In the console look, and it comes in like a screen powering up: a scan line runs down,
-// the name tears in with its colours split, the photo resolves in steps, the badge drops in
-// on its lanyard, then each panel boots in turn. Closing collapses it to a line.
+// A person, in a pop-up over Scheduling (a name on the grid, or someone in the Team column):
+// the schedule stays behind it, dimmed and blurred; tapping there closes it. In the console
+// look, and it comes in like a screen powering up: the box opens out from a line, a scan line
+// runs down it, the name tears in with its colours split, the photo resolves in steps, the
+// badge drops in on its lanyard, then each panel boots in turn. Closing collapses it to a line.
 //
 // What it shows: their photo and name, where they serve, their lanyard (the badge they have,
 // and a dropdown to change it: staff only), the spot that was tapped (each service that day
@@ -37,12 +38,12 @@ export function openPersonFull(ctx, host) {
 
   const vm0 = host.get();
   root.setAttribute('aria-label', vm0?.name || 'Person');
-  root.innerHTML = `<div class="pv-fx" aria-hidden="true"><i class="pv-scan"></i></div><div class="pv-page"></div>`;
+  root.innerHTML = `<div class="pv-panel"><div class="pv-fx" aria-hidden="true"><i class="pv-scan"></i></div><div class="pv-page"></div></div>`;
   const page = $('.pv-page', root);
   paint(true);
   $('[data-pv="close"]', root)?.focus({ preventScroll: true });
   // The entrance plays once; after that it's plain redraws.
-  setTimeout(() => root.classList.add('is-in'), still ? 0 : 1400);
+  setTimeout(() => root.classList.add('is-in'), still ? 0 : 1600);
 
   root.addEventListener('click', onClick);
   root.addEventListener('input', (e) => {
@@ -78,6 +79,7 @@ export function openPersonFull(ctx, host) {
   async function onClick(e) {
     const t = e.target.closest('[data-pv]');
     if (!t) {
+      if (!e.target.closest('.pv-panel')) { close(); return; } // the dimmed schedule behind it
       if (ddOpen && !e.target.closest('.pv-dd')) toggleDd(false);
       return;
     }

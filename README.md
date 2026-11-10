@@ -538,7 +538,7 @@ js/store-demo.js               preview data (same methods, in memory)
 js/views/cg.js                CG uploads: each campus's CG for the coming Sunday (not started, working, done)
 js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
-js/views/person-full.js       a person, full screen (from a name on Scheduling)
+js/views/person-full.js       a person, in a pop-up (from a name on Scheduling)
 js/lanyard.js                 the lanyard badges: the micro one on Scheduling, the large ones in a profile
 js/input.js                   full screen button (computers); hiding the pointer while touching
 js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
@@ -663,13 +663,16 @@ initials go in that same order, then the column pulls back in. `.crew-anim` is o
 it moves, so the grid's refreshes don't replay it. Whether it's open lasts while the app is
 open (`servicesNav.crew`).
 
-**A person, full screen** (`js/views/person-full.js`): tapping a name on Scheduling (or
-someone in the Team column) opens them full screen in the console look, not a side sheet:
+**A person, in a pop-up** (`js/views/person-full.js`): tapping a name on Scheduling (or
+someone in the Team column) opens them in a pop-up box in the console look, over the schedule
+(still there behind it, dimmed and blurred; tapping it closes the box), not a side sheet.
+Everything is inside the box, which scrolls on its own and lays itself out by its own width
+(container queries):
 their photo, name and locations; their badge (staff: the one they have, drawn, with a
 dropdown to change it); the spot that was tapped (that day's services and answers, and the
 invite still to send, with Take off); everything coming up; their teams in Planning Center
 and tags; their notes (staff, editable); a link to Planning Center. It powers up when it
-opens (a scan line runs down, the name tears in with its colours split, the photo resolves
+opens (the box opens out from a line, a scan line runs down it, the name tears in with its colours split, the photo resolves
 in steps, the badge drops in on its lanyard, the panels boot one by one) and collapses to a
 line when it closes (Esc too). Reduced motion: it just appears. services.js `openFull`
 builds what it shows from Planning Center and People (`people.profile`), so a lanyard
