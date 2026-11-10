@@ -736,8 +736,10 @@ both have their own palette. Other pages keep the app's usual look for now.
 **Schedule | Team** (staff): a switch (right of Production in the top row on phones, in the
 page's head on a computer) swaps the grid for who's on each team in Planning Center: the same
 rows (location, position), with each person on that position's team across in place of the
-dates, by name with their badge; tap one for their profile. Three columns at least (a dashed
-box is a spot nobody's on), more if a team is bigger. The labels stay while the grid's
+dates, by name with their badge; tap one for their profile. Each position wants three people
+(`TEAM_NEED` in services.js): a spot short of that is a red "Needed" box, each location says
+how many it needs (or Full), and the header and totals count spots filled, needed and in all.
+A bigger team gets more columns. The labels stay while the grid's
 contents go out and come in. It lasts while the app is open (`servicesNav.view`). Team is laid out at the
 schedule's exact measurements (`measureGrid` / `matchGrid`: label columns, each row's height,
 each date's width, the scale), so no line moves between the two; only the cells empty and fill.

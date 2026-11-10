@@ -24,6 +24,8 @@ const POLL_MS = 20000; // backup for the live push (a phone that slept, a droppe
 
 // The Scheduling grid on a phone uses short labels so three weeks fit across. Both the
 // full and the short label are drawn; CSS shows one (.lf full, .ls short).
+/** How many people each position's team should have (Scheduling › Team counts spots short of it). */
+const TEAM_NEED = 3;
 const both = (full, short) => (short && short !== full ? `<span class="lf">${esc(full)}</span><span class="ls">${esc(short)}</span>` : esc(full));
 /** AN, FF, FI, GVL, GCC, HB, MLN, SVL: a location's code, with the two the team says differently. */
 const CAMPUS_SHORT = { AND: 'AN', MAU: 'MLN' };
@@ -737,13 +739,16 @@ export function mount(el, ctx) {
     const crewSpots = teamView ? Math.max(3, ...[...crews.values()].map((t) => t.length)) : 0;
     // as many columns as the schedule shows across, so its lines carry on to the right edge
     const crewMax = Math.max(crewSpots, geo?.across || 0);
-    let crewTotal = 0;
+    // Every position wants TEAM_NEED people on its team: a spot short of that is "needed"
+    // (red). Counted for the whole grid and for each location.
+    const lacking = (row) => (teamView ? Math.max(0, TEAM_NEED - crews.get(row).length) : 0);
+    const teamSpots = teamView ? rows.length * TEAM_NEED : 0;
+    const teamMissing = teamView ? rows.reduce((n, row) => n + lacking(row), 0) : 0;
     const body = groups.map((g) => g.rows.map((row, ri) => {
       const r = rowNo++;
       const cells = teamView ? Array.from({ length: crewMax }, (_, k) => {
         const x = crews.get(row)[k];
-        if (!x) return k < crewSpots ? `<td style="--c:${2 + k}"><div class="ros-cell"><i class="rp is-team is-none" title="Nobody else on the team for this"></i></div></td>` : `<td style="--c:${2 + k}"></td>`;
-        crewTotal += 1;
+        if (!x) return k < TEAM_NEED ? `<td style="--c:${2 + k}"><div class="ros-cell"><i class="rp is-team is-none" title="${esc(`${row.position}: one more needed on the team`)}">Needed</i></div></td>` : `<td style="--c:${2 + k}"></td>`;
         const lan = x.lanyard || null;
         const inner = `${lan ? microBadge(lan, `${LANYARDS[lan]} lanyard`) : ''}<b>${nameShort(x.name) === x.name ? esc(x.name) : `<span class="nf">${esc(x.name)}</span><span class="ns">${esc(nameShort(x.name))}</span>`}</b>`;
         return `<td style="--c:${2 + k}"><div class="ros-cell">${x.id
@@ -765,14 +770,15 @@ export function mount(el, ctx) {
       const short = row.showTeam ? `${positionShort(row.position)}·${teamShort(row.team)}` : positionShort(row.position);
       const place = ctx.campusById.get(row.campusId);
       const loc = !campus && ri === 0
-        ? `<th class="ros-loc" style="--c:0" rowspan="${g.rows.length}" scope="rowgroup" title="${esc(place?.short_name || 'Other')}"><span>${both(place?.short_name || 'Other', campusShort(place))}</span></th>` : '';
+        ? `<th class="ros-loc" style="--c:0" rowspan="${g.rows.length}" scope="rowgroup" title="${esc(place?.short_name || 'Other')}"><span>${both(place?.short_name || 'Other', campusShort(place))}${
+          teamView ? ((n) => (n ? `<em class="ros-miss" title="${esc(`${n} more needed at ${place?.short_name || 'this location'}`)}">${both(`${n} needed`, `−${n}`)}</em>` : `<em class="ros-miss is-full" title="Every spot filled">${both('Full', 'OK')}</em>`))(g.rows.reduce((a, x) => a + lacking(x), 0)) : ''}</span></th>` : '';
       return `<tr class="${ri === 0 ? 'ros-first' : ''}" style="--r:${r + 1}">${loc}<th class="ros-pos" style="--c:1" scope="row" title="${esc(`${row.position} · ${row.team}`)}"><div class="pos-in"><span class="pos-l">${both(label, short)}</span></div></th>${cells}</tr>`;
     }).join('')).join('');
-    const head = teamView ? `<th class="ros-day ros-team-h" colspan="${crewMax}" style="--c:2" scope="colgroup"><span class="dh">On the team <b>in Planning Center</b></span></th>` : days.map((d, i) => {
+    const head = teamView ? `<th class="ros-day ros-team-h" colspan="${crewMax}" style="--c:2" scope="colgroup"><span class="dh">On the team <b>${teamSpots - teamMissing} of ${teamSpots} spots filled</b>${teamMissing ? `<em class="ros-miss">${teamMissing} needed</em>` : '<em class="ros-miss is-full">Full</em>'}</span></th>` : days.map((d, i) => {
       const p = m.plans.find((x) => x._day === d);
       return `<th class="ros-day ${when(d)}" style="--c:${colOf(i)}" scope="col" ${d < today ? 'title="Already happened"' : ''}><span class="dh">${d === today ? 'Today' : `<span class="lf">${esc(m.c.weekday(p.sort_date).slice(0, 3))}</span>`} <b>${esc(m.c.date(p.sort_date))}</b></span></th>`;
     }).join('');
-    const foot = teamView ? `<td colspan="${crewMax}" style="--c:2"><span class="ros-tot"><span class="is-open" title="People on these teams">${crewTotal}</span></span></td>` : totals.map((t, i) => `<td class="${when(days[i])}" style="--c:${colOf(i)}"><span class="ros-tot">${[
+    const foot = teamView ? `<td colspan="${crewMax}" style="--c:2"><span class="ros-tot is-team"><span class="st-C" title="Spots filled">${teamSpots - teamMissing}</span>${teamMissing ? `<span class="st-D" title="Still needed">${teamMissing}</span>` : ''}<span class="is-open" title="Spots in all (${TEAM_NEED} a position)">${teamSpots}</span><small>${teamMissing ? `${teamMissing} of ${teamSpots} spots still need someone` : `All ${teamSpots} spots filled`}</small></span></td>` : totals.map((t, i) => `<td class="${when(days[i])}" style="--c:${colOf(i)}"><span class="ros-tot">${[
       t.C ? `<span class="st-C" title="Confirmed">${t.C}</span>` : '',
       t.U ? `<span class="st-U" title="Requested">${t.U}</span>` : '',
       t.D ? `<span class="st-D" title="Declined">${t.D}</span>` : '',
