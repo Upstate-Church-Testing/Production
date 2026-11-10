@@ -808,10 +808,13 @@ export function mount(el, ctx) {
     }
   }
 
-  /** First look at the grid: the next service (today, or the next date) is the first column
-   *  beside the positions, with what already happened to the left of it. */
+  /** First look at the grid: the week that just happened (dimmed) is the first column beside
+   *  the positions, for follow-up, with the next service (today, or the next date) right after
+   *  it. With nothing in the past, the next service is first. */
   function scrollToNext(wrap) {
-    const next = $('thead .ros-day:not(.is-past)', wrap);
+    const upcoming = $('thead .ros-day:not(.is-past)', wrap);
+    const before = upcoming ? upcoming.previousElementSibling : $$('thead .ros-day.is-past', wrap).pop();
+    const next = before?.classList.contains('is-past') ? before : upcoming;
     const edge = $$('thead .ros-corner', wrap).pop();
     if (!next || !edge) return;
     // Safari measures inside a zoomed table in unzoomed pixels and Chrome in zoomed ones,
