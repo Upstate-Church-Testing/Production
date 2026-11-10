@@ -263,6 +263,28 @@ export async function createSupabaseStore(url, key) {
       return { rooms: ok(rooms) || [], types: ok(types) || [], levels: ok(levels) || [] };
     },
     /** A level (0-100), or null to take it off. */
+    /** Resi › Studio: the encoders and the events scheduled on them (typed in from Resi Studio). */
+    async resiStudio() {
+      const [encoders, schedules] = await Promise.all([
+        sb.from('resi_encoders').select('id, name, campus_id, notes, updated_at, updated_by_name'),
+        sb.from('resi_schedules').select('*, who:profiles!resi_schedules_updated_by_fkey(full_name)'),
+      ]);
+      return { encoders: ok(encoders) || [], schedules: ok(schedules) || [] };
+    },
+    /** Add (no id) or change an encoder; returns its id. */
+    async resiEncoderSave(row) {
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from('resi_encoders').update(fields).eq('id', id)); return id; }
+      return ok(await sb.from('resi_encoders').insert(fields).select('id').single()).id;
+    },
+    async resiEncoderRemove(id) { ok(await sb.from('resi_encoders').delete().eq('id', id)); },
+    /** Add (no id) or change a scheduled event; returns its id. */
+    async resiScheduleSave(row) {
+      const { id, ...fields } = row;
+      if (id) { ok(await sb.from('resi_schedules').update(fields).eq('id', id)); return id; }
+      return ok(await sb.from('resi_schedules').insert(fields).select('id').single()).id;
+    },
+    async resiScheduleRemove(id) { ok(await sb.from('resi_schedules').delete().eq('id', id)); },
     async houseLightSet(roomId, service, segment, level) {
       if (level == null) ok(await sb.from('house_light_levels').delete().match({ room_id: roomId, service, segment }));
       else ok(await sb.from('house_light_levels').upsert({ room_id: roomId, service, segment, level }, { onConflict: 'room_id,service,segment' }));
@@ -432,6 +454,8 @@ export async function createSupabaseStore(url, key) {
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'pco_live' }, () => cb('pco'));
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'cg_uploads' }, () => cb('cg'));
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'house_light_levels' }, () => cb('house'));
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'resi_encoders' }, () => cb('resi_studio'));
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'resi_schedules' }, () => cb('resi_studio'));
       ch.subscribe();
       return () => sb.removeChannel(ch);
     },

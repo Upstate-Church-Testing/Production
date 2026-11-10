@@ -1,4 +1,4 @@
-// Resi: what each campus's web player is showing right now.
+// Resi › Playback: what each campus's web player is showing right now.
 // Players are set up in Settings; this checks Resi every 30 seconds.
 
 import { esc, icon, $, storage, store, plural, timeAgo, debounce } from '../util.js';
@@ -26,6 +26,7 @@ export function mount(el, ctx) {
 
   el.innerHTML = `
     <div class="page-head">
+      <span class="eyebrow">Resi Playback</span>
       <div class="head-row">
         <h1 class="h1" id="r-h1">Checking…</h1>
         ${canEdit ? `<button class="btn add-desktop" data-act="settings">${icon('settings')}<span>Players</span></button>` : ''}
@@ -137,7 +138,7 @@ export function mount(el, ctx) {
 
   function drawError() {
     $('#r-loading', el).hidden = true;
-    $('#r-h1', el).textContent = 'Resi';
+    $('#r-h1', el).textContent = 'Playback';
     $('#r-extra', el).innerHTML = `<div class="empty"><h3>Couldn’t load the players</h3><p>${esc(s.error)}</p><button class="btn" data-act="retry">Try again</button></div>`;
   }
 
@@ -288,7 +289,7 @@ export function mount(el, ctx) {
       const stat = s.status.get(id);
       if (stat && t.dataset.group === 'on') $('.tv-time', t).textContent = timeLine(stat);
     }
-    if (!s.streams.length) { h1.textContent = 'Resi'; meta.textContent = ''; return; }
+    if (!s.streams.length) { h1.textContent = 'Playback'; meta.textContent = ''; return; }
     if (!s.checkedAt) { h1.textContent = 'Checking…'; meta.textContent = `${plural(s.streams.length, 'player')}`; return; }
     const states = s.streams.map((st) => s.status.get(st.id)?.state);
     const live = states.filter((x) => x === 'live' || x === 'simlive').length;

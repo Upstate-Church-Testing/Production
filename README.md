@@ -37,7 +37,7 @@ Roles, lowest to highest: `pending` → `volunteer` → `contractor` → `staff`
 - **The first account created becomes admin.** Everyone after starts as *pending* and
   sees nothing until an admin approves them on the Team screen.
 - **Staff and admins** see the network sheet, device logins and change history.
-- **Volunteers** see PCO (Services, Scheduling, My schedule) and Resi, but no equipment or network data.
+- **Volunteers** see PCO (Services, Scheduling, My schedule) and Resi › Playback, but no equipment or network data.
   Service flows and training will be built for them later.
 - **Staff** set up each campus's Resi player in Settings.
 - **Admins** approve people, change roles and set each person's production teams.
@@ -353,6 +353,37 @@ Vintage (−10).
 - Changes from anyone show up live, flashing in.
 - Stored in `house_light_levels`: one row per room, service and segment.
 
+## Resi (Studio, staff; Playback, everyone)
+
+**Playback** (`#resi`) is what every campus's web player is showing right now (it used to be
+Logistics › Resi).
+
+**Studio** is Resi Studio's schedule, kept in Tally so it can be read without opening Studio.
+Resi's API (api.resi.io, Swagger at api.resi.io/docs) can't do this for us: besides On
+Demand (read-only playlists and videos), it only lists encoders and destination groups,
+starts a "Go Live" event on an encoder right now, gets that event's status and stops it (3
+starts or stops a minute; Pro and Enterprise plans). It can't list scheduled events or
+create or change one, so each event is typed in here from Studio, with the fields of Studio's
+event form (Schedule › Create › Broadcast, content source Live Encoder):
+
+- Event name and description; the encoder, encoder preset and encoder channel; the
+  **pre-buffer** (how early the encoder starts).
+- Start date, start time, duration (hours:minutes), timezone.
+- **Repeats**: every N hours, days, weeks or months; which days (weekly); the same date or
+  the same weekday (monthly); ending never, on a date, or after N times.
+- Destinations (free text); **Paused** ("Pause Event" in Studio: kept, but doesn't run).
+- Tally's own: when the service itself starts, and notes.
+
+The board shows a day at a time (‹ › go to the previous and next day with something on it):
+a row per encoder, A to Z, each event drawn where it runs, its pre-buffer hatched like
+Studio's calendar, a marker where the service starts, and a red line for now. Two events on
+one encoder that run into each other (pre-buffer included) are flagged: Studio won't run
+both, so one was copied over wrong. **Every event** lists each encoder's events with how
+they repeat and end, the pre-buffer, when the encoder comes on, the start, the duration and
+the end; tap one to change, duplicate or remove it. **Encoders** names them as Studio does
+(Settings › Encoders) and sets where each one is. Nothing here changes Studio: change Studio
+first, then Tally. Stored in `resi_encoders` and `resi_schedules`; changes show up live.
+
 ## Gear: where things are, and what's missing (staff)
 
 Gear filters run Department → Location → Room → Area / spot → Operator position → Category →
@@ -505,6 +536,7 @@ too, whatever its number in Planning Center.
 campuses ── rooms (a room can be part of a group: rooms.group_id, like E-Wing Offices)
     │
     ├── streams (a campus's Resi web player: embed id + type; status comes from Resi live)
+    ├── resi_encoders (Resi Studio's encoders, by name) ── resi_schedules (each scheduled event, typed in from Studio)
     │
     ├── networks (subnet, VLAN, gateway, tags)
     │
@@ -565,7 +597,7 @@ js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the 
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
 js/views/person-full.js       a person, in a pop-up (from a name on Scheduling)
 js/views/house-lights.js     Lighting › House lights: levels per Worship Center, part of the service and service
-js/hud.js                     hudConfirm: "Are you sure?" in the console look (old → new)
+js/hud.js                     the console look's pop-ups: hudConfirm ("Are you sure?", old → new) and hudPanel (a form)
 js/lanyard.js                 the lanyard badges: the micro one on Scheduling, the large ones in a profile
 js/input.js                   full screen button (computers); hiding the pointer while touching
 js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
@@ -590,7 +622,9 @@ js/views/team.js               people and access
 js/views/stats.js              Statistics: gear and network numbers for one location or all of them
 js/picker.js                   the filter dropdowns and their menus (location, section, category, brand…), and the phone Filters page
 js/rooms.js                    room groups: the Room filter's entries, matching, the grouped room picker
-js/views/resi.js               Resi: what every campus's web player is showing
+js/views/resi.js               Resi › Playback: what every campus's web player is showing
+js/views/resi-studio.js        Resi › Studio: the schedule copied from Resi Studio (the day's board, every event, encoders)
+js/resi-sched.js               when a scheduled event runs (repeats, ends, pre-buffer) and how to say it
 js/views/resi-settings.js      Settings › Resi players (paste a link, embed code or ID)
 js/resi.js                     reads pasted players and asks Resi what's on
 js/views/account.js            Settings: your profile, Planning Center, Resi players, theme, sign out
@@ -635,7 +669,7 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 ## Sidebar
 
 `NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (Hazers,
-Patch, Rigging, House lights; Fixtures is off the menu for now, its page still works), Network (IP sheet), PCO (Services, Scheduling, People, My schedule) and Logistics (Meetings, Resi, Statistics, Systems, Team),
+Patch, Rigging, House lights; Fixtures is off the menu for now, its page still works), Network (IP sheet), PCO (Services, Scheduling, People, My schedule), Resi (Studio, Playback) and Logistics (Meetings, Statistics, Systems, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
 860px) it's hidden: Tally at the top left slides it in as a panel, and picking a page

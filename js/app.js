@@ -9,6 +9,7 @@ import * as NetworkView from './views/network.js';
 import * as GearView from './views/gear.js';
 import * as TeamView from './views/team.js';
 import * as ResiView from './views/resi.js';
+import * as ResiStudioView from './views/resi-studio.js';
 import * as ServicesView from './views/services.js';
 import * as MeetingsView from './views/meetings.js';
 import * as EventsView from './views/events.js';
@@ -77,10 +78,16 @@ const NAV = [
       { id: 'people', label: 'People', icon: 'team', minRole: 'staff', view: ServicesView, scope: { mode: 'people' } },
       { id: 'my-schedule', label: 'My schedule', icon: 'me', minRole: 'volunteer', view: ServicesView, scope: { mode: 'mine' } },
     ] },
+  // Resi: Studio (the schedule, copied over from Resi Studio) and Playback (what every campus's
+  // web player is showing). Playback keeps the id 'resi' so links to it still work.
+  { id: 'resi-folder', label: 'Resi', icon: 'live', folder: true,
+    children: [
+      { id: 'resi-studio', label: 'Studio', icon: 'calendar', minRole: 'staff', view: ResiStudioView },
+      { id: 'resi', label: 'Playback', icon: 'live', minRole: 'volunteer', view: ResiView },
+    ] },
   { id: 'logistics', label: 'Logistics', icon: 'clipboard', folder: true,
     children: [
       { id: 'meetings', label: 'Meetings', icon: 'chat', minRole: 'staff', view: MeetingsView },
-      { id: 'resi', label: 'Resi', icon: 'live', minRole: 'volunteer', view: ResiView },
       { id: 'stats', label: 'Statistics', icon: 'chart', minRole: 'staff', view: StatsView },
       // Systems: gear that works together (an intercom). The Gear view on its one tab.
       { id: 'systems', label: 'Systems', icon: 'link', minRole: 'staff', view: GearView, scope: { modes: ['systems'] } },

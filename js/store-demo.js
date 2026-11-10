@@ -514,6 +514,65 @@ export function createDemoStore() {
       if (level != null) db.house.push({ room_id: roomId, service, segment, level, updated_at: new Date().toISOString(), who: { full_name: me.full_name || 'Demo Admin' } });
       changed('house');
     },
+    /** Resi › Studio: the encoders in Studio, and a few made-up events to show the page. */
+    async resiStudio() {
+      await wait(90);
+      if (!db.resiEnc) {
+        const names = [['Anderson', 'AND'], ['Five Forks', 'FF'], ['Fountain Inn', 'FI'], ['GCC', 'GCC'], ['Greenville', 'GVL'], ['Harrison Bridge', 'HB'], ['Mauldin', 'MAU'], ['Simpsonville', 'SVL']];
+        db.resiEnc = names.map(([name, code]) => ({ id: 'enc-' + code, name, campus_id: CAMPUSES.some((c) => c.id === 'c-' + code) ? 'c-' + code : null, notes: null, updated_at: ago(60 * 30) }));
+        const sun = (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); })();
+        const ev = (code, name, start, mins, pre, service, extra = {}) => ({
+          id: uid(), encoder_id: 'enc-' + code, name, description: null, encoder_preset: '1080p', encoder_channel: `${names.find(([, c]) => c === code)[0]} Channel`,
+          prebuffer_min: pre, start_date: sun, start_time: start, duration_min: mins, timezone: 'America/New_York',
+          repeats: true, repeat_every: 1, repeat_unit: 'week', repeat_days: [0], repeat_month: 'date', ends: 'never', ends_on: null, ends_after: null,
+          destinations: 'Web channel', paused: false, service_time: service, notes: null, updated_at: ago(60 * 20), who: { full_name: 'Demo Admin' }, ...extra,
+        });
+        db.resiSched = [
+          ev('HB', '8:15 AM Vintage', '08:10', 70, 30, '08:15'),
+          ev('HB', '9:45 AM Modern', '09:40', 70, 10, '09:45'),
+          ev('HB', '11:15 AM Modern', '11:10', 70, 10, '11:15', { ends: 'after', ends_after: 12 }),
+          ev('SVL', '9:00 AM Vintage', '08:55', 75, 30, '09:00'),
+          ev('SVL', '10:30 AM Modern', '10:25', 75, 10, '10:30'),
+          ev('SVL', 'Midweek', '18:25', 75, 20, '18:30', { repeat_days: [3] }),
+          ev('AND', '10:00 AM Modern', '09:55', 70, 30, '10:00'),
+          ev('GVL', '9:30 AM Modern', '09:25', 70, 25, '09:30', { paused: true }),
+        ];
+      }
+      return clone({ encoders: db.resiEnc, schedules: db.resiSched });
+    },
+    async resiEncoderSave(row) {
+      await wait(120);
+      if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can change encoders.');
+      const name = String(row.name || '').trim();
+      if (!name) throw new Error('Give the encoder a name.');
+      if (db.resiEnc.some((e) => e.id !== row.id && e.name.toLowerCase() === name.toLowerCase())) throw new Error(`There's already an encoder called ${name}.`);
+      let e = row.id && db.resiEnc.find((x) => x.id === row.id);
+      if (e) Object.assign(e, row, { name, updated_at: now() });
+      else { e = { id: uid(), notes: null, campus_id: null, ...row, name, updated_at: now() }; db.resiEnc.push(e); }
+      changed('resi_studio');
+      return e.id;
+    },
+    async resiEncoderRemove(id) {
+      await wait(120);
+      db.resiEnc = db.resiEnc.filter((e) => e.id !== id);
+      db.resiSched = db.resiSched.filter((x) => x.encoder_id !== id);
+      changed('resi_studio');
+    },
+    async resiScheduleSave(row) {
+      await wait(150);
+      if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can change the schedule.');
+      let x = row.id && db.resiSched.find((r) => r.id === row.id);
+      const stamp = { updated_at: now(), who: { full_name: me.full_name || 'Demo Admin' } };
+      if (x) Object.assign(x, row, stamp);
+      else { x = { id: uid(), ...row, ...stamp }; db.resiSched.push(x); }
+      changed('resi_studio');
+      return x.id;
+    },
+    async resiScheduleRemove(id) {
+      await wait(120);
+      db.resiSched = db.resiSched.filter((x) => x.id !== id);
+      changed('resi_studio');
+    },
     /** Gear's computers (campus, name, location): which CGs there are. */
     async cgComputers() {
       await wait(40);
