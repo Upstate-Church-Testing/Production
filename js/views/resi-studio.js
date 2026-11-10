@@ -550,7 +550,7 @@ export function mount(el, ctx) {
       if (e.target.closest('[data-del]')) {
         const enc = encoderOf(ev.encoder_id);
         const yes = await hudConfirm({ title: 'Remove this event?', where: `${enc?.name || 'Encoder'} · ${ev.name}`, yes: 'Remove', no: 'Cancel', showChange: false, danger: true,
-          note: 'It comes off Tally only. Studio keeps it until it’s removed there too.' });
+          note: 'It comes off this app only. Studio keeps it until it’s removed there too.' });
         if (!yes) return;
         try { await ctx.store.resiScheduleRemove(ev.id); saving = true; ctx.toast(`Removed ${ev.name}`); panel.close(true); } catch (err) { msg(err.message); }
       }
@@ -622,7 +622,7 @@ export function mount(el, ctx) {
           <fieldset class="rs-fs"><legend>Content destinations</legend>
             <label class="rs-f"><span>Where it streams <i>optional</i></span><textarea name="destinations" rows="2" maxlength="1000" placeholder="The destination group, or each web channel, YouTube or Facebook destination">${v('destinations')}</textarea></label>
           </fieldset>
-          <fieldset class="rs-fs"><legend>In Tally <i>not in Studio</i></legend>
+          <fieldset class="rs-fs"><legend>In this app <i>not in Studio</i></legend>
             <button type="button" class="rs-switch" role="switch" data-sw="paused" aria-checked="${f.paused}"><i aria-hidden="true"></i>Paused <small>“Pause Event” is on in Studio: it’s kept, but doesn’t run</small></button>
             <label class="rs-f"><span>Notes <i>optional</i></span><textarea name="notes" rows="2" maxlength="2000">${v('notes')}</textarea></label>
           </fieldset>
@@ -764,7 +764,7 @@ export function mount(el, ctx) {
         if (r.id) {
           const n = count(r.id);
           const yes = await hudConfirm({ title: 'Remove this encoder?', where: r.name, yes: 'Remove', no: 'Cancel', showChange: false, danger: true,
-            note: n ? `Its ${n} scheduled event${n === 1 ? '' : 's'} come off Tally with it. Studio keeps everything until it’s changed there.` : 'Studio keeps it until it’s removed there too.' });
+            note: n ? `Its ${n} scheduled event${n === 1 ? '' : 's'} come off this app with it. Studio keeps everything until it’s changed there.` : 'Studio keeps it until it’s removed there too.' });
           if (!yes) return;
           try { await ctx.store.resiEncoderRemove(r.id); ctx.toast(`Removed ${r.name}`); } catch (err) { msg(err.message); return; }
         }

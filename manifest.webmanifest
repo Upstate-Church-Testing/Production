@@ -1,7 +1,7 @@
 {
-  "name": "Tally",
-  "short_name": "Tally",
-  "description": "Tally: the Upstate Church production team’s app for services, rosters, gear and networks.",
+  "name": "Production",
+  "short_name": "Production",
+  "description": "Production: the Upstate Church production team’s app for services, rosters, gear and networks.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

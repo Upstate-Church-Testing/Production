@@ -449,7 +449,7 @@ export function createLive(ctx, opts = {}) {
     if (!mine) {
       return `<div class="lvx-ctl">
           <button type="button" class="lvx-btn is-take" data-act="take" ${off}>${esc(label('take', 'Take control'))}</button>
-          <p class="lvx-ctl-note">${st.controller ? `<b>${esc(st.controller)}</b> is driving in Planning Center Live. Taking control moves it to Tally.` : 'Nobody is driving Planning Center Live. Take control to run it from here.'}</p>
+          <p class="lvx-ctl-note">${st.controller ? `<b>${esc(st.controller)}</b> is driving in Planning Center Live. Taking control moves it here.` : 'Nobody is driving Planning Center Live. Take control to run it from here.'}</p>
           ${err}
         </div>`;
     }
