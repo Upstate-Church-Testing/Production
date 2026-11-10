@@ -733,20 +733,20 @@ title and Sundays | Wednesdays. An inverted block is "now" (the selected week, t
 header, with a line down its left side); your own spot has corner brackets. Light and dark
 both have their own palette. Other pages keep the app's usual look for now.
 
-**Team column** (staff): the **Team** button in the Position header opens out each row's
-team from Planning Center beside its position, as initials (Hayden Wood → HW; the full name
-on hover): everyone on that location's team for that position (`pco_team_people`, the
-positions each person is assigned on the team, across that location's services on the grid).
-At least three spots show, an empty dashed one for each spot nobody's assigned; more than
-three all show. Tapping someone opens their full profile (the same sheet as People), not the
-quick look a pill opens. Opening: the column slides out to its full width (the biggest team's,
-every row at once), then the initials come in from top left to bottom right. Closing: the
-initials go in that same order, then the column pulls back in. `.crew-anim` is only on while
-it moves, so the grid's refreshes don't replay it. Whether it's open lasts while the app is
-open (`servicesNav.crew`).
+**Schedule | Team** (staff): a switch (right of Production in the top row on phones, in the
+page's head on a computer) swaps the grid for who's on each team in Planning Center: the same
+rows (location, position), with each person on that position's team across in place of the
+dates, by name with their badge; tap one for their profile. Three columns at least (a dashed
+box is a spot nobody's on), more if a team is bigger. The labels stay while the grid's
+contents go out and come in. It lasts while the app is open (`servicesNav.view`).
+**Sun | Wed** is the same kind of switch (`.hud-sw`).
+
+**The top row** (the logo and Production, phones and small iPads) is part of the page, not a
+bar: it has no background of its own, so there's no seam under it. Only while the page is
+scrolled (`html.is-scrolled`) does a backdrop fade in behind it, fading out downward.
 
 **A person, in a pop-up** (`js/views/person-full.js`): tapping a name on Scheduling (or
-someone in the Team column) opens them in a pop-up box in the console look, over the schedule
+someone on Team) opens them in a pop-up box in the console look, over the schedule
 (still there behind it, dimmed and blurred; tapping it closes the box), not a side sheet.
 Everything is inside the box, which scrolls on its own and lays itself out by its own width
 (container queries):

@@ -108,6 +108,14 @@ export function mount(el, ctx) {
   // Scheduling's Team column (staff): who's on each team in Planning Center, by position,
   // from the volunteer list (s.vol). Whether it's open lasts while the app is open.
   let crewIx = null;       // { vol, byPco: Planning Center person id -> volunteer }
+  // Schedule ⇄ Team (staff): the same grid, with who's on each team in place of the dates.
+  // The switch sits right of Production in the top row on phones, in the page's head on a
+  // computer (placeTools). Where each grid was scrolled to is kept per view and week.
+  if (!nav.view || !isStaff) nav.view = 'sched';
+  let viewBusy = false;
+  const scrollMem = new Map(); // "sched:sun" -> { left, top }
+  const viewSw = () => document.getElementById('s-view');
+  const narrow = matchMedia('(max-width: 859px)');
   // Sundays ⇄ Wednesdays: the board stays, what's on it goes out top left to bottom right,
   // then the other week's comes in the same way (styles.css, "Sundays ⇄ Wednesdays").
   let weekBusy = false;
@@ -130,9 +138,15 @@ export function mount(el, ctx) {
           ${isStaff ? '<button type="button" role="tab" data-smode="people">People</button>' : ''}
           <button type="button" role="tab" data-smode="mine">My schedule</button>
         </div>
-        <div class="seg ros-week" role="tablist" aria-label="Which services" id="s-week" hidden>
-          <button type="button" role="tab" data-week="sun">Sundays</button>
-          <button type="button" role="tab" data-week="mid">Wednesdays</button>
+        <div class="ros-tools">
+          ${isStaff ? `<div class="hud-sw ros-view" role="tablist" aria-label="Schedule or team" id="s-view" data-on="0" hidden>
+            <button type="button" role="tab" data-view="sched">Schedule</button>
+            <button type="button" role="tab" data-view="team">Team</button>
+          </div>` : ''}
+          <div class="hud-sw ros-week" role="tablist" aria-label="Which services" id="s-week" data-on="0" hidden>
+            <button type="button" role="tab" data-week="sun">${both('Sundays', 'Sun')}</button>
+            <button type="button" role="tab" data-week="mid">${both('Wednesdays', 'Wed')}</button>
+          </div>
         </div>
         <p class="tally" id="s-tally" aria-live="polite"></p>
       </div>
@@ -192,10 +206,11 @@ export function mount(el, ctx) {
 
   el.addEventListener('click', (e) => {
     if (nav.mode === 'people' && people.click(e)) return;
-    const t = e.target.closest('[data-act], [data-smode], [data-week], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro], [data-sb]');
+    const t = e.target.closest('[data-act], [data-smode], [data-week], [data-view], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro], [data-sb]');
     if (!t) return;
     if (t.dataset.smode) { setMode(t.dataset.smode); return; }
     if (t.dataset.week) { switchWeek(t.dataset.week); return; }
+    if (t.dataset.view) { switchView(t.dataset.view); return; }
     if (t.dataset.sb) { stepWeek(Number(t.dataset.sb)); return; }
     if (t.dataset.rp) { openFull({ pillId: t.dataset.rp }); return; }
     if (t.dataset.ro) { openOpen(t.dataset.ro); return; }
@@ -213,9 +228,16 @@ export function mount(el, ctx) {
     else if (act === 'all-places') pickCampus(ALL);
     else if (act === 'attn-off') { attn = null; draw(); }
     else if (act === 'live') openLive(nav.plan);
-    else if (act === 'crew') toggleCrew(t);
     else if (act === 'crew-p') openFull({ volId: t.dataset.v }); // them, full screen
   });
+
+  // The Schedule | Team switch lives outside this page's element on a phone (the top row),
+  // so its taps are heard there, and it's taken back out when the page is left.
+  const onViewTap = (e) => { const b = e.target.closest('[data-view]'); if (b) switchView(b.dataset.view); };
+  viewSw()?.addEventListener('click', (e) => { if (!el.contains(e.currentTarget)) onViewTap(e); });
+  const onNarrow = () => placeTools();
+  narrow.addEventListener('change', onNarrow);
+  placeTools();
 
   const onVisible = () => { if (document.visibilityState === 'visible') checkStatus(); };
   document.addEventListener('visibilitychange', onVisible);
@@ -225,7 +247,7 @@ export function mount(el, ctx) {
   }, 300));
   const clockTimer = setInterval(drawHead, 30000); // keeps "updated 3 min ago" honest
   // Wednesdays take their size from the Sunday grid, so a resize works both out again.
-  const onResize = debounce(() => { if (nav.mode === 'roster' && !weekBusy) draw(); }, 120);
+  const onResize = debounce(() => { if (nav.mode === 'roster' && !weekBusy && !viewBusy) draw(); }, 120);
   window.addEventListener('resize', onResize);
 
   load();
@@ -238,6 +260,9 @@ export function mount(el, ctx) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('resize', onResize);
       document.documentElement.classList.remove('ros-lock');
+      narrow.removeEventListener('change', onNarrow);
+      const sw = viewSw();
+      if (sw && !el.contains(sw)) sw.remove(); // out of the top row
       unsubscribe();
     },
   };
@@ -389,7 +414,9 @@ export function mount(el, ctx) {
     el.classList.toggle('is-people', nav.mode === 'people');
     const wk = $('#s-week', el);
     wk.hidden = !rosterMode || m.weeks.size < 2; // only once there's a midweek to show
-    wk.querySelectorAll('[data-week]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.week === m?.week)));
+    markSw(wk, 'week', m?.week);
+    const vw = viewSw();
+    if (vw) { vw.hidden = !rosterMode; markSw(vw, 'view', nav.view); }
     $('#s-bar', el).hidden = !connected || !m?.plans.length || nav.mode === 'mine' || rosterMode;
     drawHead();
     loc.update();
@@ -422,7 +449,8 @@ export function mount(el, ctx) {
       // Sundays and Wednesdays are both drawn and laid out, one over the other on the same
       // stage, so switching between them only moves what's already there (switchWeek).
       // Planning Center refreshes redraw them every few seconds: each stays where it was.
-      const keep = new Map($$('.ros-wrap', box).map((w) => [w.dataset.wk, { left: w.scrollLeft, top: w.scrollTop }]));
+      for (const w of $$('.ros-wrap', box)) scrollMem.set(`${w.dataset.vw}:${w.dataset.wk}`, { left: w.scrollLeft, top: w.scrollTop });
+      const keep = { get: (w) => scrollMem.get(`${nav.view}:${w}`) };
       const weeks = ['sun', 'mid'].filter((w) => m.rosterIn(w).length);
       if (!weeks.includes(m.week)) weeks.push(m.week);
       pills = new Map();
@@ -439,7 +467,7 @@ export function mount(el, ctx) {
         const wrap = wrapOf(w);
         if (!wrap) continue;
         const k = keep.get(w);
-        if (k) { wrap.scrollLeft = k.left; wrap.scrollTop = k.top; } else scrollToNext(wrap);
+        if (k) { wrap.scrollLeft = k.left; wrap.scrollTop = k.top; } else if (nav.view === 'team') wrap.scrollLeft = 0; else scrollToNext(wrap);
         if (attn && w === 'sun' && m.week === 'sun') markAttention(wrap, !k);
       }
       fitStage();
@@ -661,7 +689,7 @@ export function mount(el, ctx) {
     const campus = where === ALL ? null : ctx.campusById.get(where);
     const letters = new Set();
     if (!rows.length) {
-      return `<div class="ros-wrap ros-none ${active ? 'is-active' : ''}" data-wk="${week}"><div class="empty"><h3>No one scheduled yet</h3><p>Nobody is on the shared teams${campus ? ` at ${esc(campus.short_name)}` : ''} in the next ${plural(s.status.weeks_ahead || 6, 'week')}.</p></div></div>`;
+      return `<div class="ros-wrap ros-none ${active ? 'is-active' : ''}" data-wk="${week}" data-vw="${nav.view}"><div class="empty"><h3>No one scheduled yet</h3><p>Nobody is on the shared teams${campus ? ` at ${esc(campus.short_name)}` : ''} in the next ${plural(s.status.weeks_ahead || 6, 'week')}.</p></div></div>`;
     }
     const today = m.today;
     const next = days.find((d) => d >= today); // where coming up starts: a line down its left side
@@ -677,10 +705,25 @@ export function mount(el, ctx) {
       groups[groups.length - 1].rows.push(row);
     }
     let rowNo = 0;
-    let crewMax = 3; // the Team column's width: the biggest team (three spots at least)
+    // Team: the same rows, with everyone on each position's team in Planning Center across
+    // (by name, with their badge; each opens their profile) in place of the dates. As many
+    // columns as the biggest team, three at least; a dashed box is a spot nobody's on.
+    const teamView = nav.view === 'team' && isStaff && !!s.vol;
+    const crews = teamView ? new Map(rows.map((row) => [row, crewFor(m, row, week)])) : null;
+    const crewMax = teamView ? Math.max(3, ...[...crews.values()].map((t) => t.length)) : 0;
+    let crewTotal = 0;
     const body = groups.map((g) => g.rows.map((row, ri) => {
       const r = rowNo++;
-      const cells = days.map((d, i) => {
+      const cells = teamView ? Array.from({ length: crewMax }, (_, k) => {
+        const x = crews.get(row)[k];
+        if (!x) return `<td style="--c:${2 + k}"><div class="ros-cell"><i class="rp is-team is-none" title="Nobody else on the team for this"></i></div></td>`;
+        crewTotal += 1;
+        const lan = x.lanyard || null;
+        const inner = `${lan ? microBadge(lan, `${LANYARDS[lan]} lanyard`) : ''}<b>${nameShort(x.name) === x.name ? esc(x.name) : `<span class="nf">${esc(x.name)}</span><span class="ns">${esc(nameShort(x.name))}</span>`}</b>`;
+        return `<td style="--c:${2 + k}"><div class="ros-cell">${x.id
+          ? `<button type="button" class="rp is-team" data-act="crew-p" data-v="${esc(x.id)}" title="${esc(`${x.name}: on the ${row.position} team`)}">${inner}</button>`
+          : `<span class="rp is-team" title="${esc(x.name)}">${inner}</span>`}</div></td>`;
+      }).join('') : days.map((d, i) => {
         const cell = row.cells.get(d);
         if (!cell) return `<td class="${when(d)}" style="--c:${colOf(i)}"></td>`;
         // Same order every week: whoever's on the first service comes first.
@@ -697,22 +740,13 @@ export function mount(el, ctx) {
       const place = ctx.campusById.get(row.campusId);
       const loc = !campus && ri === 0
         ? `<th class="ros-loc" style="--c:0" rowspan="${g.rows.length}" scope="rowgroup" title="${esc(place?.short_name || 'Other')}"><span>${both(place?.short_name || 'Other', campusShort(place))}</span></th>` : '';
-      // The team: initials, three spots at least (an empty one is a spot nobody's assigned).
-      // Each one opens their full profile (as on People).
-      const team = isStaff && s.vol ? crewFor(m, row, week) : null;
-      if (team) crewMax = Math.max(crewMax, team.length);
-      const crewHtml = team ? `<span class="crew" style="--r:${r}" role="group" aria-label="${esc(`${row.position} team`)}">${
-        team.map((x, k) => (x.id
-          ? `<button type="button" class="cw" data-act="crew-p" data-v="${esc(x.id)}" style="--k:${k}" title="${esc(x.name)}" aria-label="${esc(x.name)}">${esc(initials(x.name))}</button>`
-          : `<i class="cw" style="--k:${k}" title="${esc(x.name)}">${esc(initials(x.name))}</i>`)).join('')}${
-        Array.from({ length: Math.max(0, 3 - team.length) }, (_, k) => `<i class="cw is-open" style="--k:${team.length + k}" title="Nobody else on the team for this"></i>`).join('')}</span>` : '';
-      return `<tr class="${ri === 0 ? 'ros-first' : ''}" style="--r:${r + 1}">${loc}<th class="ros-pos" style="--c:1" scope="row" title="${esc(`${row.position} · ${row.team}`)}"><div class="pos-in"><span class="pos-l">${both(label, short)}</span>${crewHtml}</div></th>${cells}</tr>`;
+      return `<tr class="${ri === 0 ? 'ros-first' : ''}" style="--r:${r + 1}">${loc}<th class="ros-pos" style="--c:1" scope="row" title="${esc(`${row.position} · ${row.team}`)}"><div class="pos-in"><span class="pos-l">${both(label, short)}</span></div></th>${cells}</tr>`;
     }).join('')).join('');
-    const head = days.map((d, i) => {
+    const head = teamView ? `<th class="ros-day ros-team-h" colspan="${crewMax}" style="--c:2" scope="colgroup"><span class="dh">On the team <b>in Planning Center</b></span></th>` : days.map((d, i) => {
       const p = m.plans.find((x) => x._day === d);
       return `<th class="ros-day ${when(d)}" style="--c:${colOf(i)}" scope="col" ${d < today ? 'title="Already happened"' : ''}><span class="dh">${d === today ? 'Today' : `<span class="lf">${esc(m.c.weekday(p.sort_date).slice(0, 3))}</span>`} <b>${esc(m.c.date(p.sort_date))}</b></span></th>`;
     }).join('');
-    const foot = totals.map((t, i) => `<td class="${when(days[i])}" style="--c:${colOf(i)}"><span class="ros-tot">${[
+    const foot = teamView ? `<td colspan="${crewMax}" style="--c:2"><span class="ros-tot"><span class="is-open" title="People on these teams">${crewTotal}</span></span></td>` : totals.map((t, i) => `<td class="${when(days[i])}" style="--c:${colOf(i)}"><span class="ros-tot">${[
       t.C ? `<span class="st-C" title="Confirmed">${t.C}</span>` : '',
       t.U ? `<span class="st-U" title="Requested">${t.U}</span>` : '',
       t.D ? `<span class="st-D" title="Declined">${t.D}</span>` : '',
@@ -720,9 +754,9 @@ export function mount(el, ctx) {
     ].join('')}</span></td>`).join('');
 
     return `
-      <div class="ros-wrap ${active ? 'is-active' : ''}" data-wk="${week}">
-        <table class="ros ${campus ? 'one-place' : ''} ${nav.crew && s.vol ? 'crew-on' : ''}" style="--cn:${crewMax};--rows:${rowNo};--cols:${colOf(days.length - 1)}">
-          <thead><tr style="--r:0">${campus ? '' : `<th class="ros-corner ros-loc-h" scope="col">${both('Location', 'Loc')}</th>`}<th class="ros-corner ros-pos-h" scope="col"><div class="pos-in"><span class="pos-l">${both('Position', 'Pos')}</span>${isStaff ? `<button type="button" class="ros-crew-btn" data-act="crew" aria-expanded="${nav.crew ? 'true' : 'false'}" title="Who's on each team" aria-label="Show who's on each team">${icon('team')}<span class="cb-l">Team</span>${icon('chevron')}</button>` : ''}</div></th>${head}</tr></thead>
+      <div class="ros-wrap ${active ? 'is-active' : ''}" data-wk="${week}" data-vw="${teamView ? 'team' : 'sched'}">
+        <table class="ros ${campus ? 'one-place' : ''} ${teamView ? 'is-team' : ''}" style="--rows:${rowNo};--cols:${teamView ? crewMax + 1 : colOf(days.length - 1)}">
+          <thead><tr style="--r:0">${campus ? '' : `<th class="ros-corner ros-loc-h" scope="col">${both('Location', 'Loc')}</th>`}<th class="ros-corner ros-pos-h" scope="col"><div class="pos-in"><span class="pos-l">${both('Position', 'Pos')}</span></div></th>${head}</tr></thead>
           <tbody>${body}</tbody>
           <tfoot><tr style="--r:${rowNo + 1}"><th class="ros-foot-h" ${campus ? '' : 'colspan="2"'}>${campus ? both('Totals', 'Tot') : 'Totals'}</th>${foot}</tr></tfoot>
         </table>
@@ -924,9 +958,10 @@ export function mount(el, ctx) {
    *  to bottom right), the frame eases to the other's height while their lines cross over,
    *  then the other's comes in the same way. Reduced motion: straight across. */
   function switchWeek(w) {
+    if (viewBusy) return;
     if (weekBusy) {
       weekWant = w;
-      $$('#s-week [data-week]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.week === w)));
+      markSw($('#s-week', el), 'week', w);
       return;
     }
     if (nav.week === w) return;
@@ -934,7 +969,7 @@ export function mount(el, ctx) {
     const from = stage && $('.ros-wrap.is-active', stage);
     const to = stage && $(`.ros-wrap[data-wk="${w}"]`, stage);
     nav.week = w;
-    $$('#s-week [data-week]', el).forEach((b) => b.setAttribute('aria-selected', String(b.dataset.week === w)));
+    markSw($('#s-week', el), 'week', w);
     if (!from || !to || from === to || matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(); return; }
     weekBusy = true;
     const span = (wrap) => {
@@ -972,7 +1007,7 @@ export function mount(el, ctx) {
           const next = weekWant;
           weekWant = null;
           if (next && next !== nav.week && alive) switchWeek(next);
-          else $$('#s-week [data-week]', el).forEach((x) => x.setAttribute('aria-selected', String(x.dataset.week === nav.week)));
+          else markSw($('#s-week', el), 'week', nav.week);
         }, b.rows * 14 + b.cols * 26 + 420);
       }, 400);
     }, a.rows * 8 + a.cols * 14 + 180);
@@ -1000,39 +1035,59 @@ export function mount(el, ctx) {
     for (const x of vol.members || []) {
       if (!teams.has(String(x.team_id)) || !(x.positions || []).some((p) => teamKey(p) === pk)) continue;
       const v = crewIx.byPco.get(String(x.person_id));
-      who.set(String(x.person_id), { name: v?.name || 'Someone', id: v?.id || null });
+      who.set(String(x.person_id), { name: v?.name || 'Someone', id: v?.id || null, lanyard: v?.lanyard || null });
     }
     return [...who.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /** The Team column. Opening: the column slides out to its full width, then the initials
-   *  come in, top left to bottom right. Closing: the initials go in that same order, then the
-   *  column pulls back in. (The timing is in styles.css; .crew-anim is only on while it moves.) */
-  async function toggleCrew(btn) {
-    if (!isStaff) return;
-    if (!s.vol) {
-      btn.classList.add('is-busy');
+  /** A two-way switch (.hud-sw): which side is on. The lit block slides to it. */
+  function markSw(sw, key, value) {
+    if (!sw) return;
+    const bs = $$(`[data-${key}]`, sw);
+    bs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset[key] === value)));
+    sw.dataset.on = String(Math.max(0, bs.findIndex((b) => b.dataset[key] === value)));
+  }
+
+  /** Schedule | Team goes right of Production in the top row on phones and small iPads, and
+   *  in front of Sundays | Wednesdays in the page's head on a computer. */
+  function placeTools() {
+    const sw = viewSw();
+    if (!sw) return;
+    const slot = ctx.topSlot?.();
+    const home = $('.ros-tools', el);
+    if (slot) { if (sw.parentElement !== slot) slot.appendChild(sw); } else if (home && sw.parentElement !== home) home.prepend(sw);
+  }
+
+  /** Schedule ⇄ Team: the labels stay; what's in the grid goes out top left to bottom right,
+   *  then the other view's comes in the same way. Reduced motion: straight across. */
+  async function switchView(v) {
+    if (!isStaff || viewBusy || weekBusy || v === nav.view || nav.mode !== 'roster') return;
+    const sw = viewSw();
+    markSw(sw, 'view', v);
+    if (v === 'team' && !s.vol) {
+      sw?.classList.add('is-busy');
       await loadPeople(false);
-      if (!alive || !s.vol) { btn.classList.remove('is-busy'); return; }
-      draw();
+      sw?.classList.remove('is-busy');
+      if (!alive) return;
+      if (!s.vol) { markSw(sw, 'view', nav.view); ctx.toast('Couldn’t load the teams.', 'bad'); return; }
     }
-    const on = !nav.crew;
-    nav.crew = on;
-    const table = $('.ros-wrap.is-active .ros', el);
-    // The other week's grid just takes the new state (it isn't showing).
-    $$('.ros', el).filter((t) => t !== table).forEach((t) => {
-      t.classList.toggle('crew-on', on);
-      $$('[data-act="crew"]', t).forEach((b) => b.setAttribute('aria-expanded', String(on)));
-    });
-    if (!table) return;
-    table.classList.add('crew-anim');
-    void table.offsetWidth; // start from where it is now
-    table.classList.toggle('crew-on', on);
-    $$('[data-act="crew"]', table).forEach((b) => b.setAttribute('aria-expanded', String(on)));
-    const rows = Number(table.style.getPropertyValue('--rows')) || 20;
-    const cn = Number(table.style.getPropertyValue('--cn')) || 3;
-    clearTimeout(toggleCrew.t);
-    toggleCrew.t = setTimeout(() => table.classList.remove('crew-anim'), 1000 + rows * 22 + cn * 60);
+    const from = $('.ros-wrap.is-active .ros', el);
+    nav.view = v;
+    if (!from || matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(); return; }
+    viewBusy = true;
+    const n = (t, k) => Number(t?.style.getPropertyValue(k)) || 6;
+    from.classList.add('vw-out');
+    setTimeout(() => {
+      if (!alive) return;
+      draw();
+      const to = $('.ros-wrap.is-active .ros', el);
+      if (!to) { viewBusy = false; return; }
+      to.classList.add('vw-hide');
+      void to.offsetWidth;
+      to.classList.add('vw-in');
+      to.classList.remove('vw-hide');
+      setTimeout(() => { to.classList.remove('vw-in'); viewBusy = false; }, n(to, '--rows') * 14 + Math.min(6, n(to, '--cols')) * 26 + 420);
+    }, n(from, '--rows') * 8 + Math.min(6, n(from, '--cols')) * 14 + 200);
   }
 
   /** The home indicator's strip (an iPad's or iPhone's home-screen app; 0 elsewhere). */
@@ -1070,7 +1125,8 @@ export function mount(el, ctx) {
       const corner = $$('thead .ros-corner', table).pop()?.getBoundingClientRect();
       const left = table.getBoundingClientRect().left;
       // The three weeks it opens on: the next service and the two after it.
-      const cols = $$('thead .ros-day', table);
+      // (Team: its first three people across; its one header spans them all.)
+      const cols = table.classList.contains('is-team') ? $$('tbody tr:first-child td', table) : $$('thead .ros-day', table);
       const next = cols.findIndex((c) => !c.classList.contains('is-past'));
       const from = Math.max(0, Math.min(next < 0 ? 0 : next, cols.length - 3));
       const three = cols.slice(from, from + 3).reduce((w, c) => w + c.getBoundingClientRect().width, 0);

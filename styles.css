@@ -330,11 +330,19 @@ code { font-size: 0.9em; background: var(--panel-3); border-radius: 6px; padding
    page's search and filters right under it. */
 @media (max-width: 859px) {
   :root { --topbar: 60px; }
-  .topbar {
-    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 22; height: var(--topbar); padding: 0 var(--gutter-r) 0 var(--gutter-l);
-    background: color-mix(in srgb, var(--bg) 96%, transparent);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  /* The top row is part of the page, not a bar: it has NO background, border, shadow or blur
+     of its own, so nothing can show a seam under it (don't give it one; match nothing to it).
+     It stays put while the page scrolls; only then (html.is-scrolled, set in app.js), with
+     things passing under it, does a backdrop fade in behind it, and that one fades out
+     downward instead of ending in a line. */
+  .topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 22; height: var(--topbar); padding: 0 var(--gutter-r) 0 var(--gutter-l); gap: 10px; }
+  .topbar::before {
+    content: ""; position: absolute; z-index: -1; left: 0; right: 0; top: calc(-1 * env(safe-area-inset-top, 0px)); bottom: -18px; pointer-events: none;
+    background: linear-gradient(to bottom, var(--bg) 0, var(--bg) calc(100% - 26px), transparent);
+    opacity: 0; transition: opacity 0.18s ease;
   }
+  html.is-scrolled .topbar::before { opacity: 1; }
+  .top-slot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; margin-left: auto; }
   .rail-open body::after { display: none; }
 }
 
@@ -430,15 +438,16 @@ button.stat:hover { border-color: var(--line-2); }
   position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--topbar, 0px)); z-index: 20;
   display: grid; gap: 10px;
   padding: 10px var(--gutter-r) 12px var(--gutter-l);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
+/* like the top row: nothing behind it until the page has scrolled under it */
+html.is-scrolled .toolbar { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 /* Covers the status-bar strip at the very top of the screen (home-screen app), so
    content scrolling under it stays hidden. Fixed, so it never sits on the page head. */
 body::after {
   content: ""; position: fixed; left: 0; right: 0; top: 0; z-index: 45; pointer-events: none;
-  height: env(safe-area-inset-top, 0px); background: var(--bg);
+  height: env(safe-area-inset-top, 0px); background: var(--bg); opacity: 0; transition: opacity 0.18s ease;
 }
+html.is-scrolled body::after { opacity: 1; } /* only while something is scrolling under it */
 .search { position: relative; }
 .search .ico { position: absolute; left: 16px; top: 50%; translate: 0 -50%; color: var(--faint); pointer-events: none; }
 .search input {
@@ -1891,8 +1900,6 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
 .view-services.is-roster #s-meta, .view-services.is-roster #s-tally { display: none; }
 .view-services.is-roster .results { gap: 0; padding-top: 2px; padding-bottom: 0; }
 /* Sunday mornings | Wednesdays: the same height as the location picker beside it. */
-.ros-week { padding: 3px; flex: none; }
-.ros-week button { padding: 7px 14px; font-size: 13px; }
 .ros-head { display: flex; align-items: center; flex: 0 1 280px; min-width: 0; }
 .ros-head[hidden] { display: none; }
 .dd.slim { min-height: 38px; padding: 2px 4px 2px 14px; border-radius: 14px; flex: 1 1 auto; min-width: 0; }
@@ -3432,7 +3439,6 @@ html.is-touch, html.is-touch * { cursor: none !important; }
 /* the head: just the title and Sundays | Wednesdays, which sits down on the board's top edge */
 .page-scheduling.is-roster .page-head { padding-bottom: 5px; }
 .page-scheduling.is-roster .mode-row { align-items: flex-end; }
-.page-scheduling.is-roster .ros-week { margin-left: auto; margin-bottom: 0; }
 .page-scheduling.is-roster .results { padding-top: 0; }
 
 /* Sundays ⇄ Wednesdays: the board (lines, labels' columns, headers) stays put; what's on it
@@ -4441,3 +4447,63 @@ html.hp-on .fs-btn { display: none; }
   .rs-inst { grid-column: 2 / 4; justify-self: end; }
   .rs-en { grid-column: 1 / -1; text-align: left; font-size: 9.5px; }
 }
+
+/* ------------------------------------------------------- two-way switches -- */
+/* .hud-sw: two choices as one small switch (Schedule | Team, Sun | Wed). The lit block slides
+   to the side that's on (data-on="0" or "1"). In the console look wherever it sits: a page's
+   head, or right of Production in the top row. */
+.hud-sw {
+  position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; flex: none; padding: 2px;
+  background: var(--hud-head); border: 1px solid var(--hud-line-2); border-radius: 4px;
+}
+.hud-sw::before {
+  content: ""; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px); border-radius: 2px; background: var(--hud-ink);
+  transition: transform 0.24s cubic-bezier(0.3, 0.8, 0.2, 1);
+}
+.hud-sw[data-on="1"]::before { transform: translateX(100%); }
+.hud-sw button {
+  position: relative; min-height: 30px; padding: 0 12px; border: 0; border-radius: 2px; background: none; color: var(--hud-dim);
+  font: 600 12px/1 var(--f-hud); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: pointer; touch-action: manipulation;
+  transition: color 0.18s ease;
+}
+.hud-sw button[aria-selected="true"] { color: var(--hud-bg); }
+.hud-sw button:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: 2px; }
+.hud-sw.is-busy { opacity: 0.6; }
+.hud-sw .ls { display: none; }
+@media (prefers-reduced-motion: reduce) { .hud-sw::before { transition: none; } }
+@media (max-width: 859px) {
+  .hud-sw button { min-height: 32px; padding: 0 10px; font-size: 11.5px; }
+}
+@media (max-width: 699px) {
+  .hud-sw .lf { display: none; }
+  .hud-sw .ls { display: inline; }
+}
+
+/* Scheduling's head: the title and its switches on one row, tight to the grid under it and
+   to the top row over it (no gaps between Production, the title and the grid). */
+.ros-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+.view-services.is-roster .mode-row { flex-wrap: nowrap; align-items: center; }
+.page-scheduling.is-roster .mode-row { align-items: center; }
+.page-scheduling.is-roster .page-title { flex-wrap: nowrap; white-space: nowrap; min-width: 0; }
+@media (max-width: 859px) {
+  .page-scheduling.is-roster .page-head { padding-top: 0; padding-bottom: 8px; }
+}
+@media (max-width: 699px) {
+  .page-scheduling.is-roster .page-title h1 { font-size: 22px; }
+}
+
+/* Scheduling › Team: the same grid with who's on each team in place of the dates. A person
+   is a plain outlined pill (no status: this isn't a date), a spot nobody's on a dashed box. */
+.ros .rp.is-team { padding: 0 9px; gap: 7px; background: color-mix(in srgb, var(--hud-ink) 7%, var(--hud-bg)); border-color: var(--hud-line-2); }
+.page-scheduling.is-roster .ros .rp.is-team { padding: 0 9px; border: 1px solid var(--hud-line-2); background: color-mix(in srgb, var(--hud-ink) 7%, var(--hud-bg)); }
+.page-scheduling.is-roster .ros button.rp.is-team:hover { background: var(--hud-ink); color: var(--hud-bg); filter: none; }
+.page-scheduling.is-roster .ros .rp.is-team.is-none { background: none; border: 1px dashed var(--hud-line-2); }
+.ros .rp.is-team.is-none { display: block; }
+.ros.is-team .ros-team-h b { font-weight: 500; color: var(--hud-dim); margin-left: 4px; letter-spacing: 0.06em; font-size: 11px; }
+.page-scheduling.is-roster .ros.is-team thead .ros-team-h { background: var(--hud-head); color: var(--hud-ink); }
+.page-scheduling.is-roster .ros.is-team thead .ros-team-h b { color: var(--hud-dim); }
+/* Schedule ⇄ Team: the labels stay; the grid's contents go out and come in top left to bottom right */
+.ros.vw-out :is(.ros-cell, .dh, .ros-tot) { opacity: 0; transform: translateX(-8px); transition: opacity 0.15s ease, transform 0.18s ease-in; transition-delay: calc(var(--r, 0) * 8ms + min(var(--c, 0), 6) * 14ms); }
+.ros.vw-hide :is(.ros-cell, .dh, .ros-tot) { opacity: 0; transform: translateX(10px); }
+.ros.vw-in :is(.ros-cell, .dh, .ros-tot) { transition: opacity 0.26s ease, transform 0.34s cubic-bezier(0.2, 0.9, 0.25, 1.15); transition-delay: calc(var(--r, 0) * 14ms + min(var(--c, 0), 6) * 26ms); }
+@media (min-width: 860px) { .ros-tools { margin-right: 24px; } } /* clear of the full screen button in the corner */

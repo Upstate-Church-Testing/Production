@@ -112,6 +112,9 @@ const ctx = {
   toast,
   openSheet,
   go: (id) => { location.hash = id; },
+  /** The space right of Production in the top row (phones and small iPads), for a page's own
+   *  switch. null on a computer, where there is no top row: the page keeps it in its head. */
+  topSlot: () => (matchMedia('(max-width: 859px)').matches ? $('#top-slot') : null),
   // Cross-section jumps: the target section picks these up once its data loads.
   pending: null,
   openDevice: (id) => goWith('network', { open: id }),
@@ -308,12 +311,22 @@ function renderShell() {
       <div class="main">
         <header class="topbar">
           <button type="button" class="brand menu-btn" aria-controls="app-nav" aria-expanded="false" aria-label="Menu">${brandMark()}<span class="brand-name">${esc(APP_NAME)}</span></button>
+          <div class="top-slot" id="top-slot"></div>
         </header>
         <main id="view" tabindex="-1"></main>
       </div>
     </div>`;
   renderNav();
-  // Phones and small iPads: Tally (top left) slides the sidebar in.
+  // The top row (the logo and Production) is part of the page, not a bar over it: it has no
+  // background of its own. Only once the page has scrolled, and things are passing under it,
+  // does it (and the status-bar strip) get something behind it (html.is-scrolled, styles.css).
+  if (!renderShell.scrollBound) {
+    renderShell.scrollBound = true;
+    const onScroll = () => document.documentElement.classList.toggle('is-scrolled', window.scrollY > 2);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+  // Phones and small iPads: the logo (top left) slides the sidebar in.
   $('.menu-btn').addEventListener('click', (e) => {
     lastPointer = e.pointerType || (e.detail === 0 ? 'keyboard' : 'touch');
     setRail(!$('.nav').classList.contains('is-open'));
