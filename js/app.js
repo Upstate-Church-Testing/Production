@@ -14,6 +14,7 @@ import * as MeetingsView from './views/meetings.js';
 import * as EventsView from './views/events.js';
 import * as HomeView from './views/home.js';
 import * as CgView from './views/cg.js';
+import * as HouseLightsView from './views/house-lights.js';
 import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
@@ -51,12 +52,14 @@ const NAV = [
   { id: 'lighting', label: 'Lighting', menuLabel: 'All lighting', icon: 'bulb', minRole: 'staff', view: GearView,
     scope: { dep: 'lighting', modes: GEAR_TABS },
     children: [
-      // Fixtures: the sheet of every light, location and room only (its grid is built, just not offered yet: add 'grid').
-      { id: 'fixtures', label: 'Fixtures', minRole: 'staff', view: GearView, scope: { dep: 'lighting', cat: 'Fixture', modes: ['fixtures'] } },
+      // Fixtures (the sheet of every light) is taken off the menu for now; its page still works:
+      // { id: 'fixtures', label: 'Fixtures', minRole: 'staff', view: GearView, scope: { dep: 'lighting', cat: 'Fixture', modes: ['fixtures'] } },
       { id: 'hazers', label: 'Hazers', minRole: 'staff', view: GearView, scope: { modes: ['haze'] } },
       { id: 'patch', label: 'Patch', minRole: 'staff', view: GearView, scope: { modes: ['patch'] } },
       // Rigging: each room's battens and trusses, front to back, and the lights on each.
       { id: 'rigging', label: 'Rigging', minRole: 'staff', view: GearView, scope: { modes: ['rig'] } },
+      // House lights: the level in each part of a service, per Worship Center and service.
+      { id: 'house-lights', label: 'House lights', minRole: 'staff', view: HouseLightsView },
     ] },
   { id: 'network-gear', label: 'Network', menuLabel: 'All network', icon: 'network', minRole: 'staff', view: GearView,
     scope: { dep: 'network', modes: GEAR_TABS },

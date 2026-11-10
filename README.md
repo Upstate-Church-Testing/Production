@@ -329,6 +329,28 @@ room isn't on a position yet.
 Harrison Bridge Worship Center: FOH Batten (the nine ColorSource Spots), Midstage Batten
 Center 1–3, Midstage Batten Left and Right, Upstage Batten Center, Left and Right.
 
+## House lights (Lighting › House lights, staff)
+
+What the house lights are at in each part of a service, as a sheet in Scheduling's console
+look. A row per room that has Sunday services (`rooms.house_lights`: each location's
+Worship Center; not Laurens or Union). A column group per part of the service, in order:
+Pre-service, Worship, Host, Video, Message. Inside each group, a column per service:
+**Sundays** has Vintage and Modern side by side; **Wednesdays** has Midweek (only Mauldin
+and Simpsonville have one). Reading down a column compares every location; a pair side by
+side compares one location's Vintage and Modern, and Modern shows how far it is from
+Vintage (−10).
+
+- Which services a room has comes from its location's shared Planning Center services
+  (Vintage, Modern, Midweek; not one in another room like "Modern [North Auditorium]").
+  One it doesn't have is hatched out (Five Forks and Fountain Inn: No Vintage).
+- Levels are percent, 0 to 100. Each cell is lit as bright as the level (dark at 0), with
+  a bar along its bottom as long as the level. Not set: a dash.
+- **Changing one**: tap it, type the level, Enter. "Are you sure you want to confirm this
+  change?" shows the old and new level; only **Yes** saves it. Clear it and Enter to remove
+  it, asked the same way. Esc or tapping away puts it back. Hover a level for who set it.
+- Changes from anyone show up live, flashing in.
+- Stored in `house_light_levels`: one row per room, service and segment.
+
 ## Gear: where things are, and what's missing (staff)
 
 Gear filters run Department → Location → Room → Area / spot → Operator position → Category →
@@ -517,6 +539,7 @@ pco_live_cache   Planning Center Live's last answer per plan (pco-live only), so
 rig_positions    a room's hanging positions (FOH Batten, Upstage Truss…): name, notes, sort_order front to back
 camera_builds    a location's camera positions (Cam N), in service or not; their gear is items with Spot "Cam N"
 systems ── system_items   gear that works together (an intercom), each member with its role
+house_light_levels (room, service: vintage / modern / midweek, segment: pre / worship / host / video / message, level 0–100)
 haze_fluids ── haze_stock (bottles per location)     haze_checks (each look at a hazer's tank: level, filled, when)
 cable_types ── cables     a kind of cable (signal + ends) and how many of each length and label at each place
 pco_schedule_log who in the app scheduled or took off whom (staff only)
@@ -539,6 +562,8 @@ js/views/cg.js                CG uploads: each campus's CG for the coming Sunday
 js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
 js/views/person-full.js       a person, in a pop-up (from a name on Scheduling)
+js/views/house-lights.js     Lighting › House lights: levels per Worship Center, part of the service and service
+js/hud.js                     hudConfirm: "Are you sure?" in the console look (old → new)
 js/lanyard.js                 the lanyard badges: the micro one on Scheduling, the large ones in a profile
 js/input.js                   full screen button (computers); hiding the pointer while touching
 js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
@@ -607,8 +632,8 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 
 ## Sidebar
 
-`NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (Fixtures,
-Hazers, Patch, Rigging), Network (IP sheet), PCO (Services, Scheduling, People, My schedule) and Logistics (Meetings, Resi, Statistics, Systems, Team),
+`NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (Hazers,
+Patch, Rigging, House lights; Fixtures is off the menu for now, its page still works), Network (IP sheet), PCO (Services, Scheduling, People, My schedule) and Logistics (Meetings, Resi, Statistics, Systems, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
 860px) it's hidden: Tally at the top left slides it in as a panel, and picking a page

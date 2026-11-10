@@ -3844,3 +3844,230 @@ button.home-card:hover { border-color: color-mix(in srgb, var(--tone) 45%, var(-
 /* Home and CG uploads: the same side margins as every other page */
 .home-grid { padding: 0 var(--gutter-r) 28px var(--gutter-l); }
 @media (min-width: 860px) { .home-grid { padding: 4px 32px 28px 28px; } }
+
+/* ---------------------------------------------- Lighting › House lights -- */
+/* views/house-lights.js. A sheet in the console look, like PCO › Scheduling: a row per
+   Worship Center; a column group per part of the service, in service order; inside each
+   group a column per service (Vintage and Modern on Sundays, Midweek on Wednesdays). Each
+   level is the number, the cell lit as bright as the house lights are (warm; dark at 0), and
+   a bar along its bottom as long as the level. So a row looks like the room through the
+   service, reading down a column compares every location, and a pair side by side compares
+   one location's Vintage and Modern (Modern shows how far it is from Vintage).
+   Not set: a dash. A service the location doesn't have: hatched. Typing: the cell inverts.
+   Both weeks are laid out on one stage (.hl-stage), only the one showing visible, like
+   Scheduling's. --r is a cell's row, --c its column (for the staggers). */
+:root { --hl-lamp: #ffcf86; } /* a warm, tungsten white */
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --hl-lamp: #c77a06; } }
+:root[data-theme="light"] { --hl-lamp: #c77a06; }
+
+/* the head: the title, and Sundays | Wednesdays down on the sheet's top edge */
+.page-house-lights .page-head { padding-bottom: 5px; }
+.page-house-lights .mode-row { align-items: flex-end; flex-wrap: nowrap; }
+.page-house-lights .page-title h1 { font: 600 30px/1 var(--f-hud); letter-spacing: 0.04em; text-transform: uppercase; }
+.page-house-lights .page-title span { font-family: var(--f-hud); letter-spacing: 0.06em; text-transform: uppercase; }
+.page-house-lights .results { padding-top: 0; gap: 10px; }
+.hl-week { margin-left: auto; flex: none; }
+.page-house-lights .seg { border-radius: 4px; padding: 2px; background: var(--hud-head); border: 1px solid var(--hud-line-2); box-shadow: none; }
+.page-house-lights .seg button { border-radius: 2px; font: 600 12px/1 var(--f-hud); letter-spacing: 0.08em; text-transform: uppercase; color: var(--hud-dim); }
+.page-house-lights .seg button[aria-selected="true"] { background: var(--hud-ink); color: var(--hud-bg); box-shadow: none; }
+
+/* the stage: both weeks, one over the other */
+.hl-stage { position: relative; overflow: hidden; background: var(--hud-bg); border: 1px solid var(--hud-line-2); border-radius: 4px; color: var(--hud-ink); }
+.hl-wrap { position: absolute; top: 0; left: 0; right: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }
+.hl-wrap:not(.is-active):not(.is-leaving) { visibility: hidden; pointer-events: none; }
+.hl-wrap.is-entering, .hl-wrap.is-leaving { opacity: 0; pointer-events: none; }
+.hl-stage.is-moving { transition: height 0.4s cubic-bezier(0.3, 0.7, 0.2, 1); }
+.hl-stage.is-moving > .hl-wrap { transition: opacity 0.3s ease; }
+.hl-wrap > .empty { padding: 36px 20px; }
+.hl-hint { margin: 0 2px; font: 500 12px/1.3 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim); }
+
+/* the sheet */
+.hl-t { width: 100%; border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+.hl-t th, .hl-t td { padding: 0; text-align: center; vertical-align: middle; font-weight: inherit; border-bottom: 1px solid var(--hud-line); border-left: 1px solid var(--hud-line); }
+.hl-t tbody tr:last-child > * { border-bottom: 0; }
+.hl-t thead th { background: var(--hud-head); font: 600 11px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase; color: var(--hud-dim); }
+.hl-t .is-seg, .hl-t .hl-seg { border-left: 2px solid var(--hud-line-2); } /* where each part of the service starts */
+.hl-seg { height: 34px; padding: 0 8px !important; color: var(--hud-ink) !important; letter-spacing: 0.12em !important; }
+.hl-svc { height: 27px; padding: 0 6px !important; border-bottom-color: var(--hud-line-2) !important; }
+.hl-seg > span, .hl-svc > span { display: inline-flex; align-items: center; gap: 6px; }
+.hl-svc b { font-weight: 600; }
+.hl-svc i {
+  display: inline-grid; place-items: center; width: 15px; height: 13px; border-radius: 1px;
+  background: var(--hud-bg); box-shadow: inset 0 0 0 1px var(--hud-line-2); color: var(--hud-ink);
+  font: 700 9px/1 var(--f-hud); font-style: normal; letter-spacing: 0;
+}
+.hl-corner, .hl-loc { position: sticky; left: 0; border-left: 0 !important; box-shadow: 1px 0 0 var(--hud-line-2); text-align: left !important; }
+.hl-corner { z-index: 3; vertical-align: bottom !important; padding: 0 14px 9px !important; border-bottom-color: var(--hud-line-2) !important; font-size: 10px !important; letter-spacing: 0.14em !important; }
+.hl-loc { z-index: 2; width: 150px; min-width: 150px; padding: 0 14px !important; background: var(--hud-head); }
+.hl-loc > span { display: grid; gap: 4px; }
+.hl-loc b { font: 600 14px/1.1 var(--f-hud); letter-spacing: 0.02em; color: var(--hud-ink); white-space: nowrap; }
+.hl-loc small { font: 500 11.5px/1.1 var(--f-hud); letter-spacing: 0.03em; color: var(--hud-dim); white-space: nowrap; }
+.hl-t tbody tr:hover > .hl-loc { background: color-mix(in srgb, var(--hud-ink) 7%, var(--hud-head)); }
+
+/* a level */
+.hl-c { position: relative; height: 54px; min-width: 76px; }
+.hl-v {
+  position: relative; display: grid; place-items: center; width: 100%; height: 54px; padding: 0; margin: 0;
+  border: 0; border-radius: 0; background: none; color: var(--hud-ink); font: inherit; cursor: pointer; overflow: hidden;
+  touch-action: manipulation;
+}
+.hl-v:disabled { cursor: default; opacity: 1; }
+.hl-fill {
+  position: absolute; inset: 0; pointer-events: none; opacity: var(--la, 0);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--hl-lamp) 36%, transparent), color-mix(in srgb, var(--hl-lamp) 20%, transparent));
+  transition: opacity 0.52s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hl-bar {
+  position: absolute; left: 0; bottom: 0; height: 3px; width: var(--lv, 0%); pointer-events: none; transform-origin: 0 50%;
+  background: var(--hl-lamp); transition: width 0.52s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hl-n { position: relative; display: inline-flex; align-items: baseline; gap: 1px; }
+.hl-n b { font: 600 19px/1 var(--f-hud); letter-spacing: 0.01em; }
+.hl-n small { font: 600 10px/1 var(--f-hud); color: var(--hud-dim); }
+.hl-d { position: absolute; top: 5px; right: 6px; font: 600 10px/1 var(--f-hud); font-style: normal; letter-spacing: 0.04em; color: var(--hud-dim); }
+.hl-dash { font: 500 16px/1 var(--f-hud); color: var(--hud-dim); opacity: 0.75; }
+/* aiming at one: corner brackets, as on your own spot in Scheduling */
+.hl-v:not(:disabled)::before, .hl-v:not(:disabled)::after {
+  content: ""; position: absolute; width: 8px; height: 8px; border: 2px solid var(--hud-ink); opacity: 0; pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.16s ease;
+}
+.hl-v::before { top: 3px; left: 3px; border-right: 0 !important; border-bottom: 0 !important; transform: translate(3px, 3px); }
+.hl-v::after { bottom: 3px; right: 3px; border-left: 0 !important; border-top: 0 !important; transform: translate(-3px, -3px); }
+@media (hover: hover) {
+  .hl-v:not(:disabled):hover::before, .hl-v:not(:disabled):hover::after { opacity: 1; transform: none; }
+  .hl-v:not(:disabled):hover { background: color-mix(in srgb, var(--hud-ink) 5%, transparent); }
+}
+.hl-v:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: -3px; }
+
+/* a service the location doesn't have */
+.hl-c.is-na { background: repeating-linear-gradient(-45deg, var(--hud-line) 0 1px, transparent 1px 7px); }
+.hl-na {
+  display: inline-block; padding: 3px 5px; background: var(--hud-bg);
+  font: 600 9.5px/1.1 var(--f-hud); letter-spacing: 0.12em; text-transform: uppercase; color: var(--hud-dim);
+}
+
+/* typing a level: the cell inverts */
+.hl-c.is-edit { background: var(--hud-ink); }
+.hl-ed { display: flex; align-items: center; justify-content: center; gap: 1px; height: 54px; color: var(--hud-bg); cursor: text; }
+.hl-input {
+  width: 3.2ch; padding: 0; margin: 0; border: 0; border-radius: 0; outline: 0; background: none; box-shadow: none;
+  color: var(--hud-bg); caret-color: var(--hud-bg); text-align: right; font: 600 19px/1 var(--f-hud); letter-spacing: 0.01em;
+}
+.hl-ed > span { font: 600 10px/1 var(--f-hud); opacity: 0.6; align-self: center; margin-top: 4px; }
+.hl-c.is-bad { background: var(--hud-d); }
+.hl-c.is-bad .hl-ed, .hl-c.is-bad .hl-input { color: var(--hud-d-ink); caret-color: var(--hud-d-ink); }
+.hl-c.is-bad .hl-ed { animation: hl-shake 0.34s linear; }
+/* someone changed it (or you did): a flash of light */
+.hl-c.is-flash .hl-v { animation: hl-flash 0.9s ease-out; }
+@keyframes hl-shake { 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+@keyframes hl-flash { 0% { background: color-mix(in srgb, var(--hl-lamp) 50%, transparent); } 100% { background: transparent; } }
+
+/* opening the page: the lights come up, top left to bottom right (each strikes, then settles
+   at its level), and the bars run out */
+.hl-t.hl-boot .hl-fill { animation: hl-strike 0.7s ease-out both; animation-delay: calc(0.08s + var(--r, 0) * 35ms + var(--c, 0) * 22ms); }
+.hl-t.hl-boot .hl-bar { animation: hl-run 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(0.14s + var(--r, 0) * 35ms + var(--c, 0) * 22ms); }
+.hl-t.hl-boot :is(.hl-n, .hl-dash, .hl-d, .hl-na) { animation: hl-flick 0.42s steps(4, end) both; animation-delay: calc(0.2s + var(--r, 0) * 35ms + var(--c, 0) * 22ms); }
+.hl-t.hl-boot :is(.hl-loc > span, .hl-seg > span, .hl-svc > span) { animation: pv-boot 0.5s steps(3, end) both; animation-delay: calc(var(--r, 0) * 35ms + var(--c, 0) * 22ms); }
+@keyframes hl-strike { 0% { opacity: 0; } 18% { opacity: 1; filter: brightness(1.9); } 30% { opacity: 0.2; filter: none; } }
+@keyframes hl-run { from { transform: scaleX(0); } }
+@keyframes hl-flick { 0% { opacity: 0; } 25% { opacity: 0.8; } 50% { opacity: 0.15; } 75%, 100% { opacity: 1; } }
+
+/* Sundays ⇄ Wednesdays: what's on the sheet goes out top left to bottom right, the frame eases
+   to the other's height as they cross over, then the other's comes in the same way */
+.hl-t.hl-out :is(.hl-c > *, .hl-loc > span, .hl-seg > span, .hl-svc > span) {
+  opacity: 0; transform: translateX(-8px);
+  transition: opacity 0.15s ease, transform 0.18s ease-in;
+  transition-delay: calc(var(--r, 0) * 16ms + var(--c, 0) * 12ms);
+}
+.hl-t.hl-hide :is(.hl-c > *, .hl-loc > span, .hl-seg > span, .hl-svc > span) { opacity: 0; transform: translateX(10px); }
+.hl-t.hl-in :is(.hl-c > *, .hl-loc > span, .hl-seg > span, .hl-svc > span) {
+  transition: opacity 0.26s ease, transform 0.34s cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  transition-delay: calc(var(--r, 0) * 30ms + var(--c, 0) * 22ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hl-fill, .hl-bar { transition: none; }
+  .hl-t :is(.hl-c > *, .hl-loc > span, .hl-seg > span, .hl-svc > span) { transition: none !important; }
+}
+
+@media (max-width: 699px) {
+  .page-house-lights .page-title h1 { font-size: 24px; }
+  .page-house-lights .page-title span { display: none; } /* "Lighting /": the menu says it */
+  .hl-stage { margin-left: calc(-1 * var(--gutter-l)); margin-right: calc(-1 * var(--gutter-r)); border-left: 0; border-right: 0; border-radius: 0; }
+  .hl-hint { margin: 0; }
+  .hl-t .lf { display: none; }
+  .hl-t .ls { display: inline; }
+  .hl-corner, .hl-loc { width: 50px; min-width: 50px; max-width: 50px; padding-left: 10px !important; padding-right: 4px !important; }
+  .hl-corner { font-size: 9px !important; letter-spacing: 0.06em !important; }
+  .hl-loc small { display: none; }
+  .hl-loc b { font-size: 12.5px; letter-spacing: 0.04em; }
+  .hl-seg { height: 30px; font-size: 10px !important; letter-spacing: 0.06em !important; white-space: normal; line-height: 1.1 !important; }
+  .hl-svc b { display: none; } /* the letter says it */
+  .hl-c { height: 48px; min-width: 54px; }
+  .hl-v, .hl-ed { height: 48px; }
+  .hl-n b, .hl-input { font-size: 17px; }
+  .hl-d { top: 4px; right: 4px; font-size: 9px; }
+  .hl-na { padding: 2px 3px; font-size: 8px; letter-spacing: 0.06em; }
+}
+
+/* ---------------------------------------------------------- "Are you sure?" -- */
+/* hud.js hudConfirm: a small box in the console look over the page, which stays behind it
+   dimmed and blurred. What changes is drawn as from → to (40% → 55%), "Removed" when it's
+   cleared. It opens out from a line like a person's pop-up and collapses to one to close. */
+html.hc-on, html.hc-on body { overflow: hidden; }
+html.hc-on #toast { z-index: 99; }
+html.hc-on .fs-btn { display: none; }
+.hc-root {
+  position: fixed; inset: 0; bottom: calc(-1 * var(--vgap, 0px)); z-index: 96; display: grid; place-items: center;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px) + var(--vgap, 0px));
+  background: rgb(3 5 7 / 0.5); backdrop-filter: blur(6px) saturate(0.85); -webkit-backdrop-filter: blur(6px) saturate(0.85);
+  color: var(--hud-ink); font-family: var(--f-hud);
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .hc-root { background: rgb(12 16 19 / 0.28); } }
+:root[data-theme="light"] .hc-root { background: rgb(12 16 19 / 0.28); }
+.hc-box {
+  position: relative; width: min(400px, 100%); padding: 18px 20px 18px; overflow: hidden;
+  background: var(--hud-bg) repeating-linear-gradient(0deg, color-mix(in srgb, var(--hud-ink) 2.5%, transparent) 0 1px, transparent 1px 3px);
+  border: 1px solid var(--hud-line-2); border-radius: 3px; box-shadow: 0 24px 70px rgb(0 0 0 / 0.55);
+}
+.hc-box::before, .hc-box::after { content: ""; position: absolute; width: 10px; height: 10px; border: 2px solid var(--hud-ink); pointer-events: none; }
+.hc-box::before { top: 5px; left: 5px; border-right: 0; border-bottom: 0; }
+.hc-box::after { bottom: 5px; right: 5px; border-left: 0; border-top: 0; }
+.hc-scan { position: absolute; left: 0; right: 0; top: 0; height: 2px; opacity: 0; pointer-events: none; background: var(--hud-ink); box-shadow: 0 0 18px 4px color-mix(in srgb, var(--hud-ink) 30%, transparent); }
+.hc-where { margin: 0 0 8px; font: 600 11px/1.35 var(--f-hud); letter-spacing: 0.12em; text-transform: uppercase; color: var(--hud-dim); }
+.hc-box h2 { margin: 0; font: 600 19px/1.2 var(--f-hud); letter-spacing: 0.01em; color: var(--hud-ink); }
+.hc-change {
+  display: flex; align-items: center; gap: 14px; margin: 16px 0 0; padding: 14px 16px; min-height: 66px;
+  background: var(--hud-head); box-shadow: inset 0 0 0 1px var(--hud-line); font-variant-numeric: tabular-nums;
+}
+.hc-change .ico { width: 18px; height: 18px; flex: none; color: var(--hud-dim); }
+.hc-from { font: 600 22px/1 var(--f-hud); color: var(--hud-dim); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.hc-to { font: 600 34px/1 var(--f-hud); color: var(--hud-ink); }
+.hc-from.is-none, .hc-to.is-none {
+  padding: 6px 8px; border: 1px dashed var(--hud-line-2); text-decoration: none;
+  font: 600 12px/1 var(--f-hud); letter-spacing: 0.12em; text-transform: uppercase; color: var(--hud-dim);
+}
+.hc-to.is-none { border-color: var(--hud-d); color: var(--hud-d); }
+.hc-note { margin: 8px 0 0; font: 500 12px/1.35 var(--f-hud); letter-spacing: 0.02em; color: var(--hud-dim); }
+.hc-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.hc-acts button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 96px; min-height: 42px; padding: 0 16px;
+  border-radius: 2px; font: 600 12.5px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; touch-action: manipulation;
+}
+.hc-no { border: 1px solid var(--hud-line-2); background: var(--hud-head); color: var(--hud-ink); }
+.hc-no:hover { border-color: var(--hud-dim); }
+.hc-yes { border: 1px solid var(--hud-ink); background: var(--hud-ink); color: var(--hud-bg); }
+.hc-yes .ico { width: 15px; height: 15px; }
+.hc-yes:hover { background: color-mix(in srgb, var(--hud-ink) 86%, var(--hud-bg)); }
+.hc-root button:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: 2px; }
+.hc-root:not(.is-still) { animation: pv-on 0.18s ease-out both; }
+.hc-root:not(.is-still) .hc-box { animation: pv-crt 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.hc-root:not(.is-still) .hc-scan { animation: pv-scan 0.5s cubic-bezier(0.45, 0, 0.25, 1) 0.16s both; }
+.hc-root:not(.is-still) :is(.hc-change, .hc-acts) { animation: pv-boot 0.45s steps(3, end) backwards; } /* not after: its clip would cut off Yes's focus ring */
+.hc-root:not(.is-still) .hc-change { animation-delay: 0.22s; }
+.hc-root:not(.is-still) .hc-acts { animation-delay: 0.3s; }
+.hc-root.is-out { animation: pv-undim 0.2s ease-in forwards; }
+.hc-root.is-out .hc-box { animation: pv-off 0.2s cubic-bezier(0.6, 0, 0.4, 1) forwards; }
+@media (max-width: 699px) {
+  .hc-root { align-items: end; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px) + var(--vgap, 0px)); } /* in reach of a thumb */
+  .hc-acts button { flex: 1 1 0; min-height: 46px; }
+}

@@ -489,6 +489,31 @@ export function createDemoStore() {
       if (row) Object.assign(row, now); else db.cg.push({ sunday, campus_id: campusId, station: station || '', ...now });
       changed('cg');
     },
+    /** Lighting › House lights: the Worship Centers (not Laurens or Union), Planning Center's
+     *  made-up services, and a few levels to start. */
+    async houseLights() {
+      await wait(90);
+      const rooms = db.rooms.filter((r) => /^worship center$/i.test(r.name) && !['c-LAU', 'c-UN'].includes(r.campus_id)).map((r) => ({ id: r.id, name: r.name, campus_id: r.campus_id }));
+      const { types } = await pco.pcoData();
+      if (!db.house) {
+        const at = (code) => rooms.find((r) => r.campus_id === 'c-' + code)?.id;
+        const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+        db.house = [
+          ['SVL', 'vintage', 'pre', 60], ['SVL', 'vintage', 'worship', 35], ['SVL', 'vintage', 'host', 50], ['SVL', 'vintage', 'video', 15], ['SVL', 'vintage', 'message', 45],
+          ['SVL', 'modern', 'pre', 50], ['SVL', 'modern', 'worship', 10], ['SVL', 'modern', 'host', 40], ['SVL', 'modern', 'video', 0], ['SVL', 'modern', 'message', 40],
+          ['AND', 'vintage', 'pre', 55], ['AND', 'modern', 'pre', 55], ['AND', 'modern', 'worship', 15],
+          ['SVL', 'midweek', 'pre', 40], ['SVL', 'midweek', 'worship', 20],
+        ].filter(([c]) => at(c)).map(([c, service, segment, level], i) => ({ room_id: at(c), service, segment, level, updated_at: ago(i + 2), who: { full_name: 'Demo Admin' } }));
+      }
+      return clone({ rooms, types, levels: db.house });
+    },
+    async houseLightSet(roomId, service, segment, level) {
+      await wait(150);
+      if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can change house lights.');
+      db.house = (db.house || []).filter((r) => !(r.room_id === roomId && r.service === service && r.segment === segment));
+      if (level != null) db.house.push({ room_id: roomId, service, segment, level, updated_at: new Date().toISOString(), who: { full_name: me.full_name || 'Demo Admin' } });
+      changed('house');
+    },
     /** Gear's computers (campus, name, location): which CGs there are. */
     async cgComputers() {
       await wait(40);

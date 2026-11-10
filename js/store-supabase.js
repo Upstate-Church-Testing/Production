@@ -252,6 +252,21 @@ export async function createSupabaseStore(url, key) {
     async cgSetUpload(sunday, campusId, status, station = '') {
       ok(await sb.from('cg_uploads').upsert({ sunday, campus_id: campusId, station: station || '', status }, { onConflict: 'sunday,campus_id,station' }));
     },
+    /** Lighting › House lights: the rooms on the sheet, Planning Center's services (which
+     *  ones each room has), and every level set. */
+    async houseLights() {
+      const [rooms, types, levels] = await Promise.all([
+        sb.from('rooms').select('id, name, campus_id').eq('house_lights', true),
+        sb.from('pco_service_types').select('id, name, campus_id, access, on_roster, is_event'),
+        sb.from('house_light_levels').select('room_id, service, segment, level, updated_at, updated_by_name, who:profiles!house_light_levels_updated_by_fkey(full_name)'),
+      ]);
+      return { rooms: ok(rooms) || [], types: ok(types) || [], levels: ok(levels) || [] };
+    },
+    /** A level (0-100), or null to take it off. */
+    async houseLightSet(roomId, service, segment, level) {
+      if (level == null) ok(await sb.from('house_light_levels').delete().match({ room_id: roomId, service, segment }));
+      else ok(await sb.from('house_light_levels').upsert({ room_id: roomId, service, segment, level }, { onConflict: 'room_id,service,segment' }));
+    },
     /** Gear's computers (campus, name, location): which CGs there are (js/cg-rows.js). */
     async cgComputers() {
       return all(() => sb.from('devices').select('campus_id, name, location, device_types!inner(category)').eq('device_types.category', 'Computer'));
@@ -416,6 +431,7 @@ export async function createSupabaseStore(url, key) {
       // Planning Center rosters: the sync touches one row whenever anything changed.
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'pco_live' }, () => cb('pco'));
       ch.on('postgres_changes', { event: '*', schema: 'public', table: 'cg_uploads' }, () => cb('cg'));
+      ch.on('postgres_changes', { event: '*', schema: 'public', table: 'house_light_levels' }, () => cb('house'));
       ch.subscribe();
       return () => sb.removeChannel(ch);
     },
