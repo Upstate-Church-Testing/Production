@@ -1918,7 +1918,8 @@ button.bar-row:hover .bar-fill { filter: brightness(1.12); }
    out; only the one showing is visible (.is-active). Switching moves what's already there:
    the frame eases to the other's height while their lines cross over (.is-moving). */
 .ros-stage { position: relative; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
-.ros-wrap { position: absolute; top: 0; left: 0; right: 0; overflow: auto; overscroll-behavior: contain; }
+.ros-wrap { position: absolute; top: 0; left: 0; right: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.ros-wrap::-webkit-scrollbar { display: none; } /* the grid's own bar is under it (.ros-sb) */
 .ros-wrap:not(.is-active):not(.is-leaving) { visibility: hidden; pointer-events: none; }
 .ros-wrap.is-entering, .ros-wrap.is-leaving { opacity: 0; pointer-events: none; }
 .ros-stage.is-moving { transition: height 0.4s cubic-bezier(0.3, 0.7, 0.2, 1); }
@@ -2872,12 +2873,98 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { vertical-align: top; padding-top: 4px; }
 }
 
+/* --------------------------------------------- Scheduling's scroll bar -- */
+/* Under the totals (js: barHtml / bindBar / paintBar): the arrows under the labels step a
+   week; the track runs under the dates only, the past shaded, a tick at each date (the next
+   one lit); the thumb is the dates on screen. Not on phones. */
+.ros-sb { display: none; }
+@media (min-width: 700px) {
+  .ros-sb {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 18px; display: flex;
+    background: var(--hud-head); border-top: 1px solid var(--hud-line-2); user-select: none; -webkit-user-select: none;
+  }
+  .ros-sb-step { flex: none; width: var(--sb-l, 0px); display: flex; justify-content: flex-end; align-items: stretch; border-right: 1px solid var(--hud-line-2); }
+  .ros-sb-step button {
+    width: 30px; padding: 0; border: 0; border-left: 1px solid var(--hud-line); background: none; color: var(--hud-dim);
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .ros-sb-step button .ico { width: 13px; height: 13px; }
+  .ros-sb-step button[data-sb="-1"] .ico { transform: rotate(180deg); }
+  .ros-sb-step button:hover:not(:disabled) { background: var(--hud-ink); color: var(--hud-bg); }
+  .ros-sb-step button:disabled { opacity: 0.3; cursor: default; }
+  .ros-sb-step button:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: -2px; }
+  .ros-sb-track { position: relative; flex: 1; min-width: 0; cursor: pointer; overflow: hidden; }
+  .ros-sb-past { position: absolute; left: 0; top: 0; bottom: 0; background: repeating-linear-gradient(-45deg, var(--hud-line) 0 1px, transparent 1px 5px); pointer-events: none; }
+  .ros-sb-ticks i { position: absolute; top: 0; width: 1px; height: 5px; background: var(--hud-line-2); pointer-events: none; }
+  .ros-sb-ticks i.is-up { height: 100%; width: 2px; background: color-mix(in srgb, var(--hud-ink) 70%, transparent); }
+  .ros-sb-thumb {
+    position: absolute; top: 4px; bottom: 4px; min-width: 24px; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--hud-ink) 38%, var(--hud-head)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hud-ink) 55%, transparent);
+    cursor: grab; touch-action: none;
+  }
+  .ros-sb-thumb i { width: 11px; height: 4px; background: repeating-linear-gradient(90deg, var(--hud-bg) 0 1px, transparent 1px 3px); opacity: 0.8; }
+  .ros-sb-track:hover .ros-sb-thumb, .ros-sb-thumb.is-drag { background: var(--hud-ink); box-shadow: none; }
+  .ros-sb-thumb.is-drag { cursor: grabbing; }
+  .ros-stage.is-moving .ros-sb-thumb { transition: left 0.4s cubic-bezier(0.3, 0.7, 0.2, 1), width 0.4s cubic-bezier(0.3, 0.7, 0.2, 1); }
+  .ros-sb.is-off .ros-sb-thumb { display: none; }
+  .ros-sb.is-off .ros-sb-track { cursor: default; }
+}
+
+/* --------------------------------------------- the sidebar: console look -- */
+/* The same look as PCO › Scheduling: squared, hairlines, Chakra Petch, and an inverted
+   block for where you are (the page you're on), as Scheduling marks the next date. Phones
+   and small iPads get the same panel when it slides in. */
+.nav {
+  background: var(--hud-bg); border-color: var(--hud-line-2); border-radius: 0 4px 4px 0;
+  font-family: var(--f-hud);
+}
+.nav-brand .brand-name { font: 600 16px/1.1 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; }
+.nav-brand .brand-org { font: 500 11px/1.2 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim); }
+.nav-brand .mark, .menu-btn .mark { border-radius: 3px; }
+.nav-item, .nav-sub-item {
+  border-radius: 2px; color: var(--hud-dim);
+  font: 600 12.5px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase;
+}
+.nav-sub-item { font-size: 12px; letter-spacing: 0.08em; }
+.nav-item:hover, .nav-sub-item:hover, .nav-group.is-current .nav-item:hover { background: none; color: var(--hud-ink); box-shadow: inset 0 0 0 1px var(--hud-line-2); }
+.nav-group.is-current .nav-item { color: var(--hud-ink); }
+.nav-item.on .ico, .nav-group.is-current .nav-item .ico { color: inherit; }
+/* where you are: inverted */
+.nav-item.on, .nav-group.is-current .nav-item.on, .nav:not(.is-open) .nav-group.is-current .nav-item,
+.nav-sub-item.on, .nav-item.on:hover, .nav-group.is-current .nav-item.on:hover, .nav-sub-item.on:hover {
+  background: var(--hud-ink); color: var(--hud-bg); box-shadow: none;
+}
+/* the group you're in, open: its name stays lit, a square marker beside it */
+.nav.is-open .nav-group.is-current.has-kids .nav-item:not(.on) { box-shadow: inset 2px 0 0 var(--hud-ink); }
+.nav-sub::before { left: 23px; width: 1px; background: var(--hud-line-2); }
+.nav-sub-item.on::before { left: -26px; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 0; background: var(--hud-ink); box-shadow: none; }
+.nav-toggle { border-radius: 2px; color: var(--hud-dim); }
+.nav-toggle:hover { background: none; color: var(--hud-ink); box-shadow: inset 0 0 0 1px var(--hud-line-2); }
+.nav-caret { color: var(--hud-dim); }
+.nav-item.on .nav-caret { color: inherit; }
+.nav-foot { border-top: 1px solid var(--hud-line); padding-top: 8px; margin-top: 0; }
+.nav-user { border-radius: 2px; }
+.nav.is-open .nav-user { background: var(--hud-head); border-color: var(--hud-line-2); }
+.nav.is-open .nav-user:hover { border-color: var(--hud-dim); }
+.nav-user-text b { font: 600 13px/1.2 var(--f-hud); letter-spacing: 0.02em; }
+.nav-user-text small { font: 500 11px/1.2 var(--f-hud); letter-spacing: 0.08em; text-transform: uppercase; color: var(--hud-dim); }
+.nav .avatar { border-radius: 2px; background: var(--hud-head); box-shadow: inset 0 0 0 1px var(--hud-line-2); color: var(--hud-ink); font: 700 13px/1 var(--f-hud); }
+.nav-items { gap: 3px; }
+@media (min-width: 860px) {
+  .nav { border: 1px solid var(--hud-line-2); border-radius: 4px; }
+  .nav.is-open { border-color: var(--hud-line-2); box-shadow: 0 24px 70px rgb(0 0 0 / 0.55); }
+  .nav-item { height: 42px; }
+  .nav-sub-item { height: 34px; }
+}
+.menu-btn { border-radius: 4px; }
+.menu-btn .brand-name { font: 600 15px/1 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; }
+
 /* ------------------------------------------------------------ lanyards -- */
 /* Drawn like the real ones (js/lanyard.js): black and white production badges on a dark blue
    lanyard. The micro one sits beside a name on Scheduling: V, C or S; no badge means they
    still need one. The profile's lanyard picker shows each badge, top to bottom. */
-.lan-micro { display: block; flex: none; width: 12px; height: 19px; margin: -4px 0 -2px -3px; }
-.rp .lan-micro + .rp-mail { margin-left: -2px; }
+.lan-micro { display: block; flex: none; width: 12px; height: 19px; margin: -4px 0 -2px; }
+.rp .lan-micro { margin-right: -2px; } /* in front of the name */
 .lan-pick { display: grid; gap: 8px; }
 .lan-opt {
   display: grid; grid-template-columns: 44px minmax(0, 1fr) 20px; align-items: center; gap: 14px;
@@ -2898,7 +2985,227 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
 .lan-tick { display: grid; place-items: center; color: var(--fg); }
 .lan-tick .ico { width: 18px; height: 18px; }
 @media (max-width: 699px) {
-  .lan-micro { width: 10px; height: 16px; margin-right: -2px; }
+  .lan-micro { width: 10px; height: 16px; }
+  .rp .lan-micro { margin-right: -1px; }
+}
+
+/* --------------------------------------------- a person, full screen -- */
+/* views/person-full.js. The console look, full screen; it powers up (a scan line runs down,
+   the name tears in with its colours split, the photo resolves in steps, the badge drops in
+   on its lanyard, the panels boot one by one) and collapses to a line when it closes.
+   .is-in: the entrance is over (redraws don't replay it); .is-still: reduced motion. */
+html.pv-on, html.pv-on body { overflow: hidden; }
+html.pv-on #toast { z-index: 95; }
+html.pv-on .fs-btn { display: none; }
+.pv-root {
+  position: fixed; inset: 0; bottom: calc(-1 * var(--vgap, 0px)); z-index: 85;
+  background: var(--hud-bg); color: var(--hud-ink); font-family: var(--f-body);
+}
+.pv-fx {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden;
+  background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--hud-ink) 2.5%, transparent) 0 1px, transparent 1px 3px);
+}
+.pv-scan { position: absolute; left: 0; right: 0; top: 0; height: 2px; opacity: 0; background: var(--hud-ink); box-shadow: 0 0 22px 5px color-mix(in srgb, var(--hud-ink) 30%, transparent); }
+.pv-page {
+  position: absolute; inset: 0; overflow: auto; overscroll-behavior: contain;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(40px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+}
+.pv-page > * { max-width: 1160px; margin-left: auto; margin-right: auto; }
+.pv-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.pv-crumb { font: 600 11.5px/1.2 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hud-dim); }
+.pv-x {
+  display: grid; place-items: center; width: 42px; height: 42px; padding: 0; flex: none;
+  border: 1px solid var(--hud-line-2); border-radius: 2px; background: var(--hud-head); color: var(--hud-ink); cursor: pointer;
+}
+.pv-x:hover { background: var(--hud-ink); color: var(--hud-bg); }
+.pv-x:focus-visible, .pv-root button:focus-visible, .pv-root a:focus-visible, .pv-root textarea:focus-visible { outline: 2px solid var(--hud-ink); outline-offset: 2px; }
+
+/* who: the photo, the name, the badge */
+.pv-id { display: grid; grid-template-columns: 172px minmax(0, 1fr) 230px; align-items: end; gap: 28px; margin-bottom: 28px; }
+.pv-photo {
+  position: relative; width: 172px; height: 172px; display: grid; place-items: center; overflow: visible;
+  background: var(--hud-head); box-shadow: inset 0 0 0 1px var(--hud-line-2);
+  font: 600 54px/1 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim);
+}
+.pv-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pv-br { position: absolute; width: 16px; height: 16px; border: 2px solid var(--hud-ink); pointer-events: none; }
+.pv-br.tl { top: -6px; left: -6px; border-right: 0; border-bottom: 0; }
+.pv-br.br { bottom: -6px; right: -6px; border-left: 0; border-top: 0; }
+.pv-who { min-width: 0; padding-bottom: 6px; }
+.pv-name {
+  position: relative; margin: 0; overflow-wrap: anywhere;
+  font: 600 clamp(34px, 5.4vw, 66px)/0.98 var(--f-hud); letter-spacing: 0.02em; text-transform: uppercase;
+}
+.pv-you { font-style: normal; font-size: 0.32em; vertical-align: 0.9em; padding: 3px 7px; margin-left: 6px; background: var(--hud-ink); color: var(--hud-bg); letter-spacing: 0.1em; }
+.pv-places { margin: 12px 0 0; font: 500 15px/1.3 var(--f-hud); letter-spacing: 0.06em; color: var(--hud-dim); }
+.pv-lan { display: grid; justify-items: center; gap: 10px; }
+.pv-badge { width: 98px; height: 168px; transform-origin: 50% 0; color: var(--hud-dim); }
+.pv-badge svg { display: block; width: 100%; height: 100%; }
+.pv-fine { margin: 0; font: 500 11.5px/1.3 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim); text-align: center; }
+/* the lanyard dropdown */
+.pv-dd { position: relative; width: 100%; }
+.pv-dd-btn, .pv-dd-list button {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 12px;
+  border: 1px solid var(--hud-line-2); border-radius: 2px; background: var(--hud-head); color: var(--hud-ink);
+  font: 600 12.5px/1 var(--f-hud); letter-spacing: 0.08em; text-transform: uppercase; text-align: left; cursor: pointer;
+}
+.pv-dd-btn span, .pv-dd-list button span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-dd-btn .ico { width: 15px; height: 15px; transition: transform 0.2s ease; }
+.pv-dd.is-open .pv-dd-btn { background: var(--hud-ink); color: var(--hud-bg); border-color: var(--hud-ink); }
+.pv-dd.is-open .pv-dd-btn .ico { transform: rotate(180deg); }
+.pv-dd-btn:hover { border-color: var(--hud-dim); }
+.pv-dd-list {
+  position: absolute; z-index: 3; left: 0; right: 0; top: calc(100% + 4px); display: none;
+  background: var(--hud-bg); border: 1px solid var(--hud-line-2); box-shadow: 0 18px 50px rgb(0 0 0 / 0.55);
+}
+.pv-dd.is-open .pv-dd-list { display: grid; animation: pv-list 0.24s steps(4, end) both; }
+.pv-dd-list button { border: 0; border-bottom: 1px solid var(--hud-line); background: none; height: 42px; }
+.pv-dd-list button:last-child { border-bottom: 0; }
+.pv-dd-list button:hover, .pv-dd-list button:focus-visible { background: var(--hud-ink); color: var(--hud-bg); outline: 0; }
+.pv-dd-list button[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--hud-ink); }
+.pv-dd-list button .ico { width: 15px; height: 15px; }
+.pv-dd-list .lan-micro, .pv-dd-btn .lan-micro { margin: -4px 0 -2px; }
+@keyframes pv-list { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
+.pv-none-x { position: relative; display: block; flex: none; width: 12px; height: 15px; border: 1px dashed var(--hud-dim); border-radius: 1.5px; }
+.pv-none-x::before, .pv-none-x::after { content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 2px; margin: -1px 0 0 -6px; background: var(--hud-d); transform: rotate(45deg); }
+.pv-none-x::after { transform: rotate(-45deg); }
+
+/* the panels */
+.pv-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.pv-grid.has-spot { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr); }
+.pv-col { display: grid; gap: 14px; min-width: 0; }
+@media (max-width: 1100px) {
+  .pv-grid.has-spot { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pv-grid.has-spot .pv-col:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) { .pv-grid, .pv-grid.has-spot { grid-template-columns: minmax(0, 1fr); } }
+.pv-block { padding: 16px 16px 14px; background: var(--hud-head); border: 1px solid var(--hud-line-2); border-radius: 2px; min-width: 0; }
+.pv-block h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; font: 600 11.5px/1.2 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hud-dim); }
+.pv-block h2::before { content: ""; width: 7px; height: 7px; background: var(--hud-ink); flex: none; }
+.pv-block.is-spot { border-color: color-mix(in srgb, var(--hud-ink) 45%, var(--hud-line-2)); }
+.pv-sum { margin: 0 0 10px; font: 600 20px/1.2 var(--f-hud); letter-spacing: 0.02em; }
+.pv-sum.is-C { color: var(--hud-c); } .pv-sum.is-U { color: var(--hud-u); } .pv-sum.is-D { color: var(--hud-d); }
+.pv-rows { list-style: none; margin: 0; padding: 0; display: grid; }
+.pv-row {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 6px; border: 0; border-top: 1px solid var(--hud-line); background: none; color: inherit; text-align: left; cursor: pointer;
+}
+.pv-rows li:first-child .pv-row { border-top: 0; }
+.pv-row:hover { background: color-mix(in srgb, var(--hud-ink) 6%, transparent); }
+.pv-row .pv-go { width: 15px; height: 15px; color: var(--hud-dim); }
+.pv-date b, .pv-what b { display: block; font: 600 14px/1.2 var(--f-hud); letter-spacing: 0.03em; }
+.pv-date b { text-transform: uppercase; letter-spacing: 0.1em; font-size: 11.5px; color: var(--hud-dim); }
+.pv-date small { display: block; font: 600 15px/1.2 var(--f-hud); color: var(--hud-ink); white-space: nowrap; }
+.pv-what { min-width: 0; }
+.pv-what b, .pv-what small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-what small { display: block; margin-top: 3px; font-size: 12.5px; color: var(--hud-dim); }
+.pv-l { display: grid; place-items: center; width: 26px; height: 26px; font: 700 12px/1 var(--f-hud); border-radius: 1px; }
+.pv-l.st-C, .pv-st.st-C { background: var(--hud-c); color: var(--hud-c-ink); }
+.pv-l.st-U, .pv-st.st-U { background: none; box-shadow: inset 0 0 0 1.5px var(--hud-u); color: var(--hud-u); }
+.pv-l.st-D, .pv-st.st-D { background: repeating-linear-gradient(-45deg, var(--hud-d) 0 3px, color-mix(in srgb, var(--hud-d) 55%, transparent) 3px 6px); color: var(--hud-d-ink); }
+.pv-st { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 1px; font: 700 10.5px/1 var(--f-hud); letter-spacing: 0.12em; text-transform: uppercase; }
+.pv-invite { margin-top: 12px; padding: 12px; border: 1px solid var(--hud-u); }
+.pv-invite p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; color: color-mix(in srgb, var(--hud-ink) 85%, transparent); }
+.pv-invite b { color: var(--hud-u); }
+.pv-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.pv-btn {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px;
+  border: 1px solid var(--hud-line-2); border-radius: 2px; background: var(--hud-bg); color: var(--hud-ink); text-decoration: none; cursor: pointer;
+  font: 600 11.5px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase;
+}
+.pv-btn .ico { width: 14px; height: 14px; }
+.pv-btn:hover:not(:disabled) { background: var(--hud-ink); color: var(--hud-bg); border-color: var(--hud-ink); }
+.pv-btn:disabled { opacity: 0.4; cursor: default; }
+.pv-btn.is-bad { border-color: var(--hud-d); color: var(--hud-d); }
+.pv-btn.is-bad:hover { background: var(--hud-d); color: var(--hud-d-ink); }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-chips.is-tags { margin-top: 10px; }
+.pv-chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 1px solid var(--hud-line-2); font: 500 13px/1 var(--f-hud); color: var(--hud-dim); }
+.pv-chip b { color: var(--hud-ink); font-weight: 600; letter-spacing: 0.06em; }
+.pv-empty { margin: 0; color: var(--hud-dim); font-size: 14px; }
+.pv-block textarea {
+  width: 100%; resize: vertical; padding: 10px 12px; margin: 0 0 10px; border: 1px solid var(--hud-line-2); border-radius: 2px;
+  background: var(--hud-bg); color: var(--hud-ink); font: 400 14.5px/1.5 var(--f-body);
+}
+.pv-foot { margin-top: 18px; }
+.pv-foot a { display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase; color: var(--hud-dim); text-decoration: none; }
+.pv-foot a:hover { color: var(--hud-ink); }
+.pv-foot .ico { width: 14px; height: 14px; }
+
+@media (max-width: 860px) {
+  .pv-id { grid-template-columns: 120px minmax(0, 1fr); gap: 20px; }
+  .pv-photo { width: 120px; height: 120px; font-size: 40px; }
+  .pv-lan { grid-column: 1 / -1; grid-template-columns: 70px minmax(0, 1fr); justify-items: stretch; align-items: center; column-gap: 16px; }
+  .pv-lan .pv-badge { grid-row: span 2; width: 70px; height: 120px; }
+  .pv-fine { text-align: left; }
+}
+@media (max-width: 560px) {
+  .pv-id { grid-template-columns: 84px minmax(0, 1fr); gap: 16px; align-items: center; }
+  .pv-photo { width: 84px; height: 84px; font-size: 28px; }
+  .pv-places { margin-top: 8px; font-size: 13px; }
+  .pv-row { grid-template-columns: 54px minmax(0, 1fr) auto; gap: 10px; }
+  .pv-row .pv-go { display: none; }
+}
+
+/* powering up (once; not with reduced motion) */
+.pv-root:not(.is-still) { animation: pv-on 0.16s ease-out both; }
+.pv-root:not(.is-still) .pv-scan { animation: pv-scan 0.64s cubic-bezier(0.45, 0, 0.25, 1) 0.04s both; }
+.pv-root:not(.is-in):not(.is-still) .pv-in { animation: pv-boot 0.5s steps(3, end) both; animation-delay: calc(0.22s + var(--i, 0) * 0.075s); }
+.pv-root:not(.is-in):not(.is-still) .pv-photo.pv-in { animation: pv-pix 0.62s steps(7, end) 0.16s both; }
+.pv-root:not(.is-in):not(.is-still) .pv-name { animation: pv-tear 0.72s steps(1, end) 0.1s both; }
+.pv-root:not(.is-in):not(.is-still) .pv-name::before,
+.pv-root:not(.is-in):not(.is-still) .pv-name::after {
+  content: attr(data-text); position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  animation: pv-split 0.86s steps(1, end) 0.1s both;
+}
+.pv-root:not(.is-in):not(.is-still) .pv-name::before { color: var(--hud-d); transform: translateX(-4px); mix-blend-mode: screen; }
+.pv-root:not(.is-in):not(.is-still) .pv-name::after { color: #3aa0ff; transform: translateX(4px); mix-blend-mode: screen; animation-delay: 0.16s; }
+.pv-root:not(.is-in):not(.is-still) .pv-badge { animation: pv-drop 0.8s cubic-bezier(0.3, 1.5, 0.45, 1) 0.42s both; }
+.pv-badge.is-swap { animation: pv-swap 0.5s steps(1, end) both; }
+.pv-root.is-out { animation: pv-off 0.26s cubic-bezier(0.6, 0, 0.4, 1) forwards; }
+@keyframes pv-on { from { opacity: 0; } }
+@keyframes pv-scan { 0% { top: 0; opacity: 0; } 8% { opacity: 0.85; } 90% { opacity: 0.85; } 100% { top: 100%; opacity: 0; } }
+@keyframes pv-boot {
+  0% { opacity: 0; clip-path: inset(0 0 100% 0); transform: translateX(-6px); }
+  30% { opacity: 1; clip-path: inset(0 0 55% 0); transform: translateX(4px); }
+  45% { clip-path: inset(30% 0 30% 0); transform: translateX(-3px); filter: brightness(1.7); }
+  62% { clip-path: inset(0 0 10% 0); transform: translateX(2px); filter: none; }
+  80%, 100% { opacity: 1; clip-path: inset(0); transform: none; }
+}
+@keyframes pv-pix {
+  0% { clip-path: inset(0 0 100% 0); filter: grayscale(1) contrast(3) brightness(1.8); }
+  60% { clip-path: inset(0); filter: grayscale(1) contrast(2) brightness(1.3); }
+  100% { clip-path: inset(0); filter: none; }
+}
+@keyframes pv-tear {
+  0% { opacity: 0; }
+  8% { opacity: 1; clip-path: inset(0 0 68% 0); transform: translateX(-10px); }
+  18% { clip-path: inset(38% 0 22% 0); transform: translateX(7px); }
+  28% { clip-path: inset(8% 0 52% 0); transform: translateX(-4px); }
+  40% { clip-path: inset(0); transform: translateX(2px); }
+  54% { clip-path: inset(60% 0 0 0); transform: translateX(-2px); }
+  64%, 100% { opacity: 1; clip-path: inset(0); transform: none; }
+}
+@keyframes pv-split {
+  0% { opacity: 0; }
+  12% { opacity: 0.9; clip-path: inset(18% 0 52% 0); }
+  30% { clip-path: inset(62% 0 8% 0); }
+  48% { clip-path: inset(4% 0 78% 0); }
+  66% { opacity: 0.55; clip-path: inset(40% 0 38% 0); }
+  82%, 100% { opacity: 0; }
+}
+@keyframes pv-drop { 0% { opacity: 0; transform: translateY(-46px) rotate(-9deg); } 30% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes pv-swap {
+  0% { filter: invert(1); transform: translateX(3px); }
+  20% { filter: none; transform: translateX(-3px); clip-path: inset(30% 0 40% 0); }
+  40% { clip-path: inset(0); transform: none; filter: brightness(2.2); }
+  60% { filter: none; transform: translateX(1px); }
+  80%, 100% { transform: none; filter: none; }
+}
+@keyframes pv-off {
+  0% { opacity: 1; transform: none; }
+  55% { opacity: 1; transform: scaleY(0.012); filter: brightness(2.4); }
+  100% { opacity: 0; transform: scale(0.02, 0.012); }
 }
 
 /* ------------------------------------------------- full screen, touch -- */
@@ -2924,7 +3231,7 @@ html.is-touch, html.is-touch * { cursor: none !important; }
    The same four marks are used in the key, the pills, each service's square and the totals.
    An inverted block means "now": the selected week, and the next date's header. Your own
    spot has corner brackets. Type is Chakra Petch, squared like the rest of it. */
-.page-scheduling.is-roster {
+:root, .page-scheduling.is-roster {
   --hud-bg: #07090b;      /* the board */
   --hud-head: #0c1014;    /* header, footer and label columns */
   --hud-line: #192026;    /* hairlines */
@@ -2937,12 +3244,12 @@ html.is-touch, html.is-touch * { cursor: none !important; }
   --f-hud: "Chakra Petch", var(--f-body);
 }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .page-scheduling.is-roster {
+  :root:not([data-theme="dark"]), :root:not([data-theme="dark"]) .page-scheduling.is-roster {
     --hud-bg: #ffffff; --hud-head: #f3f5f6; --hud-line: #e2e6e9; --hud-line-2: #c6cdd3; --hud-ink: #0c1013; --hud-dim: #66717a;
     --hud-c: #0e9a57; --hud-c-ink: #ffffff; --hud-u: #c27800; --hud-u-ink: #ffffff; --hud-d: #d72a3c; --hud-d-ink: #ffffff;
   }
 }
-:root[data-theme="light"] .page-scheduling.is-roster {
+:root[data-theme="light"], :root[data-theme="light"] .page-scheduling.is-roster {
   --hud-bg: #ffffff; --hud-head: #f3f5f6; --hud-line: #e2e6e9; --hud-line-2: #c6cdd3; --hud-ink: #0c1013; --hud-dim: #66717a;
   --hud-c: #0e9a57; --hud-c-ink: #ffffff; --hud-u: #c27800; --hud-u-ink: #ffffff; --hud-d: #d72a3c; --hud-d-ink: #ffffff;
 }

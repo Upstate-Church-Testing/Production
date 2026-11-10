@@ -30,6 +30,25 @@ export function peopleView(host) {
   /** Each person with where they serve, what's coming up for them, and when they're next on. */
   function build(m) {
     const people = s.vol?.people || [];
+    const byPerson = gather(m);
+    return people.map((person) => withFacts(person, byPerson.get(person.pco_person_id))).filter((p) => !p.audioOnly);
+  }
+
+  /** Someone's facts (where they serve, their teams, what's coming up), with their record
+   *  when there is one: by record id or Planning Center person. Someone with no record (or a
+   *  viewer who can't see records) gets what Planning Center has. */
+  function profile(volId, pcoId) {
+    const m = host.model();
+    if (!m) return null;
+    const people = s.vol?.people || [];
+    const rec = (volId && people.find((x) => x.id === volId)) || (pcoId && people.find((x) => String(x.pco_person_id) === String(pcoId))) || null;
+    const byPerson = gather(m);
+    const key = rec?.pco_person_id || pcoId;
+    return withFacts(rec || { id: null, name: null, pco_person_id: pcoId || null, lanyard: null, tags: [], notes: null, photo: null }, key ? byPerson.get(key) || byPerson.get(String(key)) : null);
+  }
+
+  /** Planning Center's side: everyone's locations, teams and coming-up spots. */
+  function gather(m) {
     const members = s.vol?.members || [];
     const teamById = new Map(m.teams.map((t) => [t.id, t]));
     const campusesOfTeam = (t) => new Set((t.service_type_ids?.length ? t.service_type_ids : [t.service_type_id])
@@ -58,16 +77,18 @@ export function peopleView(host) {
         x.upcoming.push({ plan: p, position: r.position || teamById.get(r.team_id)?.name || 'On the team', status: r.status || 'U', campusId });
       }
     }
-    return people.map((person) => {
-      const x = (person.pco_person_id && byPerson.get(person.pco_person_id)) || { campuses: new Set(), teams: new Map(), upcoming: [], assigned: new Set() };
-      const campuses = new Set(x.campuses);
-      if (person.home_campus_id) campuses.add(person.home_campus_id);
-      const upcoming = [...x.upcoming].sort((a, b) => a.plan._start - b.plan._start);
-      const positions = [...new Set([...upcoming.map((u) => u.position), ...[...x.assigned].filter((pos) => !hiddenPosition(pos))])];
-      // Only runs audio (everything Planning Center lists for them is audio, and nothing else is coming up).
-      const audioOnly = !!person.pco_person_id && x.assigned.size > 0 && !positions.length && !upcoming.length;
-      return { ...person, campuses, teams: [...x.teams.values()], upcoming, next: upcoming[0] || null, positions, audioOnly };
-    }).filter((p) => !p.audioOnly);
+    return byPerson;
+  }
+
+  function withFacts(person, found) {
+    const x = (person.pco_person_id && found) || { campuses: new Set(), teams: new Map(), upcoming: [], assigned: new Set() };
+    const campuses = new Set(x.campuses);
+    if (person.home_campus_id) campuses.add(person.home_campus_id);
+    const upcoming = [...x.upcoming].sort((a, b) => a.plan._start - b.plan._start);
+    const positions = [...new Set([...upcoming.map((u) => u.position), ...[...x.assigned].filter((pos) => !hiddenPosition(pos))])];
+    // Only runs audio (everything Planning Center lists for them is audio, and nothing else is coming up).
+    const audioOnly = !!person.pco_person_id && x.assigned.size > 0 && !positions.length && !upcoming.length;
+    return { ...person, campuses, teams: [...x.teams.values()], upcoming, next: upcoming[0] || null, positions, audioOnly };
   }
 
   const placeName = (id) => ctx.campusById.get(id)?.short_name || '';
@@ -400,5 +421,5 @@ export function peopleView(host) {
     $('#vn-name', sheet.el)?.focus();
   }
 
-  return { draw, drawList, click, input, openPerson, lanyardChips, setLanyard };
+  return { draw, drawList, click, input, openPerson, lanyardChips, setLanyard, profile, places, placeName };
 }

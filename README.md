@@ -538,6 +538,7 @@ js/store-demo.js               preview data (same methods, in memory)
 js/views/cg.js                CG uploads: each campus's CG for the coming Sunday (not started, working, done)
 js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
+js/views/person-full.js       a person, full screen (from a name on Scheduling)
 js/lanyard.js                 the lanyard badges: the micro one on Scheduling, the large ones in a profile
 js/input.js                   full screen button (computers); hiding the pointer while touching
 js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
@@ -662,7 +663,29 @@ initials go in that same order, then the column pulls back in. `.crew-anim` is o
 it moves, so the grid's refreshes don't replay it. Whether it's open lasts while the app is
 open (`servicesNav.crew`).
 
-**Lanyards on the schedule** (staff; `js/lanyard.js`): beside each name on Scheduling, a tiny
+**A person, full screen** (`js/views/person-full.js`): tapping a name on Scheduling (or
+someone in the Team column) opens them full screen in the console look, not a side sheet:
+their photo, name and locations; their badge (staff: the one they have, drawn, with a
+dropdown to change it); the spot that was tapped (that day's services and answers, and the
+invite still to send, with Take off); everything coming up; their teams in Planning Center
+and tags; their notes (staff, editable); a link to Planning Center. It powers up when it
+opens (a scan line runs down, the name tears in with its colours split, the photo resolves
+in steps, the badge drops in on its lanyard, the panels boot one by one) and collapses to a
+line when it closes (Esc too). Reduced motion: it just appears. services.js `openFull`
+builds what it shows from Planning Center and People (`people.profile`), so a lanyard
+change shows at once without replaying the entrance. People's own list still opens the
+side sheet.
+
+**Scheduling's scroll bar**: the browser's is hidden; under the totals is one in the grid's
+look (`barHtml` / `bindBar` / `paintBar`): the arrows under the labels step a week, the
+track runs under the dates only (past shaded, a tick per date, the next one lit), and the
+thumb is the dates on screen (drag it, or tap the track). Not on phones (swipe); its 18px is
+taken off the grid's room so it still stops level with the sidebar.
+
+**The sidebar** is in the console look too (everywhere): squared, hairlines, Chakra Petch,
+and the page you're on as an inverted block. The console colours (`--hud-*`) are app-wide.
+
+**Lanyards on the schedule** (staff; `js/lanyard.js`): in front of each name on Scheduling, a tiny
 black badge on a stub of dark blue lanyard with a white V (Production Volunteer), C
 (Production Coach) or S (Staff), like the real black and white production badges. No badge
 beside a name means they don't have one yet, so who needs a badge this Sunday shows on the

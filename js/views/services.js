@@ -15,6 +15,7 @@ import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
 import { microBadge } from '../lanyard.js';
+import { openPersonFull } from './person-full.js';
 import { openScheduleSheet, takeOff } from './schedule-sheet.js';
 import { pcoModel, rosterData as sharedRosterData } from '../roster.js';
 import { createLive, liveButtonHtml } from '../live.js';
@@ -111,6 +112,9 @@ export function mount(el, ctx) {
   // then the other week's comes in the same way (styles.css, "Sundays ⇄ Wednesdays").
   let weekBusy = false;
   let weekWant = null; // tapped while one was still moving: go there once it's done
+  // Scheduling's scroll bar (barHtml, bindBar, paintBar)
+  let sbWrap = null;   // the grid it's following (the week that's showing)
+  let sbGeo = null;    // { labels: px under the labels, lf, cols: each date's place along the dates }
   const live = createLive(ctx, {
     tz: () => s.status?.time_zone,
     onClose: () => { liveSave(null); if (alive) $('[data-act="live"]', el)?.focus({ preventScroll: true }); },
@@ -160,13 +164,40 @@ export function mount(el, ctx) {
   });
 
   el.addEventListener('input', (e) => { if (nav.mode === 'people') people.input(e); });
+  // Scheduling's scroll bar: dragging the thumb, tapping the track (the arrows are clicks).
+  el.addEventListener('pointerdown', (e) => {
+    const track = e.target.closest('.ros-sb-track');
+    if (!track || !sbWrap || !sbGeo) return;
+    const wrap = sbWrap;
+    const dates = wrap.scrollWidth - sbGeo.labels;
+    const tw = track.getBoundingClientRect();
+    const thumb = e.target.closest('.ros-sb-thumb');
+    e.preventDefault();
+    if (!thumb) { // the track: go there (that point in the middle)
+      const at = (e.clientX - tw.left) / tw.width;
+      const shown = wrap.clientWidth - sbGeo.labels;
+      wrap.scrollTo({ left: at * dates - shown / 2, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return;
+    }
+    const x0 = e.clientX;
+    const s0 = wrap.scrollLeft;
+    thumb.setPointerCapture(e.pointerId);
+    thumb.classList.add('is-drag');
+    const move = (ev) => { wrap.scrollLeft = s0 + ((ev.clientX - x0) / tw.width) * dates; };
+    const up = () => { thumb.classList.remove('is-drag'); thumb.removeEventListener('pointermove', move); thumb.removeEventListener('pointerup', up); thumb.removeEventListener('pointercancel', up); };
+    thumb.addEventListener('pointermove', move);
+    thumb.addEventListener('pointerup', up);
+    thumb.addEventListener('pointercancel', up);
+  });
+
   el.addEventListener('click', (e) => {
     if (nav.mode === 'people' && people.click(e)) return;
-    const t = e.target.closest('[data-act], [data-smode], [data-week], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro]');
+    const t = e.target.closest('[data-act], [data-smode], [data-week], [data-campus], [data-date], [data-plan], [data-goto], [data-pane], [data-at], [data-rp], [data-ro], [data-sb]');
     if (!t) return;
     if (t.dataset.smode) { setMode(t.dataset.smode); return; }
     if (t.dataset.week) { switchWeek(t.dataset.week); return; }
-    if (t.dataset.rp) { openPill(t.dataset.rp); return; }
+    if (t.dataset.sb) { stepWeek(Number(t.dataset.sb)); return; }
+    if (t.dataset.rp) { openFull({ pillId: t.dataset.rp }); return; }
     if (t.dataset.ro) { openOpen(t.dataset.ro); return; }
     if (t.dataset.campus) { pickCampus(t.dataset.campus); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (t.dataset.date) { nav.date = t.dataset.date; nav.plan = null; nav.at = 0; draw(); return; }
@@ -183,7 +214,7 @@ export function mount(el, ctx) {
     else if (act === 'attn-off') { attn = null; draw(); }
     else if (act === 'live') openLive(nav.plan);
     else if (act === 'crew') toggleCrew(t);
-    else if (act === 'crew-p') people.openPerson(t.dataset.v); // their full profile, as on People
+    else if (act === 'crew-p') openFull({ volId: t.dataset.v }); // them, full screen
   });
 
   const onVisible = () => { if (document.visibilityState === 'visible') checkStatus(); };
@@ -397,7 +428,7 @@ export function mount(el, ctx) {
       pills = new Map();
       opens = new Map();
       box.innerHTML = (attn && m.week === 'sun' ? attentionHtml(m) : '')
-        + `<div class="ros-stage">${weeks.map((w) => roster(m, w, rosterCampus(m), w === m.week)).join('')}</div>`;
+        + `<div class="ros-stage">${weeks.map((w) => roster(m, w, rosterCampus(m), w === m.week)).join('')}${barHtml()}</div>`;
       // Wednesdays is a few rows: the size they are on Sundays (every location), not blown up
       // to fill the screen.
       const wrapOf = (w) => $(`.ros-wrap[data-wk="${w}"]`, box);
@@ -412,6 +443,8 @@ export function mount(el, ctx) {
         if (attn && w === 'sun' && m.week === 'sun') markAttention(wrap, !k);
       }
       fitStage();
+      $$('.ros-wrap', box).forEach((w) => w.addEventListener('scroll', () => { if (w === sbWrap) paintBar(); }, { passive: true }));
+      bindBar();
       return;
     }
     if (nav.mode === 'people') { people.draw(box); return; }
@@ -734,7 +767,7 @@ export function mount(el, ctx) {
     const lan = isStaff && pill.person_id ? lanyardOf(pill.person_id) : null;
     const label = `${name}${lan ? ` (${LANYARDS[lan]} lanyard)` : ''}: ${STATUS_LABEL[pill.status]}${pill.entries.length > 1 ? ` (${pill.entries.map((e) => `${kindName(m.type(e.plan), e.plan)} ${(STATUS_LABEL[e.status] || STATUS_LABEL.U).toLowerCase()}`).join(', ')})` : ''}`;
     return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
-      <span class="rp-dots">${dots}</span><b>${many || nameShort(name) === name ? esc(shown) : `<span class="nf">${esc(name)}</span><span class="ns">${esc(nameShort(name))}</span>`}</b>${lan ? microBadge(lan, `${LANYARDS[lan]} lanyard`) : ''}${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
+      <span class="rp-dots">${dots}</span>${lan ? microBadge(lan, `${LANYARDS[lan]} lanyard`) : ''}<b>${many || nameShort(name) === name ? esc(shown) : `<span class="nf">${esc(name)}</span><span class="ns">${esc(nameShort(name))}</span>`}</b>${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
     </button>`;
   }
 
@@ -802,8 +835,87 @@ export function mount(el, ctx) {
     const wrap = stage && $('.ros-wrap.is-active', stage);
     if (!stage || !wrap) return;
     const edges = stage.offsetHeight - stage.clientHeight; // its top and bottom border
-    stage.style.height = `${wrap.offsetHeight + edges}px`;
+    stage.style.height = `${wrap.offsetHeight + sbH() + edges}px`;
   }
+
+  // ------------------------------------------------------- the scroll bar ---
+  // Under the totals, in the grid's own look (the browser's is hidden): its track runs under
+  // the dates only, with a tick at each date (the next one lit, the past shaded); the thumb is
+  // the dates on screen. Drag it, tap the track to go there, or step a week with the arrows
+  // under the labels. Not on phones (swipe), where it takes no room.
+  function sbH() { return window.innerWidth >= 700 ? 18 : 0; } // its height (styles.css .ros-sb)
+
+  function barHtml() {
+    return `<div class="ros-sb">
+      <div class="ros-sb-step">
+        <button type="button" data-sb="-1" aria-label="Back a week">${icon('chevron')}</button>
+        <button type="button" data-sb="1" aria-label="On a week">${icon('chevron')}</button>
+      </div>
+      <div class="ros-sb-track" aria-hidden="true"><span class="ros-sb-past"></span><span class="ros-sb-ticks"></span><b class="ros-sb-thumb"><i></i></b></div>
+    </div>`;
+  }
+
+  /** Follow the grid that's showing: where its dates start, and each date's place along them. */
+  function bindBar() {
+    const stage = $('.ros-stage', el);
+    const bar = stage && $('.ros-sb', stage);
+    const wrap = stage && $('.ros-wrap.is-active', stage);
+    sbWrap = wrap || null;
+    if (!bar || !wrap || !sbH()) { sbGeo = null; return; }
+    const table = $('.ros', wrap);
+    const tr = table?.getBoundingClientRect();
+    const corners = table ? $$('thead .ros-corner', table).map((c) => c.getBoundingClientRect()) : [];
+    if (!tr?.width || !corners.length) { bar.classList.add('is-off'); sbGeo = null; return; }
+    // Measured as parts of the table (Safari and Chrome measure a zoomed table differently;
+    // the parts are the same in both), then put in the grid's own pixels. The labels stay put
+    // while the dates scroll, so their width is from the first one's left edge.
+    const lf = (corners[corners.length - 1].right - corners[0].left) / tr.width;
+    const days = $$('thead .ros-day', table);
+    const cols = days.map((d) => {
+      const r = d.getBoundingClientRect();
+      return { at: ((r.left - tr.left) / tr.width - lf) / (1 - lf), w: r.width / tr.width / (1 - lf), up: d.classList.contains('is-up'), past: d.classList.contains('is-past') };
+    });
+    const full = Math.max(wrap.scrollWidth, wrap.clientWidth);
+    sbGeo = { labels: lf * full, lf, cols };
+    bar.style.setProperty('--sb-l', `${Math.round(lf * full)}px`);
+    const firstUp = cols.find((c) => !c.past);
+    $('.ros-sb-past', bar).style.width = `${((firstUp ? firstUp.at : 1) * 100).toFixed(2)}%`;
+    $('.ros-sb-ticks', bar).innerHTML = cols.map((c, i) => (i ? `<i class="${c.up ? 'is-up' : ''}" style="left:${(c.at * 100).toFixed(2)}%"></i>` : '')).join('')
+      + (cols.find((c) => c.up && cols.indexOf(c) === 0) ? '<i class="is-up" style="left:0"></i>' : '');
+    paintBar();
+  }
+
+  /** The thumb where the grid is. */
+  function paintBar() {
+    const bar = $('.ros-stage .ros-sb', el);
+    const wrap = sbWrap;
+    if (!bar || !wrap || !sbGeo) return;
+    const dates = wrap.scrollWidth - sbGeo.labels;
+    const shown = wrap.clientWidth - sbGeo.labels;
+    const can = dates > shown + 1;
+    bar.classList.toggle('is-off', !can);
+    const th = $('.ros-sb-thumb', bar);
+    const w = can ? Math.max(0.06, shown / dates) : 1;
+    const left = can ? Math.min(1 - w, wrap.scrollLeft / dates) : 0;
+    th.style.width = `${(w * 100).toFixed(3)}%`;
+    th.style.left = `${(left * 100).toFixed(3)}%`;
+    $('[data-sb="-1"]', bar).disabled = !can || wrap.scrollLeft <= 1;
+    $('[data-sb="1"]', bar).disabled = !can || wrap.scrollLeft >= wrap.scrollWidth - wrap.clientWidth - 1;
+  }
+
+  /** Step a week: the next date (or the one before) lines up beside the labels. */
+  function stepWeek(dir) {
+    const wrap = sbWrap;
+    if (!wrap || !sbGeo) return;
+    const dates = wrap.scrollWidth - sbGeo.labels;
+    const at = wrap.scrollLeft / dates;
+    const starts = sbGeo.cols.map((c) => c.at);
+    const target = dir > 0 ? starts.find((x) => x > at + 0.002) : [...starts].reverse().find((x) => x < at - 0.002);
+    if (target == null) return;
+    wrap.scrollTo({ left: target * dates, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
+
+
 
   /** Sundays ⇄ Wednesdays, with both already laid out: what's on this one goes out (top left
    *  to bottom right), the frame eases to the other's height while their lines cross over,
@@ -840,6 +952,7 @@ export function mount(el, ctx) {
       void stage.offsetWidth;
       to.classList.remove('is-entering');
       fitStage();
+      bindBar();
       setTimeout(() => {
         if (!alive) return;
         from.classList.remove('is-leaving');
@@ -947,7 +1060,7 @@ export function mount(el, ctx) {
     // bottom, clear of an iPad's home indicator, reaching the real bottom where iOS 26.0 lays
     // the home-screen app out short (--vgap).
     const room = Math.max(220, window.innerWidth < 700 ? window.innerHeight - top - below
-      : window.innerHeight + vgapPx() - safeBottom() - top - below - 16);
+      : window.innerHeight + vgapPx() - safeBottom() - top - below - 16) - sbH();
     // On a phone, never so big that fewer than three weeks fit across beside the labels.
     let MAX = window.innerWidth < 600 ? 1.25 : 1.5;
     if (window.innerWidth < 700) {
@@ -1024,83 +1137,105 @@ export function mount(el, ctx) {
   }
 
   /** One person's day on one position: each service and their answer to it. */
-  function openPill(id) {
-    const x = pills.get(id);
-    const m = model();
-    if (!x || !m) return;
-    const { row, pill } = x;
-    const isMe = m.me && pill.person_id === m.me;
-    const name = pill.name || (isMe ? ctx.me.full_name || 'You' : 'Someone');
-    const first = pill.entries[0].plan;
-    const place = ctx.campusById.get(row.campusId)?.short_name;
-    const counts = { C: 0, U: 0, D: 0 };
-    for (const e of pill.entries) counts[e.status in counts ? e.status : 'U']++;
-    const n = pill.entries.length;
-    const all = n === 2 ? 'both' : `all ${n}`;
-    const summary = pill.status === 'C' ? (n > 1 ? `Confirmed for ${all} services` : 'Confirmed')
-      : pill.status === 'D' ? (counts.D === n ? (n > 1 ? `Declined ${all} services` : 'Declined') : `Declined ${counts.D} of ${n} services`)
-      : counts.U === n ? (n > 1 ? `Hasn’t answered ${n === 2 ? 'either' : `any of the ${n}`} yet` : 'Hasn’t answered yet')
-      : `Hasn’t answered ${counts.U} of ${n} services yet`;
-    const photo = realPhoto(pill.photo);
-    const sheet = ctx.openSheet({ label: name, className: 'rp-sheet' });
-    const render = () => {
-      const vol = isStaff && pill.person_id ? s.vol?.people.find((v) => v.pco_person_id === pill.person_id) : null;
-      sheet.render(`
-      <header class="sh-head">
-        <div class="sh-top"><span class="eyebrow">${esc([place, `${m.c.weekday(first.sort_date)}, ${m.c.date(first.sort_date)}`].filter(Boolean).join(' · '))}</span>
-          <button class="icon-btn" data-close aria-label="Close">${icon('close')}</button></div>
-        <div class="rp-who">
-          <span class="ro-av">${photo ? `<img src="${esc(photo)}" alt="" referrerpolicy="no-referrer">` : esc(initials(name))}</span>
-          <div><h2>${esc(name)}${isMe ? ' <em class="you">You</em>' : ''}</h2><p class="sh-sub">${esc(row.position)} · ${esc(row.team)}</p></div>
-        </div>
-      </header>
-      <div class="sh-body">
-        <p class="rp-sum st-${pill.status}">${statusMark(pill.status)}<b>${esc(summary)}</b></p>
-        <ul class="svc-mine">${pill.entries.map((e) => `<li><button type="button" class="svc-mine-row" data-goto="${e.plan.id}">
-          <span class="rp-dots is-big"><i class="st-${esc(e.status)}">${esc(kindLetter(m.type(e.plan), e.plan))}</i></span>
-          <span class="svc-you-when"><b>${esc(firstTime(m, e.plan))}</b><small>${esc(m.c.weekday(e.plan.sort_date).slice(0, 3))} ${esc(m.c.date(e.plan.sort_date))}</small></span>
-          <span class="svc-you-what"><b>${esc(kindName(m.type(e.plan), e.plan))}</b><small>${esc(STATUS_LABEL[e.status] || STATUS_LABEL.U)}</small></span>
-          ${statusMark(e.status)}
-          ${icon('chevron', 'svc-place-go')}
-        </button></li>`).join('')}</ul>
-        ${isStaff && pill.invite ? inviteBlock(pill) : ''}
-        ${vol ? `<section class="block rp-lan">
-          <h3>Lanyard</h3>
-          <div class="rp-lan-row">${people.lanyardChips(vol)}<span class="fine">${vol.lanyard ? esc(LANYARDS[vol.lanyard]) : 'No lanyard yet'}</span>
-          <button type="button" class="btn small ghost" data-vprofile="${vol.id}">${icon('me')}Profile</button></div>
-        </section>` : ''}
-      </div>`);
-    };
-    sheet.el.addEventListener('click', (e) => {
-      const g = e.target.closest('[data-goto]');
-      if (g) { sheet.close(true); openPlan(g.dataset.goto); return; }
-      const l = e.target.closest('[data-lan]');
-      if (l) { people.setLanyard(l.dataset.vid, l.dataset.lan, () => { render(); if (nav.mode === 'roster') draw(); }); return; }
-      const pr = e.target.closest('[data-vprofile]');
-      if (pr) { sheet.close(true); people.openPerson(pr.dataset.vprofile); return; }
-      const off = e.target.closest('[data-takeoff]');
-      if (off) {
-        if (off.dataset.sure !== '1') { off.dataset.sure = '1'; off.innerHTML = `${icon('trash')}Tap again to take ${esc(name.split(/\s+/)[0])} off`; return; }
-        off.disabled = true;
-        takeOff(ctx, pill.entries.filter((x) => x.invite && x.ppid).map((x) => x.ppid))
-          .then(() => { ctx.toast(`${name} taken back off`); sheet.close(true); })
-          .catch((err) => { ctx.toast(err.message); off.disabled = false; });
+  /** Someone full screen (views/person-full.js): from a name on the grid (with that spot) or
+   *  the Team column. Built from Planning Center and their People record each time it's
+   *  drawn, so a lanyard change shows at once. */
+  function openFull({ pillId = null, volId = null } = {}) {
+    const x = pillId ? pills.get(pillId) : null;
+    if (!model() || (pillId && !x)) return;
+    const pcoId = x?.pill.person_id || (volId && s.vol?.people.find((v) => v.id === volId)?.pco_person_id) || null;
+    const recOf = () => (isStaff ? (volId && s.vol?.people.find((v) => v.id === volId)) || (pcoId && s.vol?.people.find((v) => String(v.pco_person_id) === String(pcoId))) || null : null);
+    const get = () => {
+      const m = model();
+      if (!m) return null;
+      const rec = recOf();
+      const p = people.profile(rec?.id || null, pcoId);
+      const isMe = !!(m.me && pcoId && pcoId === m.me);
+      const name = rec?.name || x?.pill.name || p?.name || (isMe ? ctx.me.full_name || 'You' : 'Someone');
+      const photo = realPhoto(x?.pill.photo || rec?.photo || null);
+      // The spot that was tapped: that day there, each service and its answer.
+      let spot = null;
+      if (x) {
+        const { row, pill } = x;
+        const first = pill.entries[0].plan;
+        const counts = { C: 0, U: 0, D: 0 };
+        for (const e of pill.entries) counts[e.status in counts ? e.status : 'U']++;
+        const n = pill.entries.length;
+        const all = n === 2 ? 'both' : `all ${n}`;
+        const summary = pill.status === 'C' ? (n > 1 ? `Confirmed for ${all} services` : 'Confirmed')
+          : pill.status === 'D' ? (counts.D === n ? (n > 1 ? `Declined ${all} services` : 'Declined') : `Declined ${counts.D} of ${n} services`)
+            : counts.U === n ? (n > 1 ? `Hasn’t answered ${n === 2 ? 'either' : `any of the ${n}`} yet` : 'Hasn’t answered yet')
+              : `Hasn’t answered ${counts.U} of ${n} services yet`;
+        const waiting = isStaff ? pill.entries.filter((e) => e.invite && e.status !== 'D') : [];
+        spot = {
+          title: `${m.c.weekday(first.sort_date)}, ${m.c.date(first.sort_date)} · ${[ctx.campusById.get(row.campusId)?.short_name, row.position].filter(Boolean).join(' ')}`,
+          status: pill.status,
+          summary,
+          entries: pill.entries.map((e) => ({ planId: e.plan.id, letter: kindLetter(m.type(e.plan), e.plan), kind: kindName(m.type(e.plan), e.plan), time: firstTime(m, e.plan), status: e.status || 'U' })),
+          invite: waiting.length ? {
+            links: waiting.filter((e) => e.plan.url && e.plan.url !== '#').map((e) => ({ href: e.plan.url, label: `${kindName(m.type(e.plan), e.plan)} in Planning Center` })),
+            canTakeOff: pill.entries.some((e) => e.invite && e.ppid),
+          } : null,
+        };
       }
+      // Everything coming up, a day at a time.
+      const days = new Map();
+      for (const u of p?.upcoming || []) {
+        const k = `${u.plan._day}|${u.campusId || ''}`;
+        if (!days.has(k)) days.set(k, []);
+        days.get(k).push(u);
+      }
+      const upcoming = [...days.values()].map((list) => {
+        const u = list[0];
+        const plans = [...new Map(list.map((y) => [y.plan.id, y.plan])).values()];
+        const sts = list.map((y) => y.status);
+        return {
+          planId: u.plan.id,
+          day: m.c.weekday(u.plan.sort_date).slice(0, 3),
+          date: m.c.date(u.plan.sort_date),
+          what: [...new Set(list.map((y) => y.position))].join(', '),
+          detail: [ctx.campusById.get(u.campusId)?.short_name, plans.map((pl) => kindName(m.type(pl), pl)).join(', ')].filter(Boolean).join(' · '),
+          status: sts.includes('D') ? 'D' : sts.some((y) => y !== 'C') ? 'U' : 'C',
+        };
+      });
+      const gaveBy = rec?.lanyard_by ? ctx.people.get(rec.lanyard_by)?.full_name : null;
+      return {
+        name, photo, isMe,
+        where: x ? `${x.row.team} · ${x.row.position}` : '',
+        places: p ? people.places(p).join(' · ') : '',
+        canLanyard: !!rec,
+        lanyard: rec?.lanyard || null,
+        lanyardNote: rec ? (rec.lanyard ? `Given ${timeAgo(rec.lanyard_at)}${gaveBy ? ` by ${gaveBy}` : ''}` : 'Needs a badge') : '',
+        spot,
+        upcoming,
+        teams: (p?.teams || []).map((t) => ({ team: t.team, place: people.placeName(t.campusId) })),
+        tags: rec?.tags || [],
+        notes: rec ? rec.notes || '' : null,
+        pcoUrl: pcoId ? `https://services.planningcenteronline.com/people/AC${pcoId}` : null,
+      };
+    };
+    openPersonFull(ctx, {
+      get,
+      goto: (id) => openPlan(id),
+      setLanyard: (kind) => new Promise((resolve) => {
+        const rec = recOf();
+        if (!rec) { resolve(); return; }
+        // setLanyard toggles: giving the one they have takes it back (None).
+        people.setLanyard(rec.id, kind || rec.lanyard, () => { if (nav.mode === 'roster' && alive) draw(); });
+        resolve();
+      }),
+      saveNotes: async (text) => {
+        const rec = recOf();
+        if (!rec) return;
+        await ctx.store.saveVolunteer({ id: rec.id, notes: text });
+        rec.notes = text;
+      },
+      takeOff: async () => {
+        const ids = x ? x.pill.entries.filter((e) => e.invite && e.ppid).map((e) => e.ppid) : [];
+        await takeOff(ctx, ids);
+        ctx.toast(`${x?.pill.name || 'They'} taken back off`);
+      },
     });
-    render();
-  }
-
-  /** Scheduled, but Planning Center hasn't emailed them yet: send it there (the API can't). */
-  function inviteBlock(pill) {
-    const waiting = pill.entries.filter((e) => e.invite && e.status !== 'D');
-    const m = model();
-    const links = waiting.filter((e) => e.plan.url && e.plan.url !== '#');
-    return `<section class="block sch-send">
-      <h3>${icon('mail')}Invite not sent yet</h3>
-      <p>Planning Center hasn’t emailed them, so it isn’t on their schedule yet. Open the plan, tap the ✉️ by their name, keep <b>Email</b> checked, and hit <b>Send</b>.</p>
-      <div class="sch-links">${links.map((e) => `<a class="btn small" href="${esc(e.plan.url)}" target="_blank" rel="noopener">${icon('open')}${esc(kindName(m.type(e.plan), e.plan))} in Planning Center</a>`).join('')}
-        <button type="button" class="btn small ghost danger-text" data-takeoff>${icon('trash')}Take off</button></div>
-    </section>`;
   }
 
   function mySchedule(m) {
