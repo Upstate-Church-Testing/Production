@@ -2872,6 +2872,35 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   html.ros-lock .ros tfoot th, html.ros-lock .ros tfoot td { vertical-align: top; padding-top: 4px; }
 }
 
+/* ------------------------------------------------------------ lanyards -- */
+/* Drawn like the real ones (js/lanyard.js): black and white production badges on a dark blue
+   lanyard. The micro one sits beside a name on Scheduling: V, C or S; no badge means they
+   still need one. The profile's lanyard picker shows each badge, top to bottom. */
+.lan-micro { display: block; flex: none; width: 12px; height: 19px; margin: -4px 0 -2px -3px; }
+.rp .lan-micro + .rp-mail { margin-left: -2px; }
+.lan-pick { display: grid; gap: 8px; }
+.lan-opt {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) 20px; align-items: center; gap: 14px;
+  width: 100%; padding: 8px 14px 8px 12px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--panel-2); color: var(--fg); text-align: left; cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.lan-opt:hover { border-color: var(--faint); }
+.lan-opt[aria-checked="true"] { border-color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, var(--panel-2)); }
+.lan-opt.is-none[aria-checked="true"] { border-color: #ff4a5c; background: color-mix(in srgb, #ff4a5c 8%, var(--panel-2)); }
+.lan-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lan-art { display: block; width: 44px; height: 75px; color: var(--muted); }
+.lan-art svg { display: block; width: 100%; height: 100%; }
+.lan-opt:not([aria-checked="true"]) .lan-art { opacity: 0.75; }
+.lan-txt b { display: block; font: 700 15px/1.25 var(--f-body); }
+.lan-txt small { display: flex; align-items: center; gap: 7px; margin-top: 5px; color: var(--muted); font-size: 12.5px; }
+.lan-txt small .lan-micro { margin: -3px 0 -2px; }
+.lan-tick { display: grid; place-items: center; color: var(--fg); }
+.lan-tick .ico { width: 18px; height: 18px; }
+@media (max-width: 699px) {
+  .lan-micro { width: 10px; height: 16px; margin-right: -2px; }
+}
+
 /* ------------------------------------------------- full screen, touch -- */
 /* Full screen (computers): in the top right corner, in the margin right of every page's
    head, under sheets and menus (js/input.js). */

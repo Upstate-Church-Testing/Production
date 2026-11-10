@@ -14,6 +14,7 @@ import { esc, icon, $, $$, debounce, plural, timeAgo, initials, pageTitle } from
 import { ALL, dropdownHtml, wireDropdown } from '../picker.js';
 import { clock, teamKey, teamServices, realPhoto, STATUS_LABEL } from '../pco.js';
 import { peopleView, LANYARDS } from './volunteers.js';
+import { microBadge } from '../lanyard.js';
 import { openScheduleSheet, takeOff } from './schedule-sheet.js';
 import { pcoModel, rosterData as sharedRosterData } from '../roster.js';
 import { createLive, liveButtonHtml } from '../live.js';
@@ -729,9 +730,11 @@ export function mount(el, ctx) {
       if (l) letters.add(l);
       return `<i class="st-${esc(e.status)}">${esc(l)}</i>`;
     }).join('');
-    const label = `${name}: ${STATUS_LABEL[pill.status]}${pill.entries.length > 1 ? ` (${pill.entries.map((e) => `${kindName(m.type(e.plan), e.plan)} ${(STATUS_LABEL[e.status] || STATUS_LABEL.U).toLowerCase()}`).join(', ')})` : ''}`;
+    // Their badge (staff can see it): a little black badge with V, C or S; none means they need one.
+    const lan = isStaff && pill.person_id ? lanyardOf(pill.person_id) : null;
+    const label = `${name}${lan ? ` (${LANYARDS[lan]} lanyard)` : ''}: ${STATUS_LABEL[pill.status]}${pill.entries.length > 1 ? ` (${pill.entries.map((e) => `${kindName(m.type(e.plan), e.plan)} ${(STATUS_LABEL[e.status] || STATUS_LABEL.U).toLowerCase()}`).join(', ')})` : ''}`;
     return `<button type="button" class="rp st-${pill.status} ${isMe ? 'is-me' : ''}" data-rp="${id}" title="${esc(label)}" aria-label="${esc(label)}">
-      <span class="rp-dots">${dots}</span><b>${many || nameShort(name) === name ? esc(shown) : `<span class="nf">${esc(name)}</span><span class="ns">${esc(nameShort(name))}</span>`}</b>${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
+      <span class="rp-dots">${dots}</span><b>${many || nameShort(name) === name ? esc(shown) : `<span class="nf">${esc(name)}</span><span class="ns">${esc(nameShort(name))}</span>`}</b>${lan ? microBadge(lan, `${LANYARDS[lan]} lanyard`) : ''}${isStaff && pill.invite ? `<span class="rp-mail" title="Invite not sent yet">${icon('mail')}</span>` : ''}
     </button>`;
   }
 
@@ -857,6 +860,14 @@ export function mount(el, ctx) {
         }, b.rows * 14 + b.cols * 26 + 420);
       }, 400);
     }, a.rows * 8 + a.cols * 14 + 180);
+  }
+
+  /** Someone's lanyard (volunteer, coach, staff), by their Planning Center person id. */
+  function lanyardOf(pcoId) {
+    const vol = s.vol;
+    if (!vol) return null;
+    if (crewIx?.vol !== vol) crewIx = { vol, byPco: new Map((vol.people || []).filter((v) => v.pco_person_id).map((v) => [String(v.pco_person_id), v])) };
+    return crewIx.byPco.get(String(pcoId))?.lanyard || null;
   }
 
   /** A row's team in Planning Center: everyone on that location's team (any of its services

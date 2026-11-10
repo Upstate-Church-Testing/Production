@@ -9,8 +9,9 @@
 
 import { esc, icon, $, $$, plural, initials, timeAgo } from '../util.js';
 import { realPhoto, hiddenPosition } from '../pco.js';
+import { badgeArt, noBadgeArt, microBadge, LANYARD_LETTER } from '../lanyard.js';
 
-export const LANYARDS = { volunteer: 'Production Volunteer', coach: 'Production Coach', staff: 'Production Staff' };
+export const LANYARDS = { volunteer: 'Production Volunteer', coach: 'Production Coach', staff: 'Staff' };
 const SHORT = { volunteer: 'Volunteer', coach: 'Coach', staff: 'Staff' };
 const KINDS = ['volunteer', 'coach', 'staff'];
 const ALL = 'all';
@@ -230,9 +231,15 @@ export function peopleView(host) {
         <div class="sh-body">
           <section class="block">
             <h3>Lanyard</h3>
-            <div class="seg vol-pick" role="radiogroup" aria-label="Lanyard">
-              ${[[null, 'None'], ...KINDS.map((k) => [k, LANYARDS[k]])].map(([k, label]) =>
-                `<button type="button" role="radio" data-pa="lan" data-k="${k || ''}" aria-checked="${(p.lanyard || null) === k}" aria-selected="${(p.lanyard || null) === k}">${k ? `<i class="lan-dot is-${k}"></i>` : ''}${esc(label)}</button>`).join('')}
+            <div class="lan-pick" role="radiogroup" aria-label="Lanyard">
+              ${[[null, 'None'], ...KINDS.map((k) => [k, LANYARDS[k]])].map(([k, label]) => {
+                const on = (p.lanyard || null) === k;
+                return `<button type="button" role="radio" class="lan-opt is-${k || 'none'}" data-pa="lan" data-k="${k || ''}" aria-checked="${on}">
+                  <span class="lan-art">${k ? badgeArt(k) : noBadgeArt()}</span>
+                  <span class="lan-txt"><b>${esc(label)}</b><small>${k ? `${microBadge(k)} on the schedule` : 'Needs a badge'}</small></span>
+                  <span class="lan-tick" aria-hidden="true">${on ? icon('check') : ''}</span>
+                </button>`;
+              }).join('')}
             </div>
             <p class="fine">${p.lanyard ? `Given ${esc(timeAgo(p.lanyard_at))}${gaveBy ? ` by ${esc(gaveBy)}` : ''}.` : 'No lanyard yet.'}</p>
           </section>

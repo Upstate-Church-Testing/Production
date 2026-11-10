@@ -538,6 +538,7 @@ js/store-demo.js               preview data (same methods, in memory)
 js/views/cg.js                CG uploads: each campus's CG for the coming Sunday (not started, working, done)
 js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the volunteers on the next Sunday, for now)
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
+js/lanyard.js                 the lanyard badges: the micro one on Scheduling, the large ones in a profile
 js/input.js                   full screen button (computers); hiding the pointer while touching
 js/cg-rows.js                 CG uploads' rows (a campus's main CG, plus CG2…), shared by CG uploads and Home
 js/views/events.js            Events: one-off Planning Center services, with Live (the service clock), Flow and Team
@@ -660,6 +661,16 @@ every row at once), then the initials come in from top left to bottom right. Clo
 initials go in that same order, then the column pulls back in. `.crew-anim` is only on while
 it moves, so the grid's refreshes don't replay it. Whether it's open lasts while the app is
 open (`servicesNav.crew`).
+
+**Lanyards on the schedule** (staff; `js/lanyard.js`): beside each name on Scheduling, a tiny
+black badge on a stub of dark blue lanyard with a white V (Production Volunteer), C
+(Production Coach) or S (Staff), like the real black and white production badges. No badge
+beside a name means they don't have one yet, so who needs a badge this Sunday shows on the
+grid itself. It reads the person's lanyard from People (matched by Planning Center person),
+and changes there show on the grid live. In someone's profile, the lanyard picker is a
+column of the badges themselves (the Upstate Church mark, the kind, upstatechurch.org) on
+their lanyard, with None as an empty badge crossed out in red. The third kind is labelled
+just **Staff** (it was Production Staff).
 
 **Full screen** (computers, `js/input.js`): a small button in the top right corner, in the
 margin beside every page's head, puts Tally in the browser's full screen and takes it out
