@@ -374,15 +374,36 @@ event form (Schedule › Create › Broadcast, content source Live Encoder):
 - Destinations (free text); **Paused** ("Pause Event" in Studio: kept, but doesn't run).
 - Tally's own: when the service itself starts, and notes.
 
-The board shows a day at a time (‹ › go to the previous and next day with something on it):
-a row per encoder, A to Z, each event drawn where it runs, its pre-buffer hatched like
-Studio's calendar, a marker where the service starts, and a red line for now. Two events on
-one encoder that run into each other (pre-buffer included) are flagged: Studio won't run
-both, so one was copied over wrong. **Every event** lists each encoder's events with how
-they repeat and end, the pre-buffer, when the encoder comes on, the start, the duration and
-the end; tap one to change, duplicate or remove it. **Encoders** names them as Studio does
-(Settings › Encoders) and sets where each one is. Nothing here changes Studio: change Studio
-first, then Tally. Stored in `resi_encoders` and `resi_schedules`; changes show up live.
+The board shows a day at a time, next to Planning Center (‹ › go to the previous and next day
+with something on either). A row per location, all ten A to Z (an encoder that isn't at a
+location gets its own row). In each row:
+
+- **Planning Center** (Tally's copy of it, `pco_plans.times`, every location's shared
+  services; not hidden ones or one-off events): rehearsals as thin dashed bars, services as
+  clear outlined bars with the start in bold, and dotted lines down from each service's start
+  and end. A time on two plans that day (Vintage and Modern share the line check) shows once.
+  Planning Center's "Other" times (Service Flow/Host Meeting, huddles) aren't shown; a time
+  named like "PLEASE IGNORE DATE" is left out. Tap a bar to open the plan in Planning Center.
+- **Resi**: the pre-buffer (the encoder on early) hatched, then the event, lighter where it
+  runs outside Planning Center's time, with how far it runs before and after ("5 before ·
+  15 after").
+
+Each Resi run is matched to what it's for: the services it really overlaps (at least half the
+service, or half the run: not one it only clips), or if none, the rehearsals. Under the board
+is what doesn't line up: a service with no Resi event (or only a paused one) at a location
+with an installed encoder; a Resi run that starts after or stops before its service (to fix)
+or rehearsal (to look at); a Resi run with nothing in Planning Center then; two events on one
+encoder that run into each other (Studio won't run both, so one was copied over wrong).
+
+**Every Resi event** lists each encoder's events with how they repeat and end, the pre-buffer,
+when the encoder comes on, the start, the duration and the end, and how the next run lines up
+with Planning Center; tap one to change, duplicate or remove it. While typing an event, the
+strip at the top draws it against Planning Center's service or rehearsal for its next run.
+**Encoders** names them as Studio does (Settings › Encoders), sets where each one is and
+whether it's installed (one that isn't, like Fountain Inn's for now, isn't checked for
+services without a Resi event). Nothing here changes Studio: change Studio first, then Tally.
+Stored in `resi_encoders` and `resi_schedules` (`service_time` there is no longer used:
+Planning Center has the times); changes show up live.
 
 ## Gear: where things are, and what's missing (staff)
 

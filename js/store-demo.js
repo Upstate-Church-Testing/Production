@@ -519,13 +519,13 @@ export function createDemoStore() {
       await wait(90);
       if (!db.resiEnc) {
         const names = [['Anderson', 'AND'], ['Five Forks', 'FF'], ['Fountain Inn', 'FI'], ['GCC', 'GCC'], ['Greenville', 'GVL'], ['Harrison Bridge', 'HB'], ['Mauldin', 'MAU'], ['Simpsonville', 'SVL']];
-        db.resiEnc = names.map(([name, code]) => ({ id: 'enc-' + code, name, campus_id: CAMPUSES.some((c) => c.id === 'c-' + code) ? 'c-' + code : null, notes: null, updated_at: ago(60 * 30) }));
+        db.resiEnc = names.map(([name, code]) => ({ id: 'enc-' + code, name, campus_id: CAMPUSES.some((c) => c.id === 'c-' + code) ? 'c-' + code : null, installed: code !== 'FI', notes: null, updated_at: ago(60 * 30) }));
         const sun = (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10); })();
         const ev = (code, name, start, mins, pre, service, extra = {}) => ({
           id: uid(), encoder_id: 'enc-' + code, name, description: null, encoder_preset: '1080p', encoder_channel: `${names.find(([, c]) => c === code)[0]} Channel`,
           prebuffer_min: pre, start_date: sun, start_time: start, duration_min: mins, timezone: 'America/New_York',
           repeats: true, repeat_every: 1, repeat_unit: 'week', repeat_days: [0], repeat_month: 'date', ends: 'never', ends_on: null, ends_after: null,
-          destinations: 'Web channel', paused: false, service_time: service, notes: null, updated_at: ago(60 * 20), who: { full_name: 'Demo Admin' }, ...extra,
+          destinations: 'Web channel', paused: false, notes: null, updated_at: ago(60 * 20), who: { full_name: 'Demo Admin' }, ...extra,
         });
         db.resiSched = [
           ev('HB', '8:15 AM Vintage', '08:10', 70, 30, '08:15'),
@@ -540,6 +540,10 @@ export function createDemoStore() {
       }
       return clone({ encoders: db.resiEnc, schedules: db.resiSched });
     },
+    async resiPco(fromIso) {
+      const { types, plans } = await pco.pcoData();
+      return clone({ types, plans: plans.filter((p) => p.sort_date >= fromIso) });
+    },
     async resiEncoderSave(row) {
       await wait(120);
       if (!['staff', 'admin'].includes(me.role)) throw new Error('Only staff can change encoders.');
@@ -548,7 +552,7 @@ export function createDemoStore() {
       if (db.resiEnc.some((e) => e.id !== row.id && e.name.toLowerCase() === name.toLowerCase())) throw new Error(`There's already an encoder called ${name}.`);
       let e = row.id && db.resiEnc.find((x) => x.id === row.id);
       if (e) Object.assign(e, row, { name, updated_at: now() });
-      else { e = { id: uid(), notes: null, campus_id: null, ...row, name, updated_at: now() }; db.resiEnc.push(e); }
+      else { e = { id: uid(), notes: null, campus_id: null, installed: true, ...row, name, updated_at: now() }; db.resiEnc.push(e); }
       changed('resi_studio');
       return e.id;
     },

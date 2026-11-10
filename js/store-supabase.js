@@ -266,10 +266,19 @@ export async function createSupabaseStore(url, key) {
     /** Resi › Studio: the encoders and the events scheduled on them (typed in from Resi Studio). */
     async resiStudio() {
       const [encoders, schedules] = await Promise.all([
-        sb.from('resi_encoders').select('id, name, campus_id, notes, updated_at, updated_by_name'),
+        sb.from('resi_encoders').select('id, name, campus_id, installed, notes, updated_at, updated_by_name'),
         sb.from('resi_schedules').select('*, who:profiles!resi_schedules_updated_by_fkey(full_name)'),
       ]);
       return { encoders: ok(encoders) || [], schedules: ok(schedules) || [] };
+    },
+    /** Planning Center for Resi › Studio: every service type (with its location) and the plans
+     *  from `fromIso` on, with their times (services, rehearsals). */
+    async resiPco(fromIso) {
+      const [types, plans] = await Promise.all([
+        all(() => sb.from('pco_service_types').select('id, name, campus_id, access, is_event').order('name')),
+        all(() => sb.from('pco_plans').select('id, service_type_id, title, sort_date, times, url').gte('sort_date', fromIso).order('sort_date')),
+      ]);
+      return { types, plans };
     },
     /** Add (no id) or change an encoder; returns its id. */
     async resiEncoderSave(row) {

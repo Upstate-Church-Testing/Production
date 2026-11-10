@@ -1,15 +1,21 @@
-// Resi › Studio: Resi Studio's schedule, kept in Tally so it can be read without opening Studio.
-// Resi's API can't list or change scheduled events (only start or stop one right now), so the
-// team types each event in here from Studio, with the same fields as Studio's event form.
+// Resi › Studio: Resi Studio's schedule, kept in Tally so it can be read without opening Studio,
+// side by side with Planning Center's clock for every location. Resi's API can't list or change
+// scheduled events (only start or stop one right now), so the team types each event in here from
+// Studio, with the same fields as Studio's event form. Planning Center comes from Tally's own copy
+// of it (pco_plans: each plan's times, its services and rehearsals).
 //
-// The board: one day at a time, a row per encoder (A to Z), each event drawn where it runs:
-// the pre-buffer (the encoder starting early) hatched, then the event itself, with a mark at
-// the service's own start when it's known. Events that run into each other on one encoder are
-// flagged (Studio won't run both, so one of them was copied over wrong). ‹ › go to the
-// previous and next day with something on it.
+// The board: one day at a time, a row per location (all ten, A to Z; an encoder that isn't at a
+// location gets a row of its own). In each row, Planning Center's rehearsals (thin, dashed) and
+// services (clear, outlined, with dotted lines down from their start and end), then Resi: the
+// pre-buffer (the encoder on early) hatched, then the event, lighter where it runs outside
+// Planning Center's time. Each Resi run is checked against Planning Center: under the board are
+// the services Resi doesn't cover, Resi runs that start after or stop before the service (or
+// rehearsal) they're for, Resi runs with nothing in Planning Center then, and two events on one
+// encoder that run into each other. ‹ › go to the previous and next day with something on it.
 // Every event: under each encoder, what it is, how it repeats and ends, the pre-buffer, when the
-// encoder comes on, the start, the duration and the end. Tap one to change it.
-// Encoders: as named in Studio › Settings › Encoders, each at its location. Staff and up.
+// encoder comes on, the start, the duration and the end, and how its next run lines up with
+// Planning Center. Tap one to change it. Encoders: as named in Studio › Settings › Encoders, each
+// at its location. Staff and up.
 
 import { esc, icon, $, $$, debounce, timeAgo, pageTitle } from '../util.js';
 import { hudConfirm, hudPanel } from '../hud.js';
@@ -21,12 +27,50 @@ const MAX_RUN = 720; // Resi: an encoder can't run more than 12 hours straight
 /** A phone shows a location's code, as Scheduling does. */
 const SHORT = { AND: 'AN', MAU: 'MLN' };
 const both = (full, short) => (short && short !== full ? `<span class="lf">${esc(full)}</span><span class="ls">${esc(short)}</span>` : esc(full));
+/** The board's lanes, in px: a rehearsal, a service, a Resi event; the gap between lanes and
+ *  the row's padding. */
+const LANE = { reh: 16, svc: 24, resi: 32, gap: 3, pad: 7, sep: 5 };
+const PCO_BACK_DAYS = 21; // Planning Center plans this far back are on the board too
+
+/** The Planning Center times the Resi run [start, end] is for: the services it really overlaps
+ *  (at least half the service, or half the run: not one it just clips the end of), or if none,
+ *  the rehearsals it does. lead: minutes Resi starts before them (negative: after); tail:
+ *  minutes it runs past their end (negative: stops before). null when nothing lines up. */
+export function matchRun(run, services, rehearsals) {
+  const over = (list) => list.filter((y) => {
+    const o = Math.min(run.end, y.end) - Math.max(run.start, y.start);
+    return o > 0 && (o >= (y.end - y.start) / 2 || o >= (run.end - run.start) / 2);
+  });
+  const sv = over(services);
+  const items = sv.length ? sv : over(rehearsals);
+  if (!items.length) return null;
+  const first = Math.min(...items.map((y) => y.start));
+  const last = Math.max(...items.map((y) => y.end));
+  return { kind: sv.length ? 'service' : 'rehearsal', items, first, last, lead: first - run.start, tail: run.end - last, noEnd: items.some((y) => y.noEnd) };
+}
+
+/** "Vintage and Modern", each name once. */
+const names = (items) => [...new Set(items.map((y) => y.name))].join(' and ');
+
+/** Lanes for overlapping bars: each item gets .lane; returns how many lanes. */
+function pack(items, a = (x) => x.start, b = (x) => x.end) {
+  const ends = [];
+  for (const it of [...items].sort((x, y) => a(x) - a(y) || b(y) - b(x))) {
+    let lane = ends.findIndex((e) => e <= a(it));
+    if (lane < 0) { lane = ends.length; ends.push(0); }
+    ends[lane] = b(it);
+    it.lane = lane;
+  }
+  return ends.length;
+}
+
+const ago = (n) => `${n} min`;
 
 export function mount(el, ctx) {
   let alive = true;
   const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const canEdit = ctx.roleAtLeast(ctx.me.role, 'staff');
-  const s = { data: null, date: null, moving: false, flash: null };
+  const s = { data: null, pco: null, pcoError: null, date: null, moving: false, flash: null };
 
   el.innerHTML = `<div class="rs">
       <div class="page-head"><div class="mode-row">${pageTitle(ctx.page)}
@@ -34,7 +78,7 @@ export function mount(el, ctx) {
           <button type="button" class="rs-btn" data-act="encoders" aria-label="Encoders">${icon('settings')}<span>Encoders</span></button>
           <button type="button" class="rs-btn is-main" data-act="add" aria-label="Add an event">${icon('plus')}<span>Event</span></button></div>` : ''}
         </div>
-        <p class="rs-note">Copied over from Resi Studio by hand, since Resi’s API can’t read scheduled events. Change something in Studio, change it here too.</p>
+        <p class="rs-note">Resi is copied over from Resi Studio by hand (Resi’s API can’t read scheduled events), so change it here when you change it in Studio. Services and rehearsals come from Planning Center.</p>
       </div>
       <div class="results rs-body" id="rs-body"><div class="loading"><div class="sk tall"></div></div></div>
     </div>`;
@@ -44,22 +88,61 @@ export function mount(el, ctx) {
   el.addEventListener('keydown', (e) => { // a row in Every event opens like a button
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('tr[data-ev]')) { e.preventDefault(); e.target.click(); }
   });
-  const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'resi_studio') load(); }, 250));
+  const unsubscribe = ctx.store.subscribe(debounce((table) => { if (table === 'resi_studio' || table === 'pco') load(); }, 300));
   load(true);
   return { unmount() { alive = false; unsubscribe(); } };
 
   // ------------------------------------------------------------------ data ---
   async function load(first = false) {
-    let data;
-    try { data = await ctx.store.resiStudio(); } catch (e) {
-      if (alive && !s.data) body.innerHTML = `<div class="empty"><h3>Couldn’t load the schedule</h3><p>${esc(e.message)}</p></div>`;
+    const from = new Date(Date.now() - PCO_BACK_DAYS * 864e5).toISOString();
+    const [resi, pco] = await Promise.allSettled([ctx.store.resiStudio(), ctx.store.resiPco ? ctx.store.resiPco(from) : Promise.resolve(null)]);
+    if (!alive) return;
+    if (resi.status === 'rejected') {
+      if (!s.data) body.innerHTML = `<div class="empty"><h3>Couldn’t load the schedule</h3><p>${esc(resi.reason?.message || '')}</p></div>`;
       return;
     }
-    if (!alive) return;
-    s.data = data;
+    s.data = resi.value;
+    if (pco.status === 'fulfilled' && pco.value) { s.pco = indexPco(pco.value); s.pcoError = null; }
+    else if (pco.status === 'rejected') s.pcoError = pco.reason?.message || 'Couldn’t load Planning Center.';
     if (!s.date) s.date = startDate();
     draw(first);
   }
+
+  /** Planning Center by day and location: { byDate: Map(date -> Map(campus -> { services,
+   *  rehearsals })), dates }. Every location's shared services (not hidden ones, not one-off
+   *  events). Times are Eastern. A time on two plans that day (Vintage and Modern share the
+   *  line check) shows once. A placeholder time ("PLEASE IGNORE DATE") is left out. */
+  function indexPco({ types, plans }) {
+    const keep = new Map((types || []).filter((t) => t.campus_id && t.access !== 'hidden' && !t.is_event).map((t) => [t.id, t]));
+    const byDate = new Map();
+    for (const p of plans || []) {
+      const t = keep.get(p.service_type_id);
+      if (!t) continue;
+      const room = /\[([^\]]+)\]/.exec(t.name)?.[1] || null;
+      const label = (p.title || t.name.split(' - ').slice(1).join(' - ') || t.name).replace(/\s*\[[^\]]+\]/, '').trim() || t.name;
+      for (const x of p.times || []) {
+        if (!x?.starts_at || (x.kind !== 'service' && x.kind !== 'rehearsal')) continue;
+        if (/\bignore\b/i.test(x.name || '')) continue;
+        const a = R.eastern(x.starts_at);
+        let end;
+        let noEnd = false;
+        if (x.ends_at) { const b = R.eastern(x.ends_at); end = b.date === a.date ? b.min : 1440; } else { noEnd = true; end = a.min + 60; }
+        if (end <= a.min) end = a.min + 1;
+        if (!byDate.has(a.date)) byDate.set(a.date, new Map());
+        const day = byDate.get(a.date);
+        if (!day.has(t.campus_id)) day.set(t.campus_id, { services: [], rehearsals: [] });
+        const at = day.get(t.campus_id);
+        const name = x.kind === 'service' ? label : (x.name || 'Rehearsal');
+        const list = x.kind === 'service' ? at.services : at.rehearsals;
+        const same = list.find((y) => y.start === a.min && y.end === end && y.name === name);
+        if (same) { if (!same.plans.includes(label)) same.plans.push(label); continue; }
+        list.push({ kind: x.kind, start: a.min, end, noEnd, name, plans: [label], room, url: p.url && /^https?:/.test(p.url) ? p.url : null });
+      }
+    }
+    for (const day of byDate.values()) for (const at of day.values()) { at.services.sort((a, b) => a.start - b.start); at.rehearsals.sort((a, b) => a.start - b.start); }
+    return { byDate, dates: [...byDate.keys()].sort() };
+  }
+  function pcoAt(campusId, date) { return (campusId && s.pco?.byDate.get(date)?.get(campusId)) || { services: [], rehearsals: [] }; }
 
   function encoders() {
     return [...(s.data?.encoders || [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }));
@@ -68,36 +151,92 @@ export function mount(el, ctx) {
   function encoderOf(id) { return (s.data?.encoders || []).find((e) => e.id === id); }
   function campusOf(enc) { return enc?.campus_id ? ctx.campusById.get(enc.campus_id) : null; }
 
+  /** The previous or next day (dir -1 or 1) with a Resi run or anything in Planning Center. */
+  function nextAny(from, dir) {
+    const a = R.nextDate(schedules(), from, dir);
+    const dates = s.pco?.dates || [];
+    const b = dir > 0 ? dates.find((d) => d > from) : [...dates].reverse().find((d) => d < from);
+    if (!a || !b) return a || b || null;
+    return dir > 0 ? (a < b ? a : b) : (a > b ? a : b);
+  }
+
   /** Today, if anything still runs today; otherwise the next day something does. */
   function startDate() {
     const t = R.today();
     const now = new Date().getHours() * 60 + new Date().getMinutes();
-    const live = schedules().filter((ev) => !ev.paused);
-    if (live.some((ev) => runs(ev, t).some((r) => r.end > now))) return t;
-    return R.nextDate(live, t) || t;
+    const resiLater = schedules().some((ev) => !ev.paused && runs(ev, t).some((r) => r.end > now));
+    const pcoLater = [...(s.pco?.byDate.get(t)?.values() || [])].some((at) => [...at.services, ...at.rehearsals].some((x) => x.end > now));
+    if (resiLater || pcoLater) return t;
+    return nextAny(t, 1) || t;
   }
 
   /** An event's runs on a date, moved onto Eastern time when it's set in another zone. */
   function runs(ev, date) {
     const shift = R.zoneShift(ev.timezone, date);
-    return R.runsOn(ev, date).map((r) => ({ ...r, on: r.on + shift, start: r.start + shift, end: r.end + shift, service: r.service == null ? null : r.service + shift }));
+    return R.runsOn(ev, date).map((r) => ({ ...r, on: r.on + shift, start: r.start + shift, end: r.end + shift }));
+  }
+
+  /** Every row of the board for a date, with what's on it and what doesn't line up. */
+  function dayRows(date) {
+    const encs = encoders();
+    const rows = ctx.campuses.map((campus) => ({ campus, encs: encs.filter((e) => e.campus_id === campus.id) }));
+    for (const e of encs.filter((x) => !x.campus_id || !ctx.campusById.get(x.campus_id))) rows.push({ campus: null, encs: [e] });
+    return rows.map((row) => {
+      const where = row.campus?.short_name || row.encs[0]?.name || '';
+      const pco = row.campus ? pcoAt(row.campus.id, date) : { services: [], rehearsals: [] };
+      const services = pco.services.map((x) => ({ ...x }));
+      const rehearsals = pco.rehearsals.map((x) => ({ ...x }));
+      const resi = row.encs.flatMap((enc) => schedules().filter((ev) => ev.encoder_id === enc.id)
+        .flatMap((ev) => runs(ev, date).map((r) => ({ ev, enc, r })))).sort((a, b) => a.r.on - b.r.on);
+      const issues = [];
+      // two on one encoder that run into each other (pre-buffer included); paused ones don't run
+      for (const enc of row.encs) {
+        const live = resi.filter((x) => x.enc.id === enc.id && !x.ev.paused);
+        for (let i = 1; i < live.length; i += 1) {
+          if (live[i].r.on < live[i - 1].r.end) {
+            live[i].clash = true; live[i - 1].clash = true;
+            issues.push({ bad: true, text: `${live[i - 1].ev.name} and ${live[i].ev.name} run into each other on the ${enc.name} encoder (pre-buffer included). Studio won’t run both, so one of them is copied over wrong.` });
+          }
+        }
+      }
+      if (row.campus) {
+        for (const x of resi) {
+          x.match = matchRun(x.r, services, rehearsals);
+          if (x.ev.paused) continue;
+          const m = x.match;
+          const span = `${R.clock(x.r.start)}–${R.clock(x.r.end)}`;
+          if (!m) { issues.push({ bad: false, text: `${x.ev.name} (${span}): nothing in Planning Center at ${where} lines up with it.` }); continue; }
+          const svc = m.kind === 'service';
+          const many = new Set(m.items.map((y) => y.name)).size > 1;
+          const begins = svc ? `the ${R.clock(m.first)} ${names(m.items)} service starts` : `${names(m.items)} ${many ? 'start' : 'starts'} (${R.clock(m.first)})`;
+          const finishes = svc ? `the ${names(m.items)} service ends (${R.clock(m.last)})` : `${names(m.items)} ${many ? 'end' : 'ends'} (${R.clock(m.last)})`;
+          if (m.lead < 0) { x.late = true; issues.push({ bad: svc, text: `${x.ev.name} starts at ${R.clock(x.r.start)}, ${ago(-m.lead)} after ${begins}.` }); }
+          if (m.tail < 0 && !m.noEnd) { x.early = true; issues.push({ bad: svc, text: `${x.ev.name} stops at ${R.clock(x.r.end)}, ${ago(-m.tail)} before ${finishes}.` }); }
+        }
+        if (row.encs.some((e) => e.installed !== false)) {
+          for (const sv of services) {
+            const mine = resi.filter((x) => x.match?.items.includes(sv));
+            if (mine.some((x) => !x.ev.paused)) continue;
+            sv.missing = true;
+            issues.push({ bad: true, text: mine.length ? `The ${R.clock(sv.start)} ${sv.name} service’s Resi event (${mine[0].ev.name}) is paused in Studio.` : `No Resi event for the ${R.clock(sv.start)} ${sv.name} service (${R.clock(sv.start)}–${sv.noEnd ? '?' : R.clock(sv.end)}).` });
+          }
+        }
+      }
+      return { ...row, where, services, rehearsals, resi, issues };
+    });
   }
 
   // ------------------------------------------------------------------ draw ---
   function draw(first = false) {
     if (!alive || !s.data) return;
     const encs = encoders();
-    if (!encs.length) {
-      body.innerHTML = `<div class="empty rs-empty"><h3>No encoders yet</h3><p>Add each encoder as it’s named in Resi Studio › Settings › Encoders.</p>
-        ${canEdit ? `<button type="button" class="rs-btn is-main" data-act="encoders">${icon('plus')}<span>Add encoders</span></button>` : ''}</div>`;
-      return;
-    }
-    body.innerHTML = `<section class="rs-day" aria-label="The schedule, day by day">${boardHtml(encs)}</section>
-      <section class="rs-all" aria-labelledby="rs-all-h"><h2 class="rs-h" id="rs-all-h">Every event</h2>${listHtml(encs)}</section>`;
+    body.innerHTML = `<section class="rs-day" aria-label="The schedule, day by day">${boardHtml()}</section>
+      <section class="rs-all" aria-labelledby="rs-all-h"><h2 class="rs-h" id="rs-all-h">Every Resi event</h2>${encs.length ? listHtml(encs) : `<div class="empty rs-empty"><h3>No encoders yet</h3><p>Add each encoder as it’s named in Resi Studio › Settings › Encoders.</p>
+        ${canEdit ? `<button type="button" class="rs-btn is-main" data-act="encoders">${icon('plus')}<span>Add encoders</span></button>` : ''}</div>`}</section>`;
     const board = $('.rs-board', body);
     if (first && board && !still()) {
       board.classList.add('rs-boot');
-      setTimeout(() => board.classList.remove('rs-boot'), encs.length * 45 + 1100);
+      setTimeout(() => board.classList.remove('rs-boot'), (ctx.campuses.length + 2) * 45 + 1300);
     }
     if (s.flash) {
       for (const n of $$(`[data-ev="${CSS.escape(s.flash)}"]`, body)) { n.classList.add('is-flash'); setTimeout(() => n.classList.remove('is-flash'), 1200); }
@@ -105,76 +244,113 @@ export function mount(el, ctx) {
     }
   }
 
-  function boardHtml(encs) {
+  function boardHtml() {
     const date = s.date;
     const t = R.today();
-    const prev = R.nextDate(schedules(), date, -1);
-    const next = R.nextDate(schedules(), date, 1);
-    const rows = encs.map((enc) => {
-      const list = schedules().filter((ev) => ev.encoder_id === enc.id)
-        .flatMap((ev) => runs(ev, date).map((r) => ({ ev, r })))
-        .sort((a, b) => a.r.on - b.r.on);
-      // two on one encoder that run into each other (pre-buffer included); paused ones don't run
-      const live = list.filter((x) => !x.ev.paused);
-      for (let i = 1; i < live.length; i += 1) {
-        if (live[i].r.on < live[i - 1].r.end) { live[i].clash = live[i - 1]; live[i - 1].clashed = true; }
-      }
-      return { enc, list };
-    });
-    const all = rows.flatMap((x) => x.list);
-    const running = all.filter((x) => !x.ev.paused);
+    const prev = nextAny(date, -1);
+    const next = nextAny(date, 1);
+    const rows = dayRows(date);
+    const nSvc = rows.reduce((n, x) => n + x.services.length, 0);
+    const nResi = rows.reduce((n, x) => n + x.resi.filter((y) => !y.ev.paused).length, 0);
+    const nPaused = rows.reduce((n, x) => n + x.resi.filter((y) => y.ev.paused).length, 0);
+    const issues = rows.flatMap((x) => x.issues.map((i) => ({ ...i, where: x.where })));
     const relative = date === t ? 'Today' : date === R.addDays(t, 1) ? 'Tomorrow' : date === R.addDays(t, -1) ? 'Yesterday' : '';
     const d = R.day(date);
+    const count = [nSvc ? `${nSvc} service${nSvc === 1 ? '' : 's'}` : '', nResi ? `${nResi} Resi event${nResi === 1 ? '' : 's'}` : '', nPaused ? `${nPaused} paused` : ''].filter(Boolean).join(' · ') || 'Nothing scheduled';
     const head = `<div class="rs-bhead">
         <button type="button" class="rs-nav" data-go="prev" ${prev ? '' : 'disabled'} aria-label="${prev ? `Back to ${R.dateText(prev)}` : 'Nothing earlier'}">${icon('chevron')}</button>
         <h2 class="rs-date" aria-live="polite"><b>${esc(R.DAY3[d.getDay()])}</b><span>${esc(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}</span>${relative ? `<em>${relative}</em>` : ''}</h2>
         <button type="button" class="rs-nav is-next" data-go="next" ${next ? '' : 'disabled'} aria-label="${next ? `On to ${R.dateText(next)}` : 'Nothing later'}">${icon('chevron')}</button>
         ${date !== t ? '<button type="button" class="rs-today" data-go="today">Today</button>' : ''}
-        <p class="rs-count">${running.length ? `${running.length} event${running.length === 1 ? '' : 's'}` : 'Nothing scheduled'}${all.length > running.length ? ` · ${all.length - running.length} paused` : ''}</p>
+        <p class="rs-count">${esc(count)}</p>
       </div>`;
-    if (!all.length) {
-      return `${head}<div class="rs-board is-empty"><p>${schedules().length ? 'Nothing runs on this day.' : 'Nothing scheduled yet.'}${canEdit ? ' Add an event with <b>Event</b> at the top, or under an encoder below.' : ''}</p></div>`;
+    const items = rows.flatMap((x) => [...x.services, ...x.rehearsals, ...x.resi.map((y) => ({ start: y.r.on, end: y.r.end }))]);
+    const pcoNote = s.pcoError ? `<p class="rs-warn">Planning Center didn’t load (${esc(s.pcoError)}), so only Resi is on the board.</p>` : '';
+    if (!items.length) {
+      return `${head}${pcoNote}<div class="rs-board is-empty"><p>Nothing in Planning Center or Resi on this day.</p></div>`;
     }
-    // the hours shown: from just before the first encoder comes on to just after the last ends
-    let t0 = Math.floor((Math.min(...all.map((x) => x.r.on)) - 20) / 60) * 60;
-    let t1 = Math.ceil((Math.max(...all.map((x) => x.r.end)) + 20) / 60) * 60;
+    // the hours shown: the first hour anything starts to the hour after the last thing ends
+    let t0 = Math.floor(Math.min(...items.map((x) => x.start)) / 60) * 60;
+    let t1 = Math.ceil(Math.max(...items.map((x) => x.end)) / 60) * 60;
     if (t1 - t0 < 240) { const pad = 240 - (t1 - t0); t0 -= Math.floor(pad / 120) * 60; t1 = t0 + 240; }
     t0 = Math.max(0, t0); t1 = Math.min(1440, Math.max(t1, t0 + 60));
     const span = t1 - t0;
     const step = span > 720 ? 120 : 60;
-    const pct = (m) => `${(((m - t0) / span) * 100).toFixed(3)}%`;
+    const pct = (m) => `${(((Math.min(Math.max(m, t0), t1) - t0) / span) * 100).toFixed(3)}%`;
+    const wid = (a, b) => `${((Math.max(0, Math.min(b, t1) - Math.max(a, t0)) / span) * 100).toFixed(3)}%`;
     const ticks = [];
     for (let m = t0; m <= t1; m += step) ticks.push(`<span class="rs-tick ${m === t0 ? 'is-first' : ''} ${m === t1 ? 'is-last' : ''}" style="left:${pct(m)}">${esc(R.clock(m).replace(':00', ''))}</span>`);
     const nowM = new Date().getHours() * 60 + new Date().getMinutes();
     const showNow = date === t && nowM >= t0 && nowM <= t1;
-    const body2 = rows.map(({ enc, list }, ri) => {
-      const cp = campusOf(enc);
-      const blocks = list.map(({ ev, r, clash, clashed }) => {
+
+    const bodyRows = rows.map((row, ri) => {
+      const nR = pack(row.rehearsals);
+      const nS = pack(row.services);
+      const nE = pack(row.resi, (x) => x.r.on, (x) => x.r.end);
+      let y = LANE.pad;
+      const yR = y; y += nR * (LANE.reh + LANE.gap) + (nR ? LANE.sep - LANE.gap : 0);
+      const yS = y; y += nS * (LANE.svc + LANE.gap) + (nS ? LANE.sep - LANE.gap : 0);
+      const yE = y; y += nE * (LANE.resi + LANE.gap) - (nE ? LANE.gap : 0);
+      const h = Math.max(48, y + LANE.pad);
+      const pcoBar = (x, kind, top, hgt) => {
+        const tip = [`${x.name}${x.room ? ` (${x.room})` : ''}`, `${R.clock(x.start)}–${x.noEnd ? '?' : R.clock(x.end)}${x.noEnd ? ' (no end time in Planning Center)' : ''}`, x.plans.length > 1 || x.plans[0] !== x.name ? `On ${x.plans.join(', ')}` : '', 'Planning Center'].filter(Boolean).join('\n');
+        const inner = kind === 'svc'
+          ? `<b>${esc(R.clockShort(x.start, true))}</b><span>${esc(x.name)}${x.room ? ` · ${esc(x.room)}` : ''}</span>`
+          : `<b>${esc(R.clockShort(x.start, true))}</b><span>${esc(x.name)}</span>`;
+        const tag = x.url ? 'a' : 'span';
+        const tiny = ((x.end - x.start) / span) * 100 < 2.6; // too short for its label: the label's in the tooltip
+        return `<${tag} class="rs-p is-${kind} ${x.missing ? 'is-missing' : ''} ${x.noEnd ? 'is-open' : ''} ${tiny ? 'is-tiny' : ''}" ${x.url ? `href="${esc(x.url)}" target="_blank" rel="noopener"` : ''}
+            style="left:${pct(x.start)};width:${wid(x.start, x.end)};top:${top + x.lane * (hgt + LANE.gap)}px;height:${hgt}px" title="${esc(tip)}" ${tiny ? `aria-label="${esc(tip)}"` : ''}>${tiny ? '' : inner}</${tag}>`;
+      };
+      const guides = row.services.map((x) => {
+        const top = yS + x.lane * (LANE.svc + LANE.gap);
+        return `<i class="rs-guide" style="left:${pct(x.start)};top:${top}px"></i>${x.noEnd ? '' : `<i class="rs-guide" style="left:${pct(x.end)};top:${top}px"></i>`}`;
+      }).join('');
+      const blocks = row.resi.map((x) => {
+        const { ev, r, match: m } = x;
         const w = Math.max(1, r.end - r.on);
         const pre = Math.max(0, r.start - r.on);
-        const svc = r.service != null && r.service >= r.on && r.service <= r.end ? ((r.service - r.on) / w) * 100 : null;
-        const tip = [`${ev.name}`, pre ? `Encoder on ${R.clock(r.on)} (${pre} min pre-buffer)` : '', `Starts ${R.clock(r.start)}`, r.service != null ? `Service ${R.clock(r.service)}` : '', `Ends ${R.clock(r.end)} (${R.dur(ev.duration_min)})`, ev.paused ? 'Paused in Studio' : '', clash || clashed ? 'Runs into another event on this encoder' : ''].filter(Boolean).join('\n');
-        return `<button type="button" class="rs-blk ${ev.paused ? 'is-paused' : ''} ${clash || clashed ? 'is-clash' : ''}" data-ev="${esc(ev.id)}" ${canEdit ? '' : 'disabled'}
-            style="left:${pct(r.on)};width:${((w / span) * 100).toFixed(3)}%;--pre:${((pre / w) * 100).toFixed(3)}%" title="${esc(tip)}">
+        const len = Math.max(1, r.end - r.start);
+        // inside the event, the stretch Planning Center has (solid); before and after it, lighter
+        const a = m ? Math.min(100, Math.max(0, ((m.first - r.start) / len) * 100)) : 0;
+        const b = m ? Math.min(100, Math.max(0, ((m.last - r.start) / len) * 100)) : 100;
+        const off = m ? [m.lead > 0 ? `${m.lead} before` : m.lead < 0 ? `${-m.lead} late` : '', m.noEnd ? '' : m.tail > 0 ? `${m.tail} after` : m.tail < 0 ? `${-m.tail} short` : ''].filter(Boolean).join(' · ') : (row.campus ? 'not in PCO' : '');
+        const tip = [ev.name, `${x.enc.name} encoder`, pre ? `Encoder on ${R.clock(r.on)} (${pre} min pre-buffer)` : '', `Starts ${R.clock(r.start)}`, `Ends ${R.clock(r.end)} (${R.dur(ev.duration_min)})`,
+          m ? `Planning Center: ${m.items.map((y) => `${y.name} ${R.clock(y.start)}–${R.clock(y.end)}`).join(', ')}` : row.campus ? 'Nothing in Planning Center then' : '',
+          m && m.lead ? `${m.lead > 0 ? `Starts ${m.lead} min before` : `Starts ${-m.lead} min after`} Planning Center` : '',
+          m && m.tail && !m.noEnd ? `${m.tail > 0 ? `Runs ${m.tail} min past` : `Stops ${-m.tail} min before`} Planning Center's end` : '',
+          ev.paused ? 'Paused in Studio' : '', x.clash ? 'Runs into another event on this encoder' : ''].filter(Boolean).join('\n');
+        const bad = !ev.paused && m?.kind === 'service' && (x.late || x.early);
+        return `<button type="button" class="rs-blk ${ev.paused ? 'is-paused' : ''} ${x.clash ? 'is-clash' : ''} ${bad ? 'is-off' : ''} ${m ? '' : 'is-alone'}" data-ev="${esc(ev.id)}" ${canEdit ? '' : 'disabled'}
+            style="left:${pct(r.on)};width:${wid(r.on, r.end)};top:${yE + x.lane * (LANE.resi + LANE.gap)}px;height:${LANE.resi}px;--pre:${((pre / w) * 100).toFixed(3)}%;--a:${a.toFixed(2)}%;--b:${b.toFixed(2)}%" title="${esc(tip)}">
             ${pre ? '<i class="rs-buf" aria-hidden="true"></i>' : ''}
-            <span class="rs-ev"><b>${esc(ev.name)}</b><small>${esc(`${R.clockShort(r.start, true)}–${R.clockShort(r.end, true)}`)}${ev.paused ? ' · Paused' : ''}</small></span>
-            ${svc != null ? `<i class="rs-svc" style="left:${svc.toFixed(3)}%" aria-hidden="true"></i>` : ''}
+            <span class="rs-ev"><b>${esc(ev.name)}</b><small>${esc(`${R.clockShort(r.start, true)}–${R.clockShort(r.end, true)}`)}${off ? ` · <em>${esc(off)}</em>` : ''}${ev.paused ? ' · Paused' : ''}</small></span>
           </button>`;
       }).join('');
-      return `<div class="rs-row" style="--r:${ri}">
-          <div class="rs-enc"><b>${both(enc.name, cp ? SHORT[cp.code] || cp.code : '')}</b></div>
-          <div class="rs-track">${blocks || '<span class="rs-none">—</span>'}${showNow ? `<i class="rs-now" style="left:${pct(nowM)}"></i>` : ''}</div>
+      const cp = row.campus;
+      const sub = row.encs.length ? row.encs.map((e) => `${e.name}${e.installed === false ? ' (not installed)' : ''}`).join(', ') : 'No encoder';
+      return `<div class="rs-row" style="--r:${ri};height:${h}px">
+          <div class="rs-enc"><b>${cp ? both(cp.short_name, SHORT[cp.code] || cp.code) : esc(row.where)}</b><small>${row.encs.length ? `${icon('live')}${esc(sub)}` : esc(sub)}</small></div>
+          <div class="rs-track">${guides}${row.rehearsals.map((x) => pcoBar(x, 'reh', yR, LANE.reh)).join('')}${row.services.map((x) => pcoBar(x, 'svc', yS, LANE.svc)).join('')}${blocks}
+            ${!row.rehearsals.length && !row.services.length && !row.resi.length ? '<span class="rs-none">—</span>' : ''}${showNow ? `<i class="rs-now" style="left:${pct(nowM)}"></i>` : ''}</div>
         </div>`;
     }).join('');
-    const clashes = rows.flatMap(({ enc, list }) => list.filter((x) => x.clash).map((x) => `<li><b>${esc(enc.name)}</b>: ${esc(x.clash.ev.name)} and ${esc(x.ev.name)} run into each other (pre-buffer included). Studio won’t run both, so one of them is copied over wrong.</li>`));
-    const hours = span / 60;
-    return `${head}
-      <div class="rs-scroll"><div class="rs-board" style="--hrs:${hours}">
-        <div class="rs-row rs-axis"><div class="rs-enc rs-corner">${both('Encoder', 'Enc')}</div><div class="rs-track">${ticks.join('')}${showNow ? `<span class="rs-nowl" style="left:${pct(nowM)}">Now</span>` : ''}</div></div>
-        ${body2}
+    const bad = issues.filter((x) => x.bad);
+    const notes = issues.filter((x) => !x.bad);
+    const checked = rows.some((x) => x.encs.some((e) => e.installed !== false) && x.services.length);
+    const diff = issues.length
+      ? `<section class="rs-diff" aria-label="Where Resi and Planning Center differ"><h3>Resi and Planning Center <span>${bad.length ? `${bad.length} to fix` : ''}${bad.length && notes.length ? ' · ' : ''}${notes.length ? `${notes.length} to look at` : ''}</span></h3>
+          <ul>${[...bad, ...notes].map((x) => `<li class="${x.bad ? 'is-bad' : ''}"><b>${esc(x.where)}</b><span>${esc(x.text)}</span></li>`).join('')}</ul></section>`
+      : checked ? '<p class="rs-ok">Resi covers every service in Planning Center on this day, start to end.</p>' : '';
+    return `${head}${pcoNote}
+      <div class="rs-scroll"><div class="rs-board" style="--hrs:${span / 60}">
+        <div class="rs-row rs-axis"><div class="rs-enc rs-corner">${both('Location', 'Loc')}</div><div class="rs-track">${ticks.join('')}${showNow ? `<span class="rs-nowl" style="left:${pct(nowM)}">Now</span>` : ''}</div></div>
+        ${bodyRows}
       </div></div>
-      <ul class="rs-legend" aria-label="Key"><li><i class="k-buf"></i>Pre-buffer: the encoder on early</li><li><i class="k-ev"></i>The event</li><li><i class="k-svc"></i>The service starts</li></ul>
-      ${clashes.length ? `<ul class="rs-clash" role="alert">${clashes.join('')}</ul>` : ''}`;
+      <ul class="rs-legend" aria-label="Key">
+        <li><i class="k-reh"></i>Rehearsal (Planning Center)</li><li><i class="k-svc"></i>Service (Planning Center)</li>
+        <li><i class="k-buf"></i>Pre-buffer: the encoder on early</li><li><i class="k-ev"></i>Resi event<i class="k-ev is-soft"></i>outside Planning Center’s time</li></ul>
+      ${diff}`;
   }
 
   function listHtml(encs) {
@@ -193,10 +369,10 @@ export function mount(el, ctx) {
         const pre = Number(ev.prebuffer_min) || 0;
         const zone = ev.timezone && ev.timezone !== R.HOME_ZONE ? ` <em class="rs-tz">${esc(R.zoneShort(ev.timezone))}</em>` : '';
         const tags = [ev.paused ? '<em class="rs-tag is-paused">Paused</em>' : '', over ? '<em class="rs-tag">Ended</em>' : ''].join('');
-        const svc = R.mins(ev.service_time);
         const by = [ev.who?.full_name || ev.updated_by_name, ev.updated_at ? timeAgo(ev.updated_at) : ''].filter(Boolean).join(', ');
+        const vs = over ? null : vsPco(ev, cp);
         return `<tr class="rs-tr ${over ? 'is-over' : ''} ${ev.paused ? 'is-paused' : ''}" data-ev="${esc(ev.id)}" ${canEdit ? 'tabindex="0" role="button"' : ''} title="${esc(by ? `Last changed by ${by}` : '')}">
-          <th scope="row" class="rs-c-ev"><b>${esc(ev.name)}</b>${tags}${svc != null ? `<small>For the ${esc(R.clock(svc))} service</small>` : ev.description ? `<small>${esc(ev.description)}</small>` : ''}</th>
+          <th scope="row" class="rs-c-ev"><b>${esc(ev.name)}</b>${tags}${vs ? `<small class="${vs.bad ? 'is-bad' : ''}">${esc(vs.text)}</small>` : ev.description ? `<small>${esc(ev.description)}</small>` : ''}</th>
           <td class="rs-c-rep" data-l="Repeats"><b>${esc(R.repeatText(ev))}</b><small>${esc(R.endText(ev))}</small></td>
           <td class="rs-c-n" data-l="Pre-buffer">${pre ? `${pre}<small> min</small>` : '<span class="rs-dim">None</span>'}</td>
           <td class="rs-c-n" data-l="Encoder on">${esc(R.clock(start - pre))}</td>
@@ -206,13 +382,30 @@ export function mount(el, ctx) {
         </tr>`;
       }).join('');
       return `<div class="rs-grp">
-          <div class="rs-ghead"><h3>${esc(enc.name)}</h3>${cp && cp.short_name !== enc.name ? `<span class="rs-loc">${esc(cp.short_name)}</span>` : ''}
+          <div class="rs-ghead"><h3>${esc(enc.name)}</h3>${cp && cp.short_name !== enc.name ? `<span class="rs-loc">${esc(cp.short_name)}</span>` : ''}${enc.installed === false ? '<span class="rs-loc is-off">Not installed</span>' : ''}
             <span class="rs-gn">${list.length ? `${list.length} event${list.length === 1 ? '' : 's'}` : 'Nothing scheduled'}</span>
             ${canEdit ? `<button type="button" class="rs-add" data-add="${esc(enc.id)}" aria-label="Add an event on ${esc(enc.name)}">${icon('plus')}<span>Event</span></button>` : ''}</div>
           ${list.length ? `<table class="rs-t"><thead><tr><th scope="col">Event</th><th scope="col">Repeats</th><th scope="col">Pre-buffer</th><th scope="col">Encoder on</th><th scope="col">Starts</th><th scope="col">Duration</th><th scope="col">Ends</th></tr></thead>
             <tbody>${rows}</tbody></table>` : ''}
         </div>`;
     }).join('');
+  }
+
+  /** How an event's next run lines up with Planning Center at its encoder's location:
+   *  { text, bad, match, date } or null when there's nothing to compare with. */
+  function vsPco(ev, campus, fromDate = R.today()) {
+    if (!campus || !s.pco) return null;
+    const date = R.firstRun(ev, fromDate);
+    if (!date) return null;
+    const r = runs(ev, date)[0];
+    const at = pcoAt(campus.id, date);
+    if (!s.pco.byDate.has(date)) return { text: `${R.dateText(date)}: Planning Center has no plans that day yet`, bad: false, date };
+    const m = matchRun(r, at.services, at.rehearsals);
+    if (!m) return { text: `${R.dateText(date)}: nothing in Planning Center at ${campus.short_name} lines up with it`, bad: false, date };
+    const what = m.kind === 'service' ? `${R.clock(m.first)} ${names(m.items)}` : names(m.items);
+    const lead = m.lead > 0 ? `${m.lead} min before` : m.lead < 0 ? `${-m.lead} min late` : 'same start';
+    const tail = m.noEnd ? '' : m.tail > 0 ? `${m.tail} min after` : m.tail < 0 ? `${-m.tail} min short` : 'same end';
+    return { text: `${what} (${R.clock(m.first)}–${R.clock(m.last)}): ${[lead, tail].filter(Boolean).join(', ')}`, bad: m.kind === 'service' && (m.lead < 0 || (!m.noEnd && m.tail < 0)), match: m, date };
   }
 
   // --------------------------------------------------------------- actions ---
@@ -231,7 +424,7 @@ export function mount(el, ctx) {
   /** Another day on the board: what's there slides out, the other day's slides in. */
   function goDay(where) {
     if (s.moving) return;
-    const to = where === 'today' ? R.today() : R.nextDate(schedules(), s.date, where === 'prev' ? -1 : 1);
+    const to = where === 'today' ? R.today() : nextAny(s.date, where === 'prev' ? -1 : 1);
     if (!to || to === s.date) return;
     const dir = to > s.date ? 1 : -1;
     const sec = $('.rs-day', body);
@@ -241,7 +434,7 @@ export function mount(el, ctx) {
     setTimeout(() => {
       if (!alive) return;
       s.date = to;
-      sec.innerHTML = boardHtml(encoders());
+      sec.innerHTML = boardHtml();
       sec.classList.remove('rs-out-l', 'rs-out-r');
       sec.classList.add(dir > 0 ? 'rs-in-l' : 'rs-in-r');
       void sec.offsetWidth;
@@ -258,7 +451,7 @@ export function mount(el, ctx) {
         id: null, encoder_id: encoderId || encoders()[0]?.id || '', name: '', description: '', encoder_preset: '', encoder_channel: '',
         prebuffer_min: '0', start_date: sunday, start_time: '', dur_h: '', dur_m: '', timezone: R.HOME_ZONE,
         repeats: true, repeat_every: '1', repeat_unit: 'week', repeat_days: [R.weekday(sunday)], repeat_month: 'date',
-        ends: 'never', ends_on: '', ends_after: '', destinations: '', paused: false, service_time: '', notes: '',
+        ends: 'never', ends_on: '', ends_after: '', destinations: '', paused: false, notes: '',
       };
     }
     const d = Number(ev.duration_min) || 0;
@@ -269,7 +462,7 @@ export function mount(el, ctx) {
       timezone: ev.timezone || R.HOME_ZONE, repeats: !!ev.repeats, repeat_every: String(ev.repeat_every || 1), repeat_unit: ev.repeat_unit || 'week',
       repeat_days: [...(ev.repeat_days || [])].map(Number), repeat_month: ev.repeat_month || 'date', ends: ev.ends || 'never',
       ends_on: ev.ends_on ? String(ev.ends_on).slice(0, 10) : '', ends_after: ev.ends_after ? String(ev.ends_after) : '',
-      destinations: ev.destinations || '', paused: !!ev.paused, service_time: R.hhmm(ev.service_time), notes: ev.notes || '',
+      destinations: ev.destinations || '', paused: !!ev.paused, notes: ev.notes || '',
     };
   }
 
@@ -286,7 +479,7 @@ export function mount(el, ctx) {
       repeats: !!f.repeats, repeat_every: Math.max(1, int(f.repeat_every) || 1), repeat_unit: f.repeat_unit, repeat_days: f.repeat_unit === 'week' ? days : [],
       repeat_month: f.repeat_month, ends: f.repeats ? f.ends : 'never', ends_on: f.repeats && f.ends === 'on' ? f.ends_on || null : null,
       ends_after: f.repeats && f.ends === 'after' ? int(f.ends_after) : null,
-      destinations: f.destinations.trim() || null, paused: !!f.paused, service_time: f.service_time || null, notes: f.notes.trim() || null,
+      destinations: f.destinations.trim() || null, paused: !!f.paused, notes: f.notes.trim() || null,
     };
     if (f.id) row.id = f.id;
     const err = !row.name ? 'Give the event a name (as it is in Studio).'
@@ -427,7 +620,6 @@ export function mount(el, ctx) {
             <label class="rs-f"><span>Where it streams <i>optional</i></span><textarea name="destinations" rows="2" maxlength="1000" placeholder="The destination group, or each web channel, YouTube or Facebook destination">${v('destinations')}</textarea></label>
           </fieldset>
           <fieldset class="rs-fs"><legend>In Tally <i>not in Studio</i></legend>
-            <label class="rs-f"><span>The service starts <i>optional, in the building</i></span><input name="service_time" type="time" value="${v('service_time')}"></label>
             <button type="button" class="rs-switch" role="switch" data-sw="paused" aria-checked="${f.paused}"><i aria-hidden="true"></i>Paused <small>“Pause Event” is on in Studio: it’s kept, but doesn’t run</small></button>
             <label class="rs-f"><span>Notes <i>optional</i></span><textarea name="notes" rows="2" maxlength="2000">${v('notes')}</textarea></label>
           </fieldset>
@@ -455,32 +647,45 @@ export function mount(el, ctx) {
     }
     function msg(text) { const m = $('.rs-msg', panel.el); if (m) m.textContent = text; }
 
-    /** The strip under the title: when the encoder comes on, starts, the service, ends; how it
-     *  repeats; the next time it runs. Drawn as it's typed. */
+    /** The strip under the title, drawn as it's typed: the next run next to what Planning
+     *  Center has at the encoder's location then (the service or rehearsal as a clear box above,
+     *  Resi below), when the encoder comes on, starts and ends, and how far it runs before and
+     *  after Planning Center's time. */
     function summary() {
       const box = $('#rs-sum', panel.el);
       if (!box) return;
       const { row } = toRow({ ...f, name: f.name || 'x', encoder_id: f.encoder_id || 'x' });
       const start = R.mins(f.start_time);
       const dur = (Number(f.dur_h) || 0) * 60 + (Number(f.dur_m) || 0);
-      if (start == null || !(dur > 0)) { box.innerHTML = '<p class="rs-sum-empty">Set the start time and duration to see when it runs.</p>'; return; }
+      if (start == null || !(dur > 0)) { box.innerHTML = '<p class="rs-sum-empty">Set the start time and duration to see when it runs, next to Planning Center.</p>'; return; }
       const pre = Number(f.prebuffer_min) || 0;
-      const svc = R.mins(f.service_time);
       const on = start - pre;
       const end = start + dur;
-      const w = end - on;
       const next = row ? R.firstRun(row, R.today()) : null;
+      const campus = campusOf(encoderOf(f.encoder_id));
+      const vs = row && next && campus ? vsPco({ ...row, id: 'x' }, campus, next) : null;
+      const m = vs?.match;
+      const lo = Math.min(on, m ? m.first : on);
+      const hi = Math.max(end, m ? m.last : end);
+      const w = Math.max(1, hi - lo);
+      const at = (x) => `${(((x - lo) / w) * 100).toFixed(2)}%`;
+      const len = (a, b) => `${(((b - a) / w) * 100).toFixed(2)}%`;
       const cells = [
         pre ? ['Encoder on', R.clock(on)] : null,
         ['Starts', R.clock(start)],
-        svc != null ? ['Service', R.clock(svc)] : null,
         ['Ends', R.clock(end)],
+        ['Duration', R.dur(dur)],
+        m ? [m.kind === 'service' ? 'Service (PCO)' : 'Rehearsal (PCO)', `${R.clock(m.first)}–${m.noEnd ? '?' : R.clock(m.last)}`] : null,
       ].filter(Boolean);
-      const early = svc != null ? svc - start : null;
-      box.innerHTML = `<div class="rs-sum-bar">${pre ? `<i class="rs-buf" style="width:${((pre / w) * 100).toFixed(2)}%"></i>` : ''}<i class="rs-sum-ev"></i>
-          ${svc != null && svc >= on && svc <= end ? `<i class="rs-svc" style="left:${(((svc - on) / w) * 100).toFixed(2)}%"></i>` : ''}</div>
-        <dl class="rs-sum-t">${cells.map(([k, x]) => `<div><dt>${k}</dt><dd>${esc(x)}</dd></div>`).join('')}<div><dt>Duration</dt><dd>${esc(R.dur(dur))}</dd></div></dl>
-        <p class="rs-sum-r">${esc(row ? `${R.repeatText(row)} · ${R.endText(row)}` : '')}${early != null && early > 0 ? ` · starts ${early} min before the service` : early != null && early < 0 ? ` · starts ${-early} min after the service` : ''}${row?.paused ? ' · paused' : ''}${next ? ` · next ${R.dateText(next)}` : row && !row.paused ? ' · no more runs' : ''}</p>`;
+      const offs = m ? [m.lead >= 0 ? `starts ${m.lead} min before` : `starts ${-m.lead} min after`, m.noEnd ? '' : m.tail >= 0 ? `ends ${m.tail} min after` : `ends ${-m.tail} min before`].filter(Boolean).join(', ') : '';
+      box.innerHTML = `<div class="rs-sum-bars">
+          ${m ? m.items.map((y) => `<i class="rs-sum-p" style="left:${at(y.start)};width:${len(y.start, y.end)}"></i>`).join('') : ''}
+          <span class="rs-sum-bar" style="left:${at(on)};width:${len(on, end)}">${pre ? `<i class="rs-buf" style="width:${((pre / (end - on)) * 100).toFixed(2)}%"></i>` : ''}<i class="rs-sum-ev"></i></span>
+        </div>
+        <dl class="rs-sum-t">${cells.map(([k, x]) => `<div><dt>${k}</dt><dd>${esc(x)}</dd></div>`).join('')}</dl>
+        <p class="rs-sum-r">${esc(row ? `${R.repeatText(row)} · ${R.endText(row)}` : '')}${row?.paused ? ' · paused' : ''}${next ? ` · next ${R.dateText(next)}` : row && !row.paused ? ' · no more runs' : ''}</p>
+        ${m ? `<p class="rs-sum-vs ${vs.bad ? 'is-bad' : ''}">${esc(`Against ${m.kind === 'service' ? `the ${R.clock(m.first)} ${names(m.items)} service` : names(m.items)} in Planning Center: ${offs}.`)}</p>`
+          : vs ? `<p class="rs-sum-vs">${esc(vs.text)}.</p>` : campus ? '' : '<p class="rs-sum-vs">This encoder isn’t at a location, so there’s nothing in Planning Center to compare with.</p>'}`;
     }
 
     async function save(btn) {
@@ -505,7 +710,7 @@ export function mount(el, ctx) {
   // -------------------------------------------------------------- encoders ---
   function openEncoders() {
     if (!canEdit) return;
-    let rows = encoders().map((e) => ({ id: e.id, name: e.name, campus_id: e.campus_id || '' }));
+    let rows = encoders().map((e) => ({ id: e.id, name: e.name, campus_id: e.campus_id || '', installed: e.installed !== false }));
     const was = JSON.stringify(rows);
     let saving = false;
     const panel = hudPanel({
@@ -518,10 +723,11 @@ export function mount(el, ctx) {
         <header class="hp-head"><p class="hp-crumb">Resi Studio · Settings</p><h2>Encoders</h2>
           <button type="button" class="hp-x" data-close aria-label="Close">${icon('close')}</button></header>
         <div class="hp-body">
-          <p class="rs-hint">Name each one as it is in Studio › Settings › Encoders, and where it is.</p>
+          <p class="rs-hint">Name each one as it is in Studio › Settings › Encoders, and where it is. One that isn’t installed yet is on the board, but its location isn’t checked for services without a Resi event.</p>
           <ul class="rs-encs">${rows.map((r, i) => `<li data-i="${i}">
             <input name="name" maxlength="80" autocomplete="off" value="${esc(r.name)}" placeholder="Encoder name" aria-label="Encoder name">
             <select name="campus_id" aria-label="Location"><option value="">No location</option>${ctx.campuses.map((c) => `<option value="${esc(c.id)}" ${c.id === r.campus_id ? 'selected' : ''}>${esc(c.short_name)}</option>`).join('')}</select>
+            <button type="button" class="rs-switch rs-inst" role="switch" data-inst="${i}" aria-checked="${r.installed}"><i aria-hidden="true"></i>Installed</button>
             <span class="rs-en">${r.id ? `${count(r.id)} event${count(r.id) === 1 ? '' : 's'}` : 'New'}</span>
             <button type="button" class="rs-x" data-rm="${i}" aria-label="Remove ${esc(r.name || 'this encoder')}">${icon('trash')}</button></li>`).join('')}</ul>
           <button type="button" class="rs-btn" data-new>${icon('plus')}<span>Add an encoder</span></button>
@@ -541,8 +747,10 @@ export function mount(el, ctx) {
       if (li && e.target.name) rows[Number(li.dataset.i)][e.target.name] = e.target.value;
     });
     panel.el.addEventListener('click', async (e) => {
+      const inst = e.target.closest('[data-inst]');
+      if (inst) { const r = rows[Number(inst.dataset.inst)]; r.installed = !r.installed; inst.setAttribute('aria-checked', String(r.installed)); return; }
       if (e.target.closest('[data-new]')) {
-        rows.push({ id: null, name: '', campus_id: '' });
+        rows.push({ id: null, name: '', campus_id: '', installed: true });
         paint();
         $$('.rs-encs input[name="name"]', panel.el).pop()?.focus();
         return;
@@ -572,9 +780,9 @@ export function mount(el, ctx) {
         try {
           for (const r of rows) {
             const b = r.id && before.get(r.id);
-            const row = { name: r.name.trim(), campus_id: r.campus_id || null };
+            const row = { name: r.name.trim(), campus_id: r.campus_id || null, installed: !!r.installed };
             if (!r.id) await ctx.store.resiEncoderSave(row);
-            else if (b && (b.name !== row.name || (b.campus_id || null) !== row.campus_id)) await ctx.store.resiEncoderSave({ id: r.id, ...row });
+            else if (b && (b.name !== row.name || (b.campus_id || null) !== row.campus_id || (b.installed !== false) !== row.installed)) await ctx.store.resiEncoderSave({ id: r.id, ...row });
           }
           saving = true;
           ctx.toast('Encoders saved');

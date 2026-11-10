@@ -65,6 +65,14 @@ function zoneOffset(zone, date) {
     return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0)) : 0;
   } catch { return 0; }
 }
+const ET = new Intl.DateTimeFormat('en-US', { timeZone: HOME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** A moment (Planning Center's "2026-11-15T14:30:00Z") as Eastern wall-clock time:
+ *  { date: "2026-11-15", min: 570 }. */
+export function eastern(isoString) {
+  const p = Object.fromEntries(ET.formatToParts(new Date(isoString)).map((x) => [x.type, x.value]));
+  return { date: `${p.year}-${p.month}-${p.day}`, min: (Number(p.hour) % 24) * 60 + Number(p.minute) };
+}
+
 /** How many minutes to add to a time in `zone` to get Eastern time on that date (Central: +60). */
 export function zoneShift(zone, date) {
   if (!zone || zone === HOME_ZONE) return 0;
