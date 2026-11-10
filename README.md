@@ -347,7 +347,9 @@ Vintage (−10).
   a bar along its bottom as long as the level. Not set: a dash.
 - **Changing one**: tap it, type the level, Enter. "Are you sure you want to confirm this
   change?" shows the old and new level; only **Yes** saves it. Clear it and Enter to remove
-  it, asked the same way. Esc or tapping away puts it back. Hover a level for who set it.
+  it, asked the same way. On a phone the number pad has no Enter: its ✓ asks the same way
+  (so does tapping away after changing it). Esc, or leaving it unchanged, puts it back.
+  Hover a level for who set it.
 - Changes from anyone show up live, flashing in.
 - Stored in `house_light_levels`: one row per room, service and segment.
 

@@ -9,8 +9,10 @@
 // location's shared Vintage / Modern / Midweek services, not one in another room like
 // "[North Auditorium]"); a service it doesn't have is hatched out.
 // Levels are percent (0-100). Tap one to type a new level; Enter asks "Are you sure?" and
-// only Yes saves it (clearing it and Enter removes it, asked the same way). Esc or tapping
-// away puts it back. Changes from anyone show up live, flashing in.
+// only Yes saves it (clearing it and Enter removes it, asked the same way). A phone's number
+// pad has no Enter: its ✓ (Done) only closes the keyboard, so leaving a level you changed
+// (the ✓, or tapping away) asks the same way. Leaving it as it was, or Esc, puts it back.
+// Changes from anyone show up live, flashing in.
 // Sundays | Wednesdays switches like Scheduling: both are laid out, what's on the sheet goes
 // out top left to bottom right and the other comes in. Staff and up.
 
@@ -250,7 +252,15 @@ export function mount(el, ctx) {
       if (e.key === 'Enter') { e.preventDefault(); submit(td, input.value); }
       else if (e.key === 'Escape') { e.preventDefault(); stopEdit(); }
     });
-    input.addEventListener('blur', () => { setTimeout(() => { if (s.edit?.td === td && !s.asking) stopEdit(); }, 0); });
+    // Leaving it: the ✓ over a phone's keyboard, tapping away, the Tab key. A new level asks
+    // "Are you sure?" just like Enter; the same level (or switching away from the app) puts it back.
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (!alive || s.edit?.td !== td || s.asking || !td.isConnected) return;
+        if (document.visibilityState === 'hidden') { stopEdit(); return; }
+        submit(td, input.value, { leaving: true });
+      }, 0);
+    });
   }
 
   function stopEdit() {
@@ -259,13 +269,14 @@ export function mount(el, ctx) {
     if (ed?.td.isConnected) paintCell(ed.td, { from: s.levels.get(ed.key)?.level ?? null });
   }
 
-  async function submit(td, raw) {
+  async function submit(td, raw, { leaving = false } = {}) {
     const text = String(raw).trim().replace(/\s*%$/, '');
     let next = null;
     if (text !== '') {
       if (!/^\d{1,3}$/.test(text) || Number(text) > 100) {
         td.classList.remove('is-bad'); void td.offsetWidth; td.classList.add('is-bad');
         ctx.toast('Type a level from 0 to 100.');
+        if (leaving) stopEdit(); // the keyboard's gone: put it back rather than leave it red
         return;
       }
       next = Number(text);
