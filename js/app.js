@@ -502,7 +502,7 @@ function authFrame(inner) {
     ${ctx.store.mode === 'demo' ? `<div class="demo-bar" role="note">Preview with example data. Any email and password signs in.</div>` : ''}
     <div class="auth">
       <div class="auth-card">
-        <div class="auth-brand">${brandMark('lg')}<div><div class="brand-name">${esc(APP_NAME)}</div><div class="brand-org">${esc(ORG_NAME)} production team</div></div></div>
+        <div class="auth-brand">${brandMark('lg')}<div><div class="brand-name">${esc(APP_NAME)}</div><div class="brand-org">${esc(ORG_NAME)}</div></div></div>
         ${inner}
       </div>
     </div>`;
@@ -761,7 +761,7 @@ function watchForUpdates() {
 // ------------------------------------------------------------------ misc --
 
 function brandMark(size = '') {
-  return `<span class="mark ${size}" aria-hidden="true"><i></i><i></i><i></i></span>`;
+  return `<span class="mark ${size}" aria-hidden="true"></span>`; // the Upstate Church logo (icons/uc-logo.png), in the page's ink
 }
 
 boot();

@@ -115,17 +115,13 @@ code { font-size: 0.9em; background: var(--panel-3); border-radius: 6px; padding
 .eyebrow { font: 500 12.5px/1 var(--f-body); color: var(--muted); letter-spacing: 0.01em; }
 
 /* brand mark: three bars in the department colors, in a rounded tile */
+/* The Upstate Church logo (icons/uc-logo.png, white on clear), drawn in the page's ink so it
+   works on dark and light. */
 .mark {
-  display: inline-grid; align-content: center; gap: 2.5px; flex: none;
-  width: 38px; height: 38px; padding: 0 9px; border-radius: 12px;
-  background: var(--panel-3); border: 1px solid var(--line-2);
+  display: inline-block; flex: none; width: 34px; height: 34px; background: var(--hud-ink, currentColor);
+  -webkit-mask: url("icons/uc-logo.png") center / contain no-repeat; mask: url("icons/uc-logo.png") center / contain no-repeat;
 }
-.mark i { display: block; height: 4px; border-radius: 2px; }
-.mark i:nth-child(1) { background: var(--dep-audio); width: 100%; }
-.mark i:nth-child(2) { background: var(--dep-video); width: 74%; }
-.mark i:nth-child(3) { background: var(--dep-lighting); width: 50%; }
-.mark.lg { width: 52px; height: 52px; padding: 0 12px; gap: 3.5px; border-radius: 16px; }
-.mark.lg i { height: 5.5px; }
+.mark.lg { width: 56px; height: 56px; }
 .brand { display: inline-flex; align-items: center; gap: 11px; }
 .brand-name { font: 500 17px/1.15 var(--f-display); letter-spacing: 0.005em; }
 .brand-org { font-size: 12.5px; color: var(--muted); }
@@ -809,7 +805,7 @@ button.r-ip:hover { border-color: var(--line-2); background: var(--panel-3); }
 }
 .auth-card { width: 100%; max-width: 420px; display: grid; gap: 24px; }
 .auth-brand { display: flex; align-items: center; gap: 14px; }
-.auth-brand .brand-name { font-size: 26px; font-weight: 400; }
+.auth-brand .brand-name { font: 600 26px/1 var(--f-hud); letter-spacing: 0.04em; text-transform: uppercase; }
 .auth-brand .brand-org { font-size: 13.5px; }
 .auth-tabs { width: 100%; }
 .auth-tabs button { flex: 1; }
@@ -2918,9 +2914,8 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   background: var(--hud-bg); border-color: var(--hud-line-2); border-radius: 0 4px 4px 0;
   font-family: var(--f-hud);
 }
-.nav-brand .brand-name { font: 600 16px/1.1 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; }
+.nav-brand .brand-name { font: 600 16px/1.1 var(--f-hud); letter-spacing: 0.04em; text-transform: uppercase; }
 .nav-brand .brand-org { font: 500 11px/1.2 var(--f-hud); letter-spacing: 0.04em; color: var(--hud-dim); }
-.nav-brand .mark, .menu-btn .mark { border-radius: 3px; }
 .nav-item, .nav-sub-item {
   border-radius: 2px; color: var(--hud-dim);
   font: 600 12.5px/1 var(--f-hud); letter-spacing: 0.1em; text-transform: uppercase;
@@ -2957,7 +2952,8 @@ html.ros-lock, html.ros-lock body { overscroll-behavior: none; touch-action: pan
   .nav-sub-item { height: 34px; }
 }
 .menu-btn { border-radius: 4px; }
-.menu-btn .brand-name { font: 600 15px/1 var(--f-hud); letter-spacing: 0.14em; text-transform: uppercase; }
+/* the same type as a page's title (SCHEDULING), smaller */
+.menu-btn .brand-name { font: 600 17px/1 var(--f-hud); letter-spacing: 0.04em; text-transform: uppercase; }
 
 /* ------------------------------------------------------------ lanyards -- */
 /* Drawn like the real ones (js/lanyard.js): black and white production badges on a dark blue
