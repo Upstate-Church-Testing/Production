@@ -31,6 +31,8 @@ const both = (full, short) => (short && short !== full ? `<span class="lf">${esc
  *  the row's padding. */
 const LANE = { reh: 16, svc: 24, resi: 32, gap: 3, pad: 7, sep: 5 };
 const PCO_BACK_DAYS = 21; // Planning Center plans this far back are on the board too
+/** Planning Center service types left off the board for now: Simpsonville's Traditional. */
+const LEFT_OUT = /^traditional$/i;
 
 /** The Planning Center times the Resi run [start, end] is for: the services it really overlaps
  *  (at least half the service, or half the run: not one it just clips the end of), or if none,
@@ -110,10 +112,11 @@ export function mount(el, ctx) {
 
   /** Planning Center by day and location: { byDate: Map(date -> Map(campus -> { services,
    *  rehearsals })), dates }. Every location's shared services (not hidden ones, not one-off
-   *  events). Times are Eastern. A time on two plans that day (Vintage and Modern share the
-   *  line check) shows once. A placeholder time ("PLEASE IGNORE DATE") is left out. */
+   *  events, not Traditional for now). Times are Eastern. A time on two plans that day
+   *  (Vintage and Modern share the line check) shows once. A placeholder time ("PLEASE IGNORE
+   *  DATE") is left out. */
   function indexPco({ types, plans }) {
-    const keep = new Map((types || []).filter((t) => t.campus_id && t.access !== 'hidden' && !t.is_event).map((t) => [t.id, t]));
+    const keep = new Map((types || []).filter((t) => t.campus_id && t.access !== 'hidden' && !t.is_event && !LEFT_OUT.test(t.name)).map((t) => [t.id, t]));
     const byDate = new Map();
     for (const p of plans || []) {
       const t = keep.get(p.service_type_id);

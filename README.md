@@ -379,7 +379,7 @@ with something on either). A row per location, all ten A to Z (an encoder that i
 location gets its own row). In each row:
 
 - **Planning Center** (Tally's copy of it, `pco_plans.times`, every location's shared
-  services; not hidden ones or one-off events): rehearsals as thin dashed bars, services as
+  services; not hidden ones, one-off events, or Simpsonville's Traditional for now): rehearsals as thin dashed bars, services as
   clear outlined bars with the start in bold, and dotted lines down from each service's start
   and end. A time on two plans that day (Vintage and Modern share the line check) shows once.
   Planning Center's "Other" times (Service Flow/Host Meeting, huddles) aren't shown; a time
