@@ -453,21 +453,45 @@ export function mount(el, ctx) {
       const keep = { get: (w) => scrollMem.get(`${nav.view}:${w}`) };
       const weeks = ['sun', 'mid'].filter((w) => m.rosterIn(w).length);
       if (!weeks.includes(m.week)) weeks.push(m.week);
-      pills = new Map();
-      opens = new Map();
-      box.innerHTML = (attn && m.week === 'sun' ? attentionHtml(m) : '')
-        + `<div class="ros-stage">${weeks.map((w) => roster(m, w, rosterCampus(m), w === m.week)).join('')}${barHtml()}</div>`;
+      const wrapOf = (w) => $(`.ros-wrap[data-wk="${w}"]`, box);
+      const teamNow = nav.view === 'team' && isStaff && !!s.vol;
+      const lay = (geo = null) => {
+        pills = new Map();
+        opens = new Map();
+        box.innerHTML = (attn && m.week === 'sun' ? attentionHtml(m) : '')
+          + `<div class="ros-stage">${weeks.map((w) => roster(m, w, rosterCampus(m), w === m.week, geo?.get(w))).join('')}${barHtml()}</div>`;
+      };
+      // Team takes its every measurement from the schedule's grid (label columns, each row's
+      // height, the width of a date, the size it's scaled to), so no line moves between the
+      // two: the schedule is laid out and measured first, then Team is laid out to match.
+      let geo = null;
+      if (teamNow) {
+        nav.view = 'sched';
+        lay();
+        let size0 = null;
+        if (wrapOf('sun')) size0 = fitRoster(null, wrapOf('sun'));
+        if (wrapOf('mid')) fitRoster(size0 || { z: null, extra: 0 }, wrapOf('mid'));
+        geo = new Map(weeks.map((w) => {
+          const wrap = wrapOf(w); // where the schedule was left: those are the dates Team's columns line up with
+          const k = scrollMem.get(`sched:${w}`);
+          if (wrap && k) wrap.scrollLeft = k.left; else if (wrap) scrollToNext(wrap);
+          return [w, measureGrid(wrap)];
+        }));
+        nav.view = 'team';
+      }
+      lay(geo);
       // Wednesdays is a few rows: the size they are on Sundays (every location), not blown up
       // to fill the screen.
-      const wrapOf = (w) => $(`.ros-wrap[data-wk="${w}"]`, box);
-      let size = null;
-      if (wrapOf('sun')) size = fitRoster(null, wrapOf('sun'));
-      if (wrapOf('mid')) fitRoster(size || { z: null, extra: 0 }, wrapOf('mid'));
+      if (geo) { for (const w of weeks) matchGrid(wrapOf(w), geo.get(w)); } else {
+        let size = null;
+        if (wrapOf('sun')) size = fitRoster(null, wrapOf('sun'));
+        if (wrapOf('mid')) fitRoster(size || { z: null, extra: 0 }, wrapOf('mid'));
+      }
       for (const w of weeks) {
         const wrap = wrapOf(w);
         if (!wrap) continue;
         const k = keep.get(w);
-        if (k) { wrap.scrollLeft = k.left; wrap.scrollTop = k.top; } else if (nav.view === 'team') wrap.scrollLeft = 0; else scrollToNext(wrap);
+        if (k) { wrap.scrollLeft = k.left; wrap.scrollTop = k.top; } else if (nav.view === 'team') alignTeam(wrap, geo?.get(w)); else scrollToNext(wrap);
         if (attn && w === 'sun' && m.week === 'sun') markAttention(wrap, !k);
       }
       fitStage();
@@ -684,7 +708,7 @@ export function mount(el, ctx) {
     return k && k.toLowerCase() !== String(p.title || '').replace(/[^A-Za-z]/g, '').toLowerCase() ? k[0].toUpperCase() : '';
   }
 
-  function roster(m, week, where, active = true) {
+  function roster(m, week, where, active = true, geo = null) {
     const { days, rows } = rosterData(m, week, where);
     const campus = where === ALL ? null : ctx.campusById.get(where);
     const letters = new Set();
@@ -710,13 +734,15 @@ export function mount(el, ctx) {
     // columns as the biggest team, three at least; a dashed box is a spot nobody's on.
     const teamView = nav.view === 'team' && isStaff && !!s.vol;
     const crews = teamView ? new Map(rows.map((row) => [row, crewFor(m, row, week)])) : null;
-    const crewMax = teamView ? Math.max(3, ...[...crews.values()].map((t) => t.length)) : 0;
+    const crewSpots = teamView ? Math.max(3, ...[...crews.values()].map((t) => t.length)) : 0;
+    // as many columns as the schedule shows across, so its lines carry on to the right edge
+    const crewMax = Math.max(crewSpots, geo?.across || 0);
     let crewTotal = 0;
     const body = groups.map((g) => g.rows.map((row, ri) => {
       const r = rowNo++;
       const cells = teamView ? Array.from({ length: crewMax }, (_, k) => {
         const x = crews.get(row)[k];
-        if (!x) return `<td style="--c:${2 + k}"><div class="ros-cell"><i class="rp is-team is-none" title="Nobody else on the team for this"></i></div></td>`;
+        if (!x) return k < crewSpots ? `<td style="--c:${2 + k}"><div class="ros-cell"><i class="rp is-team is-none" title="Nobody else on the team for this"></i></div></td>` : `<td style="--c:${2 + k}"></td>`;
         crewTotal += 1;
         const lan = x.lanyard || null;
         const inner = `${lan ? microBadge(lan, `${LANYARDS[lan]} lanyard`) : ''}<b>${nameShort(x.name) === x.name ? esc(x.name) : `<span class="nf">${esc(x.name)}</span><span class="ns">${esc(nameShort(x.name))}</span>`}</b>`;
@@ -1038,6 +1064,73 @@ export function mount(el, ctx) {
       who.set(String(x.person_id), { name: v?.name || 'Someone', id: v?.id || null, lanyard: v?.lanyard || null });
     }
     return [...who.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** A laid-out schedule grid's measurements, for Team to match (matchGrid). Sizes are in the
+   *  table's own pixels: `f` is how many screen pixels one of them is at its zoom (browsers
+   *  measure a zoomed table differently; a probe at the same zoom says which). */
+  function measureGrid(wrap) {
+    const table = wrap && $('.ros', wrap);
+    if (!table) return null;
+    const z = table.style.zoom || '1';
+    const probe = document.createElement('div');
+    probe.style.cssText = `position:absolute;visibility:hidden;width:100px;height:1px;zoom:${z}`;
+    wrap.appendChild(probe);
+    const f = probe.getBoundingClientRect().width / 100 || 1;
+    probe.remove();
+    const w = (n) => (n ? n.getBoundingClientRect().width / f : 0);
+    const corner = $$('thead .ros-corner', table).pop();
+    const edge = corner ? corner.getBoundingClientRect().right : 0;
+    const labels = corner ? (edge - table.getBoundingClientRect().left) / f : 0;
+    // each date's width, from the first one showing beside the labels (they aren't all the same)
+    const days = $$('thead .ros-day', table);
+    const from = Math.max(0, days.findIndex((d) => d.getBoundingClientRect().right > edge + 2));
+    const cols = days.slice(from).map(w).filter(Boolean);
+    // how far that first date is tucked under the labels (screen pixels; a couple at most)
+    const off = days[from] ? Math.max(0, edge - days[from].getBoundingClientRect().left) : 0;
+    const room = wrap.clientWidth / f - labels + off / f;
+    let across = 0;
+    for (let sum = 0; cols.length && sum < room + 1; across += 1) sum += cols[Math.min(across, cols.length - 1)];
+    return {
+      z, f, cols, across, off, loc: w($('thead .ros-loc-h', table)), pos: w($('thead .ros-pos-h', table)),
+      rows: $$('tbody tr', table).map((tr) => tr.getBoundingClientRect().height / f),
+      head: $('thead tr', table).getBoundingClientRect().height / f, foot: ($('tfoot tr', table)?.getBoundingClientRect().height || 0) / f,
+      wrapH: wrap.style.height, fits: wrap.classList.contains('fits'),
+    };
+  }
+
+  /** Team's grid at the schedule's measurements: nothing but what's in the cells differs. */
+  function matchGrid(wrap, g) {
+    const table = wrap && $('.ros', wrap);
+    if (!table || !g) { if (wrap) fitRoster(null, wrap); return; }
+    table.style.zoom = g.z;
+    const px = (n) => `${n.toFixed(3)}px`;
+    const n = $$('tbody tr:first-child td', table).length;
+    const widths = [...(g.loc ? [g.loc] : []), g.pos, ...Array.from({ length: n }, (_, k) => g.cols[Math.min(k, g.cols.length - 1)] || 144)];
+    table.insertAdjacentHTML('afterbegin', `<colgroup>${widths.map((x) => `<col style="width:${px(x)}">`).join('')}</colgroup>`);
+    table.style.width = px(widths.reduce((a, b) => a + b, 0));
+    table.classList.add('is-matched');
+    $$('tbody tr', table).forEach((tr, i) => { if (g.rows[i]) tr.style.height = px(g.rows[i]); });
+    const hr = $('thead tr', table); if (hr) hr.style.height = px(g.head);
+    const fr = $('tfoot tr', table); if (fr && g.foot) fr.style.height = px(g.foot);
+    wrap.style.height = g.wrapH;
+    wrap.classList.toggle('fits', g.fits);
+    fitNames(table);
+  }
+
+  /** Team's first column exactly where the schedule's first date sits beside the labels. */
+  function alignTeam(wrap, g) {
+    wrap.scrollLeft = 0;
+    const first = $('tbody tr:first-child td', wrap);
+    const edge = $$('thead .ros-corner', wrap).pop();
+    if (!g?.off || !first || !edge) return;
+    for (let i = 0; i < 6; i++) {
+      const d = (edge.getBoundingClientRect().right - first.getBoundingClientRect().left) - g.off;
+      if (Math.abs(d) < 0.3) break;
+      const was = wrap.scrollLeft;
+      wrap.scrollLeft = was - d;
+      if (wrap.scrollLeft === was) break;
+    }
   }
 
   /** A two-way switch (.hud-sw): which side is on. The lit block slides to it. */

@@ -738,7 +738,9 @@ page's head on a computer) swaps the grid for who's on each team in Planning Cen
 rows (location, position), with each person on that position's team across in place of the
 dates, by name with their badge; tap one for their profile. Three columns at least (a dashed
 box is a spot nobody's on), more if a team is bigger. The labels stay while the grid's
-contents go out and come in. It lasts while the app is open (`servicesNav.view`).
+contents go out and come in. It lasts while the app is open (`servicesNav.view`). Team is laid out at the
+schedule's exact measurements (`measureGrid` / `matchGrid`: label columns, each row's height,
+each date's width, the scale), so no line moves between the two; only the cells empty and fill.
 **Sun | Wed** is the same kind of switch (`.hud-sw`).
 
 **The top row** (the logo and Production, phones and small iPads) is part of the page, not a

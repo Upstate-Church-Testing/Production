@@ -4507,3 +4507,8 @@ html.hp-on .fs-btn { display: none; }
 .ros.vw-hide :is(.ros-cell, .dh, .ros-tot) { opacity: 0; transform: translateX(10px); }
 .ros.vw-in :is(.ros-cell, .dh, .ros-tot) { transition: opacity 0.26s ease, transform 0.34s cubic-bezier(0.2, 0.9, 0.25, 1.15); transition-delay: calc(var(--r, 0) * 14ms + min(var(--c, 0), 6) * 26ms); }
 @media (min-width: 860px) { .ros-tools { margin-right: 24px; } } /* clear of the full screen button in the corner */
+
+/* Team at the schedule's exact measurements (services.js matchGrid): the label columns and a
+   date's width are pinned, so no line moves between Schedule and Team. */
+.ros.is-matched { min-width: 0; table-layout: fixed; }
+.ros.is-matched :is(th, td) { width: auto; min-width: 0; max-width: none; box-sizing: border-box; }
