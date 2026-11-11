@@ -4498,7 +4498,8 @@ html.hp-on .fs-btn { display: none; }
 /* views/haze-board.js, in the console look. One sheet as tall as the screen has left (set
    by fit()), its lines sharing the height evenly so every hazer shows without scrolling.
    A line: location | hazer | tank | last filled, last checked | fluid on hand (the fluid
-   moves under the hazer's name on a phone). The tank is an upright can (.hb-can), as tall
+   moves under the hazer's name on a phone). The tank is a flat upright meter (.hb-can,
+   drawn like a console fader: square, a line every eighth, a bright line at the level), as tall
    as its line allows (--rowh, set by fit()): .hb-liq is --lvl high, the three <u> are the
    quarter lines, .hb-marks names them beside it. Green from half up, amber from a quarter,
    red under that, dashed when it's never been checked. */
@@ -4552,22 +4553,23 @@ html.hp-on .fs-btn { display: none; }
 /* the tank: an upright can */
 .hb-tk { display: flex; align-items: center; justify-content: flex-start; gap: 14px; padding: 0 14px 0 20px; text-align: left; }
 .hb-gauge { flex: none; display: flex; align-items: stretch; gap: 6px; --h: clamp(30px, calc(var(--rowh, 60px) - 20px), 74px); height: var(--h); }
-.hb-can { position: relative; display: block; height: 100%; aspect-ratio: 0.56; border: 1.5px solid var(--hud-dim); border-radius: 50% / 12%; overflow: hidden;
-  background: linear-gradient(to right, color-mix(in srgb, var(--hud-ink) 12%, transparent), transparent 38%, color-mix(in srgb, var(--hud-ink) 7%, transparent)); }
-.hb-liq { position: absolute; left: 0; right: 0; bottom: 0; height: var(--lvl, 0%); background: var(--c, var(--hud-dim));
-  background-image: linear-gradient(to right, rgb(255 255 255 / 0.42), rgb(255 255 255 / 0) 40%, rgb(0 0 0 / 0.28));
-  border-top: 1px solid color-mix(in srgb, #fff 45%, var(--c, transparent)); transition: height 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.hb-can[style*="--lvl:0%"] .hb-liq, .hb-can[style*="--lvl: 0%"] .hb-liq { border-top: 0; }
-/* the can's rim */
-.hb-can::after { content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: 13%; border: 1px solid var(--hud-dim); border-radius: 50%; opacity: 0.8; pointer-events: none; }
-.hb-can u { position: absolute; right: 0; width: 42%; height: 1px; background: var(--hud-ink); opacity: 0.6; }
+.hb-can { position: relative; display: block; height: 100%; aspect-ratio: 0.46; margin: 0 5px; border: 1px solid var(--hud-ink); border-radius: 0;
+  /* flat, like a fader on a console: a line every eighth */
+  background: repeating-linear-gradient(to top, transparent 0 calc(12.5% - 1px), color-mix(in srgb, var(--hud-ink) 22%, transparent) calc(12.5% - 1px) 12.5%); }
+.hb-liq { position: absolute; left: 0; right: 0; bottom: 0; height: var(--lvl, 0%); transition: height 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  background: color-mix(in srgb, var(--c, var(--hud-dim)) 46%, var(--hud-bg)); }
+.hb-can::after { content: ""; position: absolute; inset: 0; pointer-events: none; /* the same lines, cut through the fill */
+  background: repeating-linear-gradient(to top, transparent 0 calc(12.5% - 1px), var(--hud-bg) calc(12.5% - 1px) 12.5%); opacity: 0.7; }
+/* where the level is: a bright line across, past both edges */
+.hb-liq::before { content: ""; z-index: 1; position: absolute; left: -6px; right: -6px; top: -1px; height: 2px; background: var(--c, var(--hud-dim)); box-shadow: 0 0 6px color-mix(in srgb, var(--c, transparent) 70%, transparent); }
+.hb-can u { position: absolute; right: -5px; width: 4px; height: 1px; background: var(--hud-dim); }
 .hb-can u:nth-of-type(1) { bottom: 25%; } .hb-can u:nth-of-type(2) { bottom: 50%; } .hb-can u:nth-of-type(3) { bottom: 75%; }
 .hb-marks { position: relative; display: block; width: 26px; }
 .hb-marks em { position: absolute; left: 0; transform: translateY(50%); font: 600 9.5px/1 var(--f-hud); font-style: normal; letter-spacing: 0.04em; text-transform: uppercase; color: var(--hud-dim); white-space: nowrap; }
 .hb-marks em:nth-child(1) { bottom: 100%; transform: translateY(100%); } .hb-marks em:nth-child(2) { bottom: 75%; } .hb-marks em:nth-child(3) { bottom: 50%; } .hb-marks em:nth-child(4) { bottom: 25%; }
 .lvl-ok { --c: var(--hud-c); } .lvl-low { --c: var(--hud-u); } .lvl-bad { --c: var(--hud-d); }
-.lvl-none .hb-can { border-style: dashed; }
-.lvl-none .hb-can::after { display: none; }
+.lvl-none .hb-can { border-style: dashed; border-color: var(--hud-dim); }
+.lvl-none .hb-liq::before { display: none; }
 .hb-rd b { font: 600 20px/1 var(--f-hud); }
 .lvl-bad .hb-rd b { color: var(--hud-d); }
 

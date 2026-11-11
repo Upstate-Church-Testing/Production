@@ -457,7 +457,7 @@ Where something is and what it's for are kept apart:
   that fits the screen without scrolling, in the console look. A line per hazer in service,
   locations in the usual order. Spares aren't on it, nor are the locations that aren't part
   of the round (`LEFT_OUT` in the view: Greenville, Laurens, Union). Across: the hazer (its
-  model's photo, name, **the room it's in**, brand), its **tank** (an upright can filled to
+  model's photo, name, **the room it's in**, brand), its **tank** (a flat upright meter, drawn like a console fader, filled to
   the last check, marked ¼ ½ ¾ Full), **last filled** and **last checked** (the dates of the
   latest check marked "I filled it" and of the latest check of any kind; a check over 30
   days old is amber), and the fluid it takes with the bottles on hand there (− / +). Tapping
