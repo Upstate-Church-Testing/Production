@@ -15,5 +15,18 @@ with sync_playwright() as p:
             print('ok ' if ok else 'BAD', size, 'vgap', vgap, m)
             if not ok: bad.append((size,vgap))
             c.close()
+    # The installed iPhone app: the window is either the whole screen, or about a status bar short of it
+    # (iOS 26.0). Either way the sheet must end at the bottom of the screen: no gap, nothing past it.
+    UA='Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'
+    for short in (0, 61):
+        for sw, sh in [(393,852),(430,932)]:
+            c=b.new_context(viewport={'width':sw,'height':sh-short}, screen={'width':sw,'height':sh}, user_agent=UA, device_scale_factor=2, has_touch=True, is_mobile=True, color_scheme='dark')
+            c.add_init_script("window.UCP_PREVIEW = true; Object.defineProperty(navigator, 'standalone', { get: () => true });"); pg=c.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
+            pg.goto('http://127.0.0.1:8777/index.html#haze'); pg.wait_for_timeout(2300)
+            m=pg.evaluate("() => { const r=[...document.querySelectorAll('.hb-r')].at(-1).getBoundingClientRect(); return {window: innerHeight, screen: screen.height, lastBottom: Math.round(r.bottom), vgap: getComputedStyle(document.documentElement).getPropertyValue('--vgap')} }")
+            ok = abs(m['lastBottom'] - sh) <= 1
+            print('ok ' if ok else 'BAD', 'iPhone app', (sw, sh), 'window short by', short, m)
+            if not ok: bad.append(('ios', sw, sh, short))
+            c.close()
     b.close()
 print('BAD', bad or 'none', 'ERRORS', errs or 'none')

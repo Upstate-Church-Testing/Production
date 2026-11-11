@@ -74,11 +74,15 @@ export function mount(el, ctx) {
   const onResize = debounce(() => fit(), 100);
   window.addEventListener('resize', onResize);
   window.visualViewport?.addEventListener('resize', onResize);
+  // (That window height can change with no resize event: look every second, and fit again.)
+  let seenH = window.innerHeight;
+  const watchH = setInterval(() => { if (window.innerHeight !== seenH) { seenH = window.innerHeight; fit(); } }, 1000);
 
   load(false);
   return {
     unmount() {
       alive = false;
+      clearInterval(watchH);
       document.documentElement.classList.remove('hb-lock');
       unsubscribe();
       window.removeEventListener('resize', onResize);
@@ -197,9 +201,9 @@ export function mount(el, ctx) {
     if (!board) return;
     document.documentElement.classList.add('hb-lock'); // (measured as it will be: the page's home-bar strip gone)
     const top = board.getBoundingClientRect().top + window.scrollY;
-    // Down to the bottom of the window, less the sheet's own margin (which keeps it clear
-    // of the home bar). Never past it: a sheet that ran long had its last line cut off.
-    const room = window.innerHeight;
+    // Down to the bottom of the screen, less the sheet's own margin (which keeps it clear of
+    // the home bar). Never past it, never short of it.
+    const room = screenBottom();
     let h = Math.max(0, Math.floor(room - top - (parseFloat(getComputedStyle(board).marginBottom) || 0)));
     board.style.height = `${h}px`;
     // Anything else still under it comes off too, and so does whatever of the sheet itself
@@ -211,6 +215,20 @@ export function mount(el, ctx) {
     // (A few px of leeway: lines still rising into place on opening count as taller.)
     document.documentElement.classList.toggle('hb-lock', board.scrollHeight <= board.clientHeight + 8);
     if (row) board.style.setProperty('--rowh', `${Math.floor(row.getBoundingClientRect().height)}px`); // the cans are sized to their line
+  }
+
+  /** Where the screen really ends, measured now. The iPhone home-screen app sometimes
+   *  reports its window about a status bar shorter than the screen it fills (iOS 26.0), and
+   *  sometimes not, changing without notice: so the screen's own height is used there
+   *  whenever the window is within a status bar of it (further off is a keyboard). */
+  function screenBottom() {
+    const ios = /iP(hone|od|ad)/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+    const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+    if (!(ios && standalone)) return window.innerHeight;
+    const tall = window.innerHeight > window.innerWidth;
+    const full = tall ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    const short = full - window.innerHeight;
+    return short >= 0 && short <= 90 ? full : window.innerHeight;
   }
 
   function hazerOf(id) {

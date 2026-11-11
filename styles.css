@@ -4507,7 +4507,8 @@ html.hp-on .fs-btn { display: none; }
 /* With every line on screen (fit() says so) the page holds still, as Scheduling does: no
    scrolling, no bounce; the sheet keeps clear of the home bar by its own margin. */
 html.hb-lock { padding-bottom: 0; }
-html.hb-lock { overflow: hidden; } /* (not the body too: the top bar sticks to the screen, not to a clipped body) */
+/* (No overflow: hidden, as on Scheduling: in the iPhone app the sheet can run past a window
+   that reports itself short, and must still show there. Touches just don't move the page.) */
 html.hb-lock, html.hb-lock body { overscroll-behavior: none; touch-action: none; }
 .page-haze .page-head { padding-bottom: 6px; }
 .page-haze .mode-row { align-items: flex-end; flex-wrap: nowrap; }
