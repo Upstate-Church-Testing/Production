@@ -481,7 +481,7 @@ export function patchView(host) {
     col[col.indexOf(el) + 1]?.focus();
   }
 
-  return { draw, click, input, keydown, editing: () => !!edit, cancel: () => { edit = null; } };
+  return { draw, click, input, keydown, editing: () => !!edit, cancel: () => { edit = null; }, startEdit };
 }
 
 const toInt = (v) => (v === '' || v == null || !/^\d+$/.test(String(v)) ? null : Number(v));

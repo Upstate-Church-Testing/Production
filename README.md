@@ -312,8 +312,14 @@ A patch belongs to the console in its room, so patch and fixture ID are per loca
 room ("rig"), and moving a unit to another room clears them. The database checks that a
 patch doesn't run past address 512; the app flags overlapping patches, repeated fixture
 IDs and repeated stage numbers, and treats two fixtures on exactly the same addresses as
-doubled on purpose. Gear › Patch is the patch sheet: one room at a time, universe by
-universe (1–100), with a fill-in table, or one universe across every location.
+doubled on purpose. Lighting › Patch (`js/views/patch-board.js`, in the console look) opens on
+every room with lights on one sheet that fits the screen without scrolling: a line per room
+with how many fixtures are patched, each universe in use and how full it is, and how many
+need a look; picking a universe dims the rooms that don't use it. A line opens that room's
+patch list, the one screen that scrolls: figures (patched, universes, addresses, console),
+then universe by universe (1–100) a bar of the 512 addresses and the fixtures in address
+order, then what isn't patched, with a search. "Edit numbers" is the fill-in table
+(`js/views/patch.js`).
 
 ## Rigging (Lighting › Rigging)
 
@@ -644,7 +650,9 @@ js/views/haze.js               Haze's forms (a model's fluid and tank, a fluid, 
 js/views/cameras.js            Gear › Cameras: camera positions and the gear on each
 js/views/systems.js            Logistics › Systems: gear that works together, with roles
 js/views/cables.js             Cables: types by their ends, every length and label with a count
-js/views/patch.js              Gear › Patch: each room's patch by universe, the numbers table with quick fill, one universe across locations
+js/views/patch-board.js        Lighting › Patch: every room on one sheet, and a room's patch list
+js/views/patch.js              Patch's numbers table with quick fill (and the older patch sheet, no longer on the menu)
+js/fit.js                      a sheet sized to what's left of the screen, so its page needn't scroll (Haze, Patch)
 js/views/rigging.js            Lighting › Rigging: each room's positions front to back, what hangs on each, hang and edit sheets
 js/lighting.js                 patch parsing (1.333), footprints, overlap and duplicate checks
 js/photo.js                    turns a picked photo into a white-background square (plus thumbnail)
@@ -703,7 +711,7 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 
 ## Sidebar
 
-`NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (Haze,
+`NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (a folder only, no page of its own: Haze,
 Patch, Rigging, House lights; Fixtures is off the menu for now, its page still works), Network (IP sheet), PCO (Services, Scheduling, People, My schedule), Resi (Studio, Playback) and Logistics (Meetings, Statistics, Systems, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under
