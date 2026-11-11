@@ -197,14 +197,14 @@ export function mount(el, ctx) {
     if (!board) return;
     document.documentElement.classList.add('hb-lock'); // (measured as it will be: the page's home-bar strip gone)
     const top = board.getBoundingClientRect().top + window.scrollY;
-    // iOS leaves a home-screen app's window short of the real bottom by --vgap (app.js):
-    // the sheet runs down to the real bottom.
-    const vgap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vgap')) || 0;
-    const room = window.innerHeight + vgap;
+    // Down to the bottom of the window, less the sheet's own margin (which keeps it clear
+    // of the home bar). Never past it: a sheet that ran long had its last line cut off.
+    const room = window.innerHeight;
     let h = Math.max(0, Math.floor(room - top - (parseFloat(getComputedStyle(board).marginBottom) || 0)));
     board.style.height = `${h}px`;
-    // Whatever's still under it (the home indicator's strip, say) comes off too.
-    const over = document.documentElement.scrollHeight - room;
+    // Anything else still under it comes off too, and so does whatever of the sheet itself
+    // is past the window's edge.
+    const over = Math.max(document.documentElement.scrollHeight - room, Math.ceil(board.getBoundingClientRect().bottom) - room);
     if (over > 0 && over < h) { h -= over; board.style.height = `${h}px`; }
     const row = $('.hb-r:not(.hb-hd)', board);
     // With every line showing, the page itself holds still: nothing to scroll, nothing bounces.
