@@ -453,15 +453,18 @@ Where something is and what it's for are kept apart:
   "Don't know the model yet…" and say what kind of thing it is (Projector, Display…).
   It goes in on a placeholder model and Gear keeps saying "3 items still need a model"
   until each one is switched to its real model.
-- **Haze** (Lighting › Haze, `js/views/haze-board.js`): every location's hazers on one sheet
-  that fits the screen without scrolling, in the console look. A line per hazer, locations in
-  the usual order, and a line for a location with none. Across: the hazer (its model's photo,
-  name, brand, room; spares are tagged), its **density** (a percent typed in and confirmed,
-  `devices.haze_density`), its **tank** (a cylinder on its side filled to the last check,
-  marked ¼ ½ ¾ Full) and the fluid it takes with the bottles on hand there (− / +). Tapping
-  the hazer or its tank opens it: tap how full it is, say if it was filled, see earlier checks.
+- **Haze** (Lighting › Haze, `js/views/haze-board.js`): the Sunday haze round on one sheet
+  that fits the screen without scrolling, in the console look. A line per hazer in service,
+  locations in the usual order. Spares aren't on it, nor are the locations that aren't part
+  of the round (`LEFT_OUT` in the view: Greenville, Laurens, Union). Across: the hazer (its
+  model's photo, name, **the room it's in**, brand), its **tank** (an upright can filled to
+  the last check, marked ¼ ½ ¾ Full), **last filled** and **last checked** (the dates of the
+  latest check marked "I filled it" and of the latest check of any kind; a check over 30
+  days old is amber), and the fluid it takes with the bottles on hand there (− / +). Tapping
+  a line opens the hazer: tap how full it is, say if it was filled, see earlier checks.
   Hazers are lighting items in the "Hazer" category: they keep a patch but don't show
   up under "Fixture". The model says which fluid it takes and how big the tank is.
+  (`devices.haze_density`, a percent per hazer, is kept but not shown for now.)
 - **Cameras**: each location's camera positions (Cam 1…N), in service or out of
   commission, with the gear on each one (any item whose Spot is "Cam 3"): each piece by
   brand and model ("Atomos Ninja V") with its photo, what it is and its asset # under

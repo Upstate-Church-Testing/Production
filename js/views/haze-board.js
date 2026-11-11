@@ -1,26 +1,39 @@
-// Lighting › Haze: every location's hazers on one sheet that fits the screen (no scrolling),
-// in the console look (like PCO › Scheduling and House lights). One line per hazer, the
-// locations in the order they're in everywhere else; a location with no hazer still has
-// its line. Across: the location, the hazer (its model's photo, its name, brand and room; a
-// spare says so), its density (a percent, typed in: Enter or leaving it asks "Are you
-// sure?"; clearing it takes it off), its tank (a cylinder lying on its side, filled to the
-// last level checked, marked ¼ ½ ¾ and Full), and the fluid it takes with the bottles on
-// hand at that location (− and +). Tapping the hazer or its tank opens it: tap how full
-// the tank is (Empty ¼ ½ ¾ Full), say if it was filled, and see the earlier checks.
+// Lighting › Haze: the Sunday haze round on one sheet that fits the screen (no scrolling),
+// in the console look (like PCO › Scheduling and House lights). One line per hazer in
+// service, the locations in the order they're in everywhere else. Left off: spares, and
+// the locations that aren't part of the haze round (LEFT_OUT). Across: the location, the
+// hazer (its model's photo, its name, the room it's in, its brand), its tank (an upright
+// can filled to the last level checked, marked ¼ ½ ¾ and Full), when it was last filled
+// and last checked (the level is only as good as that date), and the fluid it takes with
+// the bottles on hand at that location (− and +). Tapping a line opens the hazer: tap how
+// full the tank is (Empty ¼ ½ ¾ Full), say if it was filled, and see the earlier checks.
 // A hazer is an ordinary lighting item in the "Hazer" category (Gear); its model says which
 // fluid it takes and how big the tank is (views/haze.js has those forms). Staff and up.
+// (devices.haze_density, a percent per hazer, is kept but not shown for now.)
 
-import { esc, icon, $, $$, debounce, pageTitle, timeAgo } from '../util.js';
-import { hudConfirm, hudPanel } from '../hud.js';
+import { esc, icon, $, $$, debounce, pageTitle } from '../util.js';
+import { hudPanel } from '../hud.js';
 import { hazeView, isHazer } from './haze.js';
 import { ALL } from '../picker.js';
 
 const LEVELS = [[0, 'Empty'], [25, '¼'], [50, '½'], [75, '¾'], [100, 'Full']];
 const STALE_DAYS = 30;
+/** Locations that aren't part of the haze round (by code): not on the sheet. */
+const LEFT_OUT = new Set(['GVL', 'LAU', 'UN']);
 /** A phone shows a location's code, as Scheduling does. */
 const SHORT = { AND: 'AN', MAU: 'MLN' };
 const both = (full, short) => (short && short !== full ? `<span class="lf">${esc(full)}</span><span class="ls">${esc(short)}</span>` : esc(full));
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+/** How long ago a day was, in days: "Today", "Yesterday", "12 days ago". */
+const daysAgo = (iso) => {
+  const a = new Date(iso); a.setHours(0, 0, 0, 0);
+  const b = new Date(); b.setHours(0, 0, 0, 0);
+  const n = Math.round((b - a) / 864e5);
+  return n <= 0 ? 'Today' : n === 1 ? 'Yesterday' : `${n} days ago`;
+};
+/** The can: filled to --lvl, a line at each quarter, the quarters named beside it. */
+const can = (lvl) => `<span class="hb-gauge"><span class="hb-can" style="--lvl:${lvl ?? 0}%"><i class="hb-liq"></i><u></u><u></u><u></u></span>
+  <span class="hb-marks" aria-hidden="true"><em>Full</em><em>¾</em><em>½</em><em>¼</em></span></span>`;
 const levelText = (n) => (n == null ? 'Not checked' : n >= 100 ? 'Full' : n <= 0 ? 'Empty' : n === 25 ? '¼' : n === 50 ? '½' : n === 75 ? '¾' : `${n}%`);
 const levelClass = (n) => (n == null ? 'lvl-none' : n >= 50 ? 'lvl-ok' : n >= 25 ? 'lvl-low' : 'lvl-bad');
 /** A hazer, drawn: for a model with no photo. */
@@ -29,7 +42,7 @@ const HAZER_ART = '<svg viewBox="0 0 32 32" aria-hidden="true" fill="none" strok
 export function mount(el, ctx) {
   let alive = true;
   const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const s = { data: null, extra: null, campus: ALL, edit: null, asking: false, first: true };
+  const s = { data: null, extra: null, campus: ALL, first: true };
 
   el.innerHTML = `<div class="hz" id="hb">
       <div class="page-head"><div class="mode-row">${pageTitle(ctx.page)}<p class="hb-count" id="hb-count" role="status"></p></div></div>
@@ -49,10 +62,9 @@ export function mount(el, ctx) {
   });
 
   el.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-open], [data-dn], [data-step], [data-fluid], [data-model]');
-    if (!t || s.asking) return;
-    if (t.dataset.dn) startEdit(t.closest('.hb-dn'));
-    else if (t.dataset.open) openHazer(t.dataset.open);
+    const t = e.target.closest('[data-open], [data-step], [data-fluid], [data-model]');
+    if (!t) return;
+    if (t.dataset.open) openHazer(t.dataset.open);
     else if (t.dataset.step) forms.stepStock(t.dataset.step, Number(t.dataset.d));
     else if (t.dataset.fluid) forms.fluidSheet((s.extra?.fluids || []).find((f) => f.id === t.dataset.fluid));
     else if (t.dataset.model) forms.modelSheet(t.dataset.model);
@@ -84,7 +96,6 @@ export function mount(el, ctx) {
       if (alive && !s.data) body.innerHTML = `<div class="empty"><p>Couldn’t load haze: ${esc(e.message)}</p></div>`;
       return;
     }
-    if (live && (s.edit || s.asking)) return; // typing a density: it's drawn again when that's done
     draw();
   }
 
@@ -94,15 +105,20 @@ export function mount(el, ctx) {
   function checksOf(id) { return s.extra.checks.filter((c) => c.device_id === id).sort((a, b) => b.checked_at.localeCompare(a.checked_at)); }
   function bottles(campusId, fluidId) { return s.extra.stock.find((r) => r.campus_id === campusId && r.fluid_id === fluidId)?.bottles || 0; }
   function spare(d) { return d.status !== 'active'; }
+  /** A date on the sheet: the day, and how long ago under it. */
+  function when(label, k, old) {
+    return `<span class="hb-d${k ? '' : ' is-none'}${old ? ' is-old' : ''}"><small>${label}</small><b>${k ? esc(day(k.checked_at)) : '—'}</b><i>${k ? daysAgo(k.checked_at) : 'Not on record'}</i></span>`;
+  }
 
-  /** One line per hazer, by location (each location's in-service ones first); a location
-   *  with none has one empty line. */
+  /** One line per hazer in service, by location (by room, then name); a location on the
+   *  round with none has one empty line. */
   function lines() {
-    const hz = s.data.devices.filter((d) => d.status !== 'retired' && isHazer(typeOf(d)));
+    const hz = s.data.devices.filter((d) => d.status === 'active' && isHazer(typeOf(d)));
     const out = [];
     for (const c of ctx.campuses) {
+      if (LEFT_OUT.has(c.code)) continue;
       const here = hz.filter((d) => d.campus_id === c.id)
-        .sort((a, b) => spare(a) - spare(b) || roomName(a.room_id).localeCompare(roomName(b.room_id)) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+        .sort((a, b) => roomName(a.room_id).localeCompare(roomName(b.room_id)) || a.name.localeCompare(b.name, undefined, { numeric: true }));
       if (!here.length) out.push({ c, d: null, first: true });
       here.forEach((d, i) => out.push({ c, d, first: i === 0 }));
     }
@@ -118,7 +134,7 @@ export function mount(el, ctx) {
     const none = new Set(list.filter((x) => !x.d).map((x) => x.c.id)).size;
     $('#hb-count', el).innerHTML = `<b>${hz.length}</b> ${hz.length === 1 ? 'hazer' : 'hazers'}${none ? ` <i>·</i> ${none} ${none === 1 ? 'location' : 'locations'} without` : ''}${low ? ` <i>·</i> <em>${low} low</em>` : ''}`;
     body.innerHTML = `<div class="hb-board${s.first && !still() ? ' hb-boot' : ''}" style="--n:${list.length}">
-        <div class="hb-r hb-hd" role="row"><span>${both('Location', 'Loc')}</span><span>Hazer</span><span>Density</span><span>Tank</span><span class="hb-fl">Fluid on hand</span></div>
+        <div class="hb-r hb-hd" role="row"><span>${both('Location', 'Loc')}</span><span>Hazer</span><span>Tank</span><span class="hb-whd"><span>${both('Last filled', 'Filled / checked')}</span><span>Last checked</span></span><span class="hb-fl">Fluid on hand</span></div>
         ${list.map(line).join('')}
       </div>`;
     fit();
@@ -126,7 +142,7 @@ export function mount(el, ctx) {
       s.first = false;
       // The tanks fill from empty, once.
       if (!still()) {
-        const cyl = $$('.hb-cyl', body);
+        const cyl = $$('.hb-can', body);
         cyl.forEach((n) => { n.dataset.to = n.style.getPropertyValue('--lvl'); n.style.setProperty('--lvl', '0%'); });
         requestAnimationFrame(() => requestAnimationFrame(() => cyl.forEach((n) => n.style.setProperty('--lvl', n.dataset.to))));
         setTimeout(() => $('.hb-board', body)?.classList.remove('hb-boot'), 700);
@@ -141,26 +157,28 @@ export function mount(el, ctx) {
     if (!d) return `<div class="hb-r is-first is-none" role="row" style="${j}">${loc}<span class="hb-nohz">No hazer</span></div>`;
     const t = typeOf(d);
     const f = fluid(t?.haze_fluid_id);
-    const last = checksOf(d.id)[0];
+    const checks = checksOf(d.id);
+    const last = checks[0];
+    const fill = checks.find((k) => k.filled);
     const lvl = last ? last.level : null;
     const stale = last && (Date.now() - Date.parse(last.checked_at)) / 864e5 > STALE_DAYS;
     const n = f ? bottles(c.id, f.id) : 0;
     const photo = t?.photo_path ? ctx.store.photoUrl(t.photo_path, true) : null;
-    const brand = [t?.manufacturer, t && t.name !== d.name && !d.name.startsWith(t.name) ? t.name : null].filter(Boolean).join(' ');
-    const room = roomName(d.room_id);
+    const room = [roomName(d.room_id), d.location].filter(Boolean).join(' · ') || 'No room set';
     const key = f ? `${c.id}|${f.id}` : '';
-    return `<div class="hb-r${first ? ' is-first' : ''}${spare(d) ? ' is-spare' : ''}" role="row" style="${j}" data-id="${d.id}">
+    const said = `${c.short_name} ${room} ${d.name}`;
+    return `<div class="hb-r${first ? ' is-first' : ''}" role="row" style="${j}" data-id="${d.id}">
       ${loc}
-      <button type="button" class="hb-who" data-open="${d.id}" aria-label="${esc(`${c.short_name} ${d.name}: open`)}">
+      <button type="button" class="hb-who" data-open="${d.id}" aria-label="${esc(`${said}: open`)}">
         <span class="hb-pic">${photo ? `<img src="${esc(photo)}" alt="" loading="lazy">` : HAZER_ART}</span>
-        <span class="hb-nm"><b>${esc(d.name)}${spare(d) ? '<i>Spare</i>' : ''}</b>
-          <small><span class="lf">${esc([brand, room].filter(Boolean).join(' · '))}</span><span class="ls">${esc([t?.manufacturer, f ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : null].filter(Boolean).join(' · '))}</span></small></span>
+        <span class="hb-nm"><b>${esc(d.name)}</b><span class="hb-room">${esc(room)}</span>
+          <small><span class="lf">${esc(t?.manufacturer || '')}</span><span class="ls">${esc([t?.manufacturer, f ? `${n} ${n === 1 ? 'bottle' : 'bottles'}` : null].filter(Boolean).join(' · '))}</span></small></span>
       </button>
-      <span class="hb-dn" data-id="${d.id}">${density(d, c)}</span>
-      <button type="button" class="hb-tk ${levelClass(lvl)}" data-open="${d.id}" aria-label="${esc(`${c.short_name} ${d.name} tank: ${levelText(lvl)}${last ? `, checked ${day(last.checked_at)}` : ''}. Check it`)}">
-        <span class="hb-gauge"><span class="hb-cyl" style="--lvl:${lvl ?? 0}%"><i class="hb-liq"></i><u></u><u></u><u></u></span>
-          <span class="hb-marks" aria-hidden="true"><em>¼</em><em>½</em><em>¾</em><em>${both('Full', 'F')}</em></span></span>
-        <span class="hb-rd"><b>${lvl == null ? '—' : levelText(lvl)}</b><small class="${stale ? 'is-old' : ''}">${last ? esc(day(last.checked_at)) : 'Not checked'}</small></span>
+      <button type="button" class="hb-tk ${levelClass(lvl)}" data-open="${d.id}" aria-label="${esc(`${said} tank: ${levelText(lvl)}. Check it`)}">
+        ${can(lvl)}<span class="hb-rd"><b>${lvl == null ? '—' : levelText(lvl)}</b></span>
+      </button>
+      <button type="button" class="hb-when" data-open="${d.id}" aria-label="${esc(`${said}: last filled ${fill ? day(fill.checked_at) : 'not on record'}, last checked ${last ? day(last.checked_at) : 'not on record'}`)}">
+        ${when('<span class="lf">Last filled</span><span class="ls">Filled</span>', fill, false)}${when('<span class="lf">Last checked</span><span class="ls">Checked</span>', last, stale)}
       </button>
       <span class="hb-fl">${f ? `<button type="button" class="hb-fname" data-fluid="${f.id}"><b>${esc(f.name)}</b><small>${esc([f.manufacturer, f.bottle_liters ? `${Number(f.bottle_liters)} L` : null].filter(Boolean).join(' · '))}</small></button>
           <span class="hb-step${n ? '' : ' is-out'}" role="group" aria-label="${esc(`${f.name} bottles at ${c.short_name}`)}">
@@ -169,13 +187,6 @@ export function mount(el, ctx) {
             <button type="button" data-step="${key}" data-d="1" aria-label="One more bottle">${icon('plus')}</button></span>`
         : `<button type="button" class="hb-set" data-model="${t?.id || ''}">Set its fluid</button>`}</span>
     </div>`;
-  }
-
-  function density(d, c) {
-    const n = d.haze_density;
-    const label = `${c.short_name} ${d.name} density`;
-    return `<button type="button" class="hb-dv${n == null ? ' is-empty' : ''}" data-dn="1" aria-label="${esc(n == null ? `${label}: not set. Set it` : `${label}: ${n}%. Change it`)}">
-      ${n == null ? '<span class="hb-dash">—</span>' : `<span class="hb-bar" style="--lv:${n}%"></span><span class="hb-n"><b>${n}</b><small>%</small></span>`}</button>`;
   }
 
   /** The sheet is as tall as the screen has left, its lines sharing that evenly, so it all
@@ -191,77 +202,13 @@ export function mount(el, ctx) {
     // Whatever's still under it (the home indicator's strip, say) comes off too.
     const over = document.documentElement.scrollHeight - window.innerHeight;
     if (over > 0 && over < h) { h -= over; board.style.height = `${h}px`; }
+    const row = $('.hb-r:not(.hb-hd)', board);
+    if (row) board.style.setProperty('--rowh', `${Math.floor(row.getBoundingClientRect().height)}px`); // the cans are sized to their line
   }
 
-  // --------------------------------------------------------------- density ---
   function hazerOf(id) {
     const d = s.data.devices.find((x) => x.id === id);
     return d ? { d, c: ctx.campusById.get(d.campus_id) } : null;
-  }
-
-  function startEdit(cell) {
-    const h = cell && hazerOf(cell.dataset.id);
-    if (!h || s.asking) return;
-    if (s.edit) stopEdit();
-    s.edit = { cell, id: h.d.id };
-    cell.classList.add('is-edit');
-    cell.innerHTML = `<label class="hb-ed"><input type="text" inputmode="numeric" autocomplete="off" maxlength="4" value="${h.d.haze_density ?? ''}"
-      aria-label="${esc(`${h.c.short_name} ${h.d.name} density, 0 to 100. Enter to save, Esc to cancel`)}"><span>%</span></label>`;
-    const input = $('input', cell);
-    input.focus();
-    input.select();
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); submit(cell, input.value); }
-      else if (e.key === 'Escape') { e.preventDefault(); stopEdit(); }
-    });
-    // Leaving it (a phone keyboard's ✓, tapping away, Tab) asks the same way Enter does.
-    input.addEventListener('blur', () => {
-      setTimeout(() => {
-        if (!alive || s.edit?.cell !== cell || s.asking || !cell.isConnected) return;
-        if (document.visibilityState === 'hidden') { stopEdit(); return; }
-        submit(cell, input.value, true);
-      }, 0);
-    });
-  }
-
-  function stopEdit() {
-    s.edit = null;
-    draw();
-  }
-
-  async function submit(cell, raw, leaving = false) {
-    const h = hazerOf(cell.dataset.id);
-    if (!h) { stopEdit(); return; }
-    const text = String(raw).trim().replace(/\s*%$/, '');
-    let next = null;
-    if (text !== '') {
-      if (!/^\d{1,3}$/.test(text) || Number(text) > 100) {
-        cell.classList.remove('is-bad'); void cell.offsetWidth; cell.classList.add('is-bad');
-        ctx.toast('Type a density from 0 to 100.');
-        if (leaving) stopEdit();
-        return;
-      }
-      next = Number(text);
-    }
-    const was = h.d.haze_density ?? null;
-    if (was === next) { stopEdit(); return; }
-    s.asking = true;
-    const yes = await hudConfirm({
-      title: 'Are you sure you want to confirm this change?',
-      where: `${h.c.short_name} · ${h.d.name} · Haze density`,
-      from: was == null ? '' : `${was}%`,
-      to: next == null ? '' : `${next}%`,
-      note: h.d.updated_at && was != null ? `Last changed ${timeAgo(h.d.updated_at)}` : '',
-      yes: 'Yes',
-      no: 'Cancel',
-    });
-    s.asking = false;
-    if (!alive) return;
-    if (!yes) { stopEdit(); return; }
-    h.d.haze_density = next; // shown now; put back if it doesn't save
-    stopEdit();
-    try { await ctx.store.setHazeDensity(h.d.id, next); }
-    catch (e) { h.d.haze_density = was; draw(); ctx.toast(e.message, 'bad'); }
   }
 
   // ---------------------------------------------------------------- a hazer ---
@@ -285,7 +232,6 @@ export function mount(el, ctx) {
         ['Room', [roomName(d.room_id), d.location].filter(Boolean).join(' · ') || 'Not set'],
         ['Fluid', f ? [f.manufacturer, f.name].filter(Boolean).join(' ') : 'Not set'],
         ['Tank', t?.tank_liters ? `${Number(t.tank_liters)} L` : 'Not set'],
-        ['Density', d.haze_density == null ? 'Not set' : `${d.haze_density}%`],
       ];
       panel.render(`<header class="hp-head"><p class="hp-crumb">${esc(c.short_name)} · Haze${spare(d) ? ' · Spare' : ''}</p><h2>${esc(d.name)}</h2>
           <button type="button" class="hp-x" data-close aria-label="Close">${icon('close')}</button></header>
@@ -294,8 +240,8 @@ export function mount(el, ctx) {
             <dl class="hb-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>
           <button type="button" class="hb-link" data-pm="${t?.id || ''}">Change this model’s fluid or tank size</button>
           <h3>How full is the tank?</h3>
-          <div class="hb-big ${levelClass(level)}"><span class="hb-gauge"><span class="hb-cyl" style="--lvl:${level ?? 0}%"><i class="hb-liq"></i><u></u><u></u><u></u></span>
-            <span class="hb-marks" aria-hidden="true"><em>¼</em><em>½</em><em>¾</em><em>Full</em></span></span></div>
+          <div class="hb-big ${levelClass(level)}">${can(level)}
+            <div class="hb-when">${when('Last filled', history.find((k) => k.filled), false)}${when('Last checked', history[0], false)}</div></div>
           <div class="hb-lv" role="group" aria-label="Tank level">${LEVELS.map(([n, label]) => `<button type="button" data-lvl="${n}" aria-pressed="${n === level}">${label}</button>`).join('')}</div>
           <button type="button" class="hb-tog" data-filled role="switch" aria-checked="${filled}"><i></i>I filled it</button>
           ${stock?.bottles ? `<label class="hb-used" ${filled ? '' : 'hidden'}><input type="checkbox" id="hb-used"> Used up a bottle of ${esc(f.name)} (${stock.bottles - 1} left at ${esc(c.short_name)} after)</label>` : ''}
