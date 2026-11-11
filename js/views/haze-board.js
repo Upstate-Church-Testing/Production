@@ -195,12 +195,14 @@ export function mount(el, ctx) {
     const board = $('.hb-board', body);
     if (!board) return;
     const top = board.getBoundingClientRect().top + window.scrollY;
-    const cs = getComputedStyle(document.documentElement);
-    const gap = (parseFloat(cs.getPropertyValue('--vgap')) || 0) + (parseFloat(getComputedStyle(board).marginBottom) || 0);
-    let h = Math.max(0, Math.floor(window.innerHeight - top - gap));
+    // iOS leaves a home-screen app's window short of the real bottom by --vgap (app.js):
+    // the sheet runs down to the real bottom.
+    const vgap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--vgap')) || 0;
+    const room = window.innerHeight + vgap;
+    let h = Math.max(0, Math.floor(room - top - (parseFloat(getComputedStyle(board).marginBottom) || 0)));
     board.style.height = `${h}px`;
     // Whatever's still under it (the home indicator's strip, say) comes off too.
-    const over = document.documentElement.scrollHeight - window.innerHeight;
+    const over = document.documentElement.scrollHeight - room;
     if (over > 0 && over < h) { h -= over; board.style.height = `${h}px`; }
     const row = $('.hb-r:not(.hb-hd)', board);
     if (row) board.style.setProperty('--rowh', `${Math.floor(row.getBoundingClientRect().height)}px`); // the cans are sized to their line
