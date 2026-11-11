@@ -176,8 +176,9 @@ the last few past ones; an event opens on its times, a Live button and two panes
   tappable only when `device_ids` has the gear (the mic, an IEM pack): one item opens its Gear
   pop-up over Live, more than one lists them first. Planning Center's notes aren't shown on
   Live for now. Side by side (Now left, Next right) on a computer or a phone on its
-  side. The screen stays awake while it's open, and computers and iPads go to the browser's
-  full screen.
+  side. The screen stays awake while it's open. It fills the app's own window and never
+  puts the browser in full screen (F11-style); closing and opening it again on the same
+  service draws it straight away.
   Updates (app.js): a copy knows its own version (its script's ?v=), so one opened from the
   browser's kept index.html (GitHub Pages lets it keep it 10 minutes) knows it's behind and takes
   the new version right away; the reload goes by a new address (?u=version, removed again once

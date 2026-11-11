@@ -1,4 +1,5 @@
-// Live: a full-screen production view of Planning Center Live for one plan, on its own layer
+// Live: a production view of Planning Center Live for one plan that fills the app's window
+// (never the browser's own full screen), on its own layer
 // over the whole app (on <body>, not inside the page, so nothing can clip it). Used by Events
 // (an event's Live button) and PCO › Services (any service's Live button): createLive(ctx, …)
 // gives a view its own Live, opened with live.open({ id, title, day }).
@@ -55,7 +56,6 @@ export function createLive(ctx, opts = {}) {
   let wake = null;
   let wallFmt = null;
   let layer = null;          // the layer, on <body> while open
-  let browserFull = false;   // the browser's own full screen (computers, iPads)
   // The server's clock, steadily: of the last 20 answers, the one with the quickest round trip
   // sets the offset (a slow one's half-way guess is the least sure), and the time shown never
   // steps backwards (a correction waits instead of jumping the countdown back).
@@ -82,8 +82,6 @@ export function createLive(ctx, opts = {}) {
 
   const onKey = (e) => { if (e.key === 'Escape' && layer) close(); };
   document.addEventListener('keydown', onKey);
-  const onFs = () => { if (!document.fullscreenElement && browserFull) { browserFull = false; if (layer) close(); } };
-  document.addEventListener('fullscreenchange', onFs);
   const onVisible = () => { if (document.visibilityState === 'visible' && layer) { poll(); keepAwake(true); } };
   document.addEventListener('visibilitychange', onVisible);
 
@@ -96,7 +94,6 @@ export function createLive(ctx, opts = {}) {
       if (layer) close(true);
       alive = false;
       document.removeEventListener('keydown', onKey);
-      document.removeEventListener('fullscreenchange', onFs);
       document.removeEventListener('visibilitychange', onVisible);
     },
   };
@@ -107,6 +104,7 @@ export function createLive(ctx, opts = {}) {
     if (s.liveFor !== p.id) { s.live = null; s.liveFor = p.id; s.liveError = null; s.sig = ''; s.ctlError = null; }
     plan = { ...p };
     if (!layer) {
+      s.sig = ''; // a new, empty layer: draw it even if nothing changed since it was last open
       layer = document.createElement('div');
       layer.className = 'lvx-root';
       layer.setAttribute('role', 'dialog');
@@ -123,12 +121,7 @@ export function createLive(ctx, opts = {}) {
       document.documentElement.classList.add('lv-full-on');
       window.addEventListener('resize', fitTitle);
       document.fonts?.ready?.then(() => fitTitle()).catch(() => {});
-      // Where the browser can (not iPhone Safari), the whole screen: no browser bars either.
-      try {
-        if (!document.fullscreenElement && document.documentElement.requestFullscreen && matchMedia('(hover: hover)').matches) {
-          document.documentElement.requestFullscreen().then(() => { browserFull = true; }).catch(() => {});
-        }
-      } catch { /* not offered */ }
+      // (It fills the app's own window and nothing more: never the browser's full screen.)
       paint();
       $('[data-act="close"]', layer)?.focus({ preventScroll: true });
     } else {
@@ -147,9 +140,8 @@ export function createLive(ctx, opts = {}) {
     clearTimeout(pollTimer); pollTimer = null;
     clearInterval(tickTimer); tickTimer = null;
     keepAwake(false);
-    if (layer) { layer.remove(); layer = null; window.removeEventListener('resize', fitTitle); }
+    if (layer) { layer.remove(); layer = null; s.sig = ''; window.removeEventListener('resize', fitTitle); }
     document.documentElement.classList.remove('lv-full-on');
-    if (document.fullscreenElement && browserFull) { browserFull = false; document.exitFullscreen().catch(() => {}); }
     plan = null;
     if (quiet || !was) return;
     opts.onClose?.();
