@@ -4534,3 +4534,6 @@ html.hp-on .fs-btn { display: none; }
   .page-scheduling.is-roster .ros.is-team thead .ros-team-h b { font-size: 11px; margin-left: 6px; }
   .ros-tot.is-team small { display: none; }
 }
+
+/* A phone: each date exactly a third of the room beside the labels (services.js fitThree) */
+.ros.has-dayw thead .ros-day, .ros.has-dayw td { box-sizing: border-box; width: var(--dayw); min-width: var(--dayw); max-width: var(--dayw); }

@@ -1072,6 +1072,28 @@ export function mount(el, ctx) {
     return [...who.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** A phone: exactly three weeks across beside the labels, edge to edge (no sliver of a
+   *  fourth), so Team's three columns fill the same width. Each date's width is set from the
+   *  room there is (--dayw, in the table's own pixels), then checked and corrected once. */
+  function fitThree(table, wrap) {
+    table.style.removeProperty('--dayw');
+    table.classList.remove('has-dayw');
+    if (window.innerWidth >= 700 || table.classList.contains('is-team')) return;
+    const days = $$('thead .ros-day', table);
+    const corner = $$('thead .ros-corner', table).pop();
+    if (days.length < 3 || !corner) return;
+    const room = wrap.getBoundingClientRect().right - corner.getBoundingClientRect().right;
+    if (room < 150) return;
+    table.classList.add('has-dayw');
+    let w = days[0].getBoundingClientRect().width > 0 ? (room / 3) * (days[0].offsetWidth / days[0].getBoundingClientRect().width) : room / 3;
+    for (let i = 0; i < 3; i++) {
+      table.style.setProperty('--dayw', `${w.toFixed(3)}px`);
+      const got = days[0].getBoundingClientRect().width;
+      if (!got || Math.abs(got * 3 - room) < 0.4) break;
+      w *= room / 3 / got;
+    }
+  }
+
   /** A laid-out schedule grid's measurements, for Team to match (matchGrid). Sizes are in the
    *  table's own pixels: `f` is how many screen pixels one of them is at its zoom (browsers
    *  measure a zoomed table differently; a probe at the same zoom says which). */
@@ -1096,7 +1118,7 @@ export function mount(el, ctx) {
     const off = days[from] ? Math.max(0, edge - days[from].getBoundingClientRect().left) : 0;
     const room = wrap.clientWidth / f - labels + off / f;
     let across = 0;
-    for (let sum = 0; cols.length && sum < room + 1; across += 1) sum += cols[Math.min(across, cols.length - 1)];
+    for (let sum = 0; cols.length && sum < room - 1; across += 1) sum += cols[Math.min(across, cols.length - 1)];
     return {
       z, f, cols, across, off, loc: w($('thead .ros-loc-h', table)), pos: w($('thead .ros-pos-h', table)),
       rows: $$('tbody tr', table).map((tr) => tr.getBoundingClientRect().height / f),
@@ -1247,6 +1269,7 @@ export function mount(el, ctx) {
       return apply(zz);
     };
     const done = (r) => {
+      fitThree(table, wrap);
       fitNames(table);
       wrap.classList.toggle('fits', wrap.scrollHeight <= wrap.clientHeight + 1); // nothing to scroll up and down
       return r;
