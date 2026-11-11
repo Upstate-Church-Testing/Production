@@ -1,8 +1,7 @@
 // A person, in a pop-up over Scheduling (a name on the grid, or someone in the Team column):
 // the schedule stays behind it, dimmed and blurred; tapping there closes it. In the console
-// look, and it comes in like a screen powering up: the box opens out from a line, a scan line
-// runs down it, the name tears in with its colours split, the photo resolves in steps, the
-// badge drops in on its lanyard, then each panel boots in turn. Closing collapses it to a line.
+// look. It opens clean and quick (about half a second): the box opens out from a line, one
+// scan line runs down it, and what's inside rises into place. Closing collapses it to a line.
 //
 // What it shows: their photo and name, where they serve, their lanyard (the badge they have,
 // and a dropdown to change it: staff only), the spot that was tapped (each service that day
@@ -43,7 +42,7 @@ export function openPersonFull(ctx, host) {
   paint(true);
   $('[data-pv="close"]', root)?.focus({ preventScroll: true });
   // The entrance plays once; after that it's plain redraws.
-  setTimeout(() => root.classList.add('is-in'), still ? 0 : 1600);
+  setTimeout(() => root.classList.add('is-in'), still ? 0 : 700);
 
   root.addEventListener('click', onClick);
   root.addEventListener('input', (e) => {
@@ -73,7 +72,7 @@ export function openPersonFull(ctx, host) {
     };
     if (still) { done(); return; }
     root.classList.add('is-out');
-    setTimeout(done, 260);
+    setTimeout(done, 170);
   }
 
   async function onClick(e) {
@@ -94,7 +93,7 @@ export function openPersonFull(ctx, host) {
       if ((vm.lanyard || null) === k) { $('.pv-dd-btn', root)?.focus(); return; }
       await host.setLanyard(k);
       paint(false);
-      // the new badge glitches in
+      // the new badge fades in
       const art = $('.pv-badge', root);
       if (art && !still) { art.classList.remove('is-swap'); void art.offsetWidth; art.classList.add('is-swap'); }
       $('.pv-dd-btn', root)?.focus();

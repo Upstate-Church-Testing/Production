@@ -26,6 +26,8 @@ const POLL_MS = 20000; // backup for the live push (a phone that slept, a droppe
 // full and the short label are drawn; CSS shows one (.lf full, .ls short).
 /** How many people each position's team should have (Scheduling › Team counts spots short of it). */
 const TEAM_NEED = 3;
+const SW_OUT = 190; // a switch's contents blinking out (90ms spread + 90ms each), then
+const SW_IN = 330;  // the new ones blinking in (150ms spread + 160ms each)
 const both = (full, short) => (short && short !== full ? `<span class="lf">${esc(full)}</span><span class="ls">${esc(short)}</span>` : esc(full));
 /** AN, FF, FI, GVL, GCC, HB, MLN, SVL: a location's code, with the two the team says differently. */
 const CAMPUS_SHORT = { AND: 'AN', MAU: 'MLN' };
@@ -1010,6 +1012,7 @@ export function mount(el, ctx) {
     };
     const a = span(from);
     const b = span(to);
+    jitter(a.t); jitter(b.t);
     a.t?.classList.add('wk-out');
     setTimeout(() => {
       if (!alive) return;
@@ -1040,9 +1043,9 @@ export function mount(el, ctx) {
           weekWant = null;
           if (next && next !== nav.week && alive) switchWeek(next);
           else markSw($('#s-week', el), 'week', nav.week);
-        }, b.rows * 14 + b.cols * 26 + 420);
-      }, 400);
-    }, a.rows * 8 + a.cols * 14 + 180);
+        }, SW_IN);
+      }, 230);
+    }, SW_OUT);
   }
 
   /** Someone's lanyard (volunteer, coach, staff), by their Planning Center person id. */
@@ -1161,6 +1164,13 @@ export function mount(el, ctx) {
     }
   }
 
+  /** A switch's blink out and in: every piece of the grid gets its own random moment (--j,
+   *  0 to 1), so they go and come in no particular order. Out lasts SW_OUT, in SW_IN (ms),
+   *  matching the transitions in styles.css. */
+  function jitter(table) {
+    if (table) for (const n of $$('.ros-cell, tbody .pos-in, .ros-loc > span, .dh, .ros-tot', table)) n.style.setProperty('--j', Math.random().toFixed(2));
+  }
+
   /** A two-way switch (.hud-sw): which side is on. The lit block slides to it. */
   function markSw(sw, key, value) {
     if (!sw) return;
@@ -1196,19 +1206,20 @@ export function mount(el, ctx) {
     nav.view = v;
     if (!from || matchMedia('(prefers-reduced-motion: reduce)').matches) { draw(); return; }
     viewBusy = true;
-    const n = (t, k) => Number(t?.style.getPropertyValue(k)) || 6;
+    jitter(from);
     from.classList.add('vw-out');
     setTimeout(() => {
       if (!alive) return;
       draw();
       const to = $('.ros-wrap.is-active .ros', el);
       if (!to) { viewBusy = false; return; }
+      jitter(to);
       to.classList.add('vw-hide');
       void to.offsetWidth;
       to.classList.add('vw-in');
       to.classList.remove('vw-hide');
-      setTimeout(() => { to.classList.remove('vw-in'); viewBusy = false; }, n(to, '--rows') * 14 + Math.min(6, n(to, '--cols')) * 26 + 420);
-    }, n(from, '--rows') * 8 + Math.min(6, n(from, '--cols')) * 14 + 200);
+      setTimeout(() => { to.classList.remove('vw-in'); viewBusy = false; }, SW_IN);
+    }, SW_OUT);
   }
 
   /** The home indicator's strip (an iPad's or iPhone's home-screen app; 0 elsewhere). */
