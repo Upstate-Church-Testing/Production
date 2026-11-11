@@ -4504,6 +4504,11 @@ html.hp-on .fs-btn { display: none; }
    quarter lines, .hb-marks names them beside it. Green from half up, amber from a quarter,
    red under that, dashed when it's never been checked. */
 #view.page-haze { padding-bottom: 0; }
+/* With every line on screen (fit() says so) the page holds still, as Scheduling does: no
+   scrolling, no bounce; the sheet keeps clear of the home bar by its own margin. */
+html.hb-lock { padding-bottom: 0; }
+html.hb-lock { overflow: hidden; } /* (not the body too: the top bar sticks to the screen, not to a clipped body) */
+html.hb-lock, html.hb-lock body { overscroll-behavior: none; touch-action: none; }
 .page-haze .page-head { padding-bottom: 6px; }
 .page-haze .mode-row { align-items: flex-end; flex-wrap: nowrap; }
 .page-haze .page-title h1 { font: 600 30px/1 var(--f-hud); letter-spacing: 0.04em; text-transform: uppercase; }
@@ -4655,7 +4660,7 @@ html.hp-on .fs-btn { display: none; }
   .page-haze .page-title h1 { font-size: 24px; }
   .page-haze .page-title span { display: none; }
   .hb-count { font-size: 10px; letter-spacing: 0.05em; }
-  .hb-board { grid-template-rows: 24px repeat(var(--n), minmax(34px, 1fr)); margin: 0 calc(-1 * var(--gutter-r)) 0 calc(-1 * var(--gutter-l)); border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
+  .hb-board { grid-template-rows: 24px repeat(var(--n), minmax(34px, 1fr)); margin: 0 calc(-1 * var(--gutter-r)) env(safe-area-inset-bottom, 0px) calc(-1 * var(--gutter-l)); border-left: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
   .hb-r { grid-template-columns: 46px minmax(0, 1fr) 70px 92px; }
   .hb-r > .hb-fl { display: none; }
   .hb-board .lf { display: none; }
@@ -4692,3 +4697,25 @@ html.hp-on .fs-btn { display: none; }
   .hb-p-top { gap: 12px; }
   .hb-pic.is-big { width: 72px; height: 72px; }
 }
+
+/* ------------------------------------------------------ pull to refresh -- */
+/* pull.js: a small console read-out that comes down from the top middle as the page is
+   pulled. --p (0 to 1) is how far the pull is; the bar's ten blocks light up with it,
+   sweep while refreshing, and all light when done. */
+.ptr { position: fixed; z-index: 98; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 50%; pointer-events: none;
+  transform: translate(-50%, calc((var(--p, 0) - 1) * 70px)); opacity: calc(var(--p, 0) * 1.4); visibility: hidden;
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out, visibility 0s 0.2s; }
+.ptr.is-on { visibility: visible; transition: none; }
+.ptr.is-run, .ptr.is-done { --p: 1 !important; transition: transform 0.16s ease-out; }
+.ptr-box { display: grid; gap: 7px; justify-items: center; min-width: 168px; padding: 9px 14px 10px; background: var(--hud-bg); border: 1px solid var(--hud-line-2); color: var(--hud-ink);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.5); }
+.ptr-t { font: 600 10px/1 var(--f-hud); letter-spacing: 0.16em; text-transform: uppercase; color: var(--hud-dim); white-space: nowrap; }
+.ptr.is-armed .ptr-t, .ptr.is-run .ptr-t, .ptr.is-done .ptr-t { color: var(--hud-ink); }
+.ptr-bar { position: relative; width: 140px; height: 6px; overflow: hidden;
+  background: repeating-linear-gradient(to right, color-mix(in srgb, var(--hud-ink) 16%, transparent) 0 12px, transparent 12px 14px); }
+.ptr-bar i { position: absolute; inset: 0; clip-path: inset(0 calc((1 - var(--p, 0)) * 100%) 0 0);
+  background: repeating-linear-gradient(to right, var(--hud-ink) 0 12px, transparent 12px 14px); }
+.ptr.is-armed .ptr-bar i, .ptr.is-done .ptr-bar i { background: repeating-linear-gradient(to right, var(--hud-c) 0 12px, transparent 12px 14px); }
+.ptr.is-run .ptr-bar i { clip-path: none; width: 42px; inset: 0 auto 0 0; animation: ptr-run 0.7s steps(8) infinite; }
+@keyframes ptr-run { from { transform: translateX(-42px); } to { transform: translateX(140px); } }
+@media (prefers-reduced-motion: reduce) { .ptr.is-run .ptr-bar i { animation: none; width: 100%; opacity: 0.6; } }

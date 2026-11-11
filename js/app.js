@@ -17,6 +17,7 @@ import * as HomeView from './views/home.js';
 import * as CgView from './views/cg.js';
 import * as HouseLightsView from './views/house-lights.js';
 import * as HazeView from './views/haze-board.js';
+import { initPull } from './pull.js';
 import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
@@ -207,6 +208,7 @@ async function boot() {
   });
   window.addEventListener('hashchange', onHash);
   watchForUpdates();
+  initPull({ onRefresh: refreshNow, busy: () => busyForUpdate() || !ctx.me || !$('#view') || !!$('.nav.is-open') });
   start();
 }
 
@@ -699,17 +701,16 @@ function applyTheme() {
 function setTheme(t) { save('ucp.theme', t); applyTheme(); }
 
 // -------------------------------------------------------- auto-updating --
-// Open copies notice a new version and take it at a quiet moment, never under
-// someone who's looking at the page: when they go to another page, when the app
-// has sat untouched for 10 minutes, or when they come back after half an hour
-// away. Not while a panel, menu or the filters are open, something is being typed,
-// or a video is full screen (reloading would knock it out of full screen, and the
-// browser window back to its old size).
+// Open copies notice a new version (asking every minute) and take it at a moment nothing is
+// lost: on coming back to the app, on going to another page, after two minutes untouched,
+// or when the page is pulled down to refresh (js/pull.js, which otherwise draws the page
+// again from fresh data). Not while a panel, menu or the filters are open, something is
+// being typed, or a video is full screen (reloading would knock it out of full screen, and
+// the browser window back to its old size).
 
 let updateReady = false;
 let latestV = null;
-const QUIET_MS = 10 * 60 * 1000;
-const AWAY_MS = 30 * 60 * 1000;
+const QUIET_MS = 2 * 60 * 1000;
 let lastTouch = Date.now();
 // The version this copy is (from its own script address, js/app.js?v=…). The browser may keep
 // index.html for 10 minutes (GitHub Pages), so a phone can open an older copy than version.json says.
@@ -717,18 +718,18 @@ const RUNNING = (() => { try { return new URL(import.meta.url).searchParams.get(
 const TRIED_KEY = 'ucp.updating';
 
 function busyForUpdate() {
-  return !!document.querySelector('.sheet-root, .dd-menu-root, .fp-root')
+  return !!document.querySelector('.sheet-root, .dd-menu-root, .fp-root, .hp-root, .hc-root, .pv-root')
     || !!(document.fullscreenElement || document.webkitFullscreenElement)
     || !!document.activeElement?.matches?.('input, textarea, select, [contenteditable="true"]');
 }
 /** Reloads into the new version if one is waiting and nothing would be lost. Loads it by a
  *  new address (?u=version) so a kept copy of the old page can't come back instead, and never
  *  twice for the same version (if that still gives the old copy, it waits for the next one). */
-function takeUpdate() {
+function takeUpdate(asked = false) {
   if (!updateReady || busyForUpdate()) return false;
   let tried = null;
   try { tried = sessionStorage.getItem(TRIED_KEY); } catch { /* private mode */ }
-  if (latestV && tried === latestV) return false;
+  if (!asked && latestV && tried === latestV) return false; // (pulling down to refresh asks again)
   try { if (latestV) sessionStorage.setItem(TRIED_KEY, latestV); } catch { /* private mode */ }
   const u = new URL(location.href);
   u.searchParams.set('u', latestV || String(Date.now()));
@@ -736,10 +737,22 @@ function takeUpdate() {
   return true;
 }
 
+let loadedV = null;
+/** Asks the server which version is out (version.json, never a kept copy). */
+async function checkVersion() {
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    latestV = v;
+    if (RUNNING ? v !== RUNNING : loadedV != null && v !== loadedV) updateReady = true;
+    if (loadedV == null) loadedV = v;
+    if (RUNNING && v === RUNNING) { try { sessionStorage.removeItem(TRIED_KEY); } catch { /* fine */ } }
+  } catch { /* offline */ }
+}
+
 function watchForUpdates() {
   if (ctx.store.mode !== 'live') return;
-  let loaded = null;
-  let hiddenAt = null;
   for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
     window.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true });
   }
@@ -748,29 +761,27 @@ function watchForUpdates() {
     try { history.replaceState(history.state, '', location.pathname + location.hash); } catch { /* fine */ }
   }
   let first = true;
-  const check = async () => {
-    try {
-      const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
-      if (!r.ok) return;
-      const { v } = await r.json();
-      latestV = v;
-      if (RUNNING ? v !== RUNNING : loaded != null && v !== loaded) updateReady = true;
-      if (loaded == null) loaded = v;
-      if (RUNNING && v === RUNNING) { try { sessionStorage.removeItem(TRIED_KEY); } catch { /* fine */ } }
-    } catch { /* offline */ }
-    // Just opened on an older copy: take the new one now, before anything's been touched.
-    if (first) { first = false; if (updateReady && takeUpdate()) return; }
-    if (updateReady && Date.now() - lastTouch > QUIET_MS) takeUpdate(); // left alone (a screen on the wall)
+  const check = async (back = false) => {
+    await checkVersion();
+    // Just opened on an older copy, or just come back to the app: take the new one now.
+    if (first || back) { first = false; if (updateReady && takeUpdate()) return; }
+    if (updateReady && Date.now() - lastTouch > QUIET_MS) takeUpdate(); // left alone for a couple of minutes
   };
   check();
-  setInterval(check, 5 * 60 * 1000);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
-    const away = hiddenAt && Date.now() - hiddenAt > AWAY_MS;
-    hiddenAt = null;
-    if (away && takeUpdate()) return; // back after a while: start fresh
-    check();
-  });
+  setInterval(check, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(true); });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) check(true); });
+}
+
+/** Pulling down to refresh: the new version if there is one, or else this page drawn again
+ *  from fresh data. Says how it went (shown by the pull read-out). */
+async function refreshNow() {
+  if (ctx.store.mode === 'live') {
+    await checkVersion();
+    if (updateReady && takeUpdate(true)) return 'Updating';
+  }
+  if (current) { current = { ...current, id: null }; onHash(); } // the page, mounted again
+  return 'Up to date';
 }
 
 // ------------------------------------------------------------------ misc --

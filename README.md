@@ -182,6 +182,10 @@ the last few past ones; an event opens on its times, a Live button and two panes
   browser's kept index.html (GitHub Pages lets it keep it 10 minutes) knows it's behind and takes
   the new version right away; the reload goes by a new address (?u=version, removed again once
   loaded) so the kept page can't come back, and it never reloads twice for the same version.
+  Every copy asks for the version each minute and takes a new one on coming back to the app,
+  on going to another page, or after two minutes untouched. On touch screens, pulling the
+  page down (`js/pull.js`: a console read-out at the top middle) takes a new version at once,
+  or else draws the page again from fresh data.
   The same Live opens from any service on PCO › Services: it's its own module (`js/live.js`,
   `createLive`), and Events and Services each open it for a plan.
   A new version is taken while Live is open (it comes straight back to the same event,
@@ -626,6 +630,7 @@ js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the 
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
 js/views/person-full.js       a person, in a pop-up (from a name on Scheduling)
 js/views/house-lights.js     Lighting › House lights: levels per Worship Center, part of the service and service
+js/pull.js                    pull down to refresh (touch screens)
 js/hud.js                     the console look's pop-ups: hudConfirm ("Are you sure?", old → new) and hudPanel (a form)
 js/lanyard.js                 the lanyard badges: the micro one on Scheduling, the large ones in a profile
 js/input.js                   full screen button (computers); hiding the pointer while touching

@@ -79,6 +79,7 @@ export function mount(el, ctx) {
   return {
     unmount() {
       alive = false;
+      document.documentElement.classList.remove('hb-lock');
       unsubscribe();
       window.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('resize', onResize);
@@ -194,6 +195,7 @@ export function mount(el, ctx) {
   function fit() {
     const board = $('.hb-board', body);
     if (!board) return;
+    document.documentElement.classList.add('hb-lock'); // (measured as it will be: the page's home-bar strip gone)
     const top = board.getBoundingClientRect().top + window.scrollY;
     // iOS leaves a home-screen app's window short of the real bottom by --vgap (app.js):
     // the sheet runs down to the real bottom.
@@ -205,6 +207,9 @@ export function mount(el, ctx) {
     const over = document.documentElement.scrollHeight - room;
     if (over > 0 && over < h) { h -= over; board.style.height = `${h}px`; }
     const row = $('.hb-r:not(.hb-hd)', board);
+    // With every line showing, the page itself holds still: nothing to scroll, nothing bounces.
+    // (A few px of leeway: lines still rising into place on opening count as taller.)
+    document.documentElement.classList.toggle('hb-lock', board.scrollHeight <= board.clientHeight + 8);
     if (row) board.style.setProperty('--rowh', `${Math.floor(row.getBoundingClientRect().height)}px`); // the cans are sized to their line
   }
 
