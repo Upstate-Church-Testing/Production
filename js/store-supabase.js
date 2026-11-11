@@ -419,6 +419,10 @@ export async function createSupabaseStore(url, key) {
     async setTypeUnknown(typeId, unknown) {
       ok(await sb.from('device_types').update({ unknown: !!unknown }).eq('id', typeId));
     },
+    /** How dense a hazer is run: a percent (0-100), or null for not set. */
+    async setHazeDensity(deviceId, density) {
+      ok(await sb.from('devices').update({ haze_density: density }).eq('id', deviceId));
+    },
     /** A hazer model's fluid and tank size. */
     async setHazerModel(typeId, { haze_fluid_id = null, tank_liters = null }) {
       ok(await sb.from('device_types').update({ haze_fluid_id, tank_liters }).eq('id', typeId));

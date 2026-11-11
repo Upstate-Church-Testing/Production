@@ -453,10 +453,15 @@ Where something is and what it's for are kept apart:
   "Don't know the model yet…" and say what kind of thing it is (Projector, Display…).
   It goes in on a placeholder model and Gear keeps saying "3 items still need a model"
   until each one is switched to its real model.
-- **Haze**: every hazer with its tank level (from the last check), when it was filled,
-  its patch and the fluid it takes, plus the bottles of each fluid at each location.
+- **Haze** (Lighting › Haze, `js/views/haze-board.js`): every location's hazers on one sheet
+  that fits the screen without scrolling, in the console look. A line per hazer, locations in
+  the usual order, and a line for a location with none. Across: the hazer (its model's photo,
+  name, brand, room; spares are tagged), its **density** (a percent typed in and confirmed,
+  `devices.haze_density`), its **tank** (a cylinder on its side filled to the last check,
+  marked ¼ ½ ¾ Full) and the fluid it takes with the bottles on hand there (− / +). Tapping
+  the hazer or its tank opens it: tap how full it is, say if it was filled, see earlier checks.
   Hazers are lighting items in the "Hazer" category: they keep a patch but don't show
-  under "Fixture".
+  up under "Fixture". The model says which fluid it takes and how big the tank is.
 - **Cameras**: each location's camera positions (Cam 1…N), in service or out of
   commission, with the gear on each one (any item whose Spot is "Cam 3"): each piece by
   brand and model ("Atomos Ninja V") with its photo, what it is and its asset # under
@@ -626,7 +631,8 @@ js/views/events.js            Events: one-off Planning Center services, with Liv
 js/live.js                    Live: the full-screen Planning Center Live view, opened from Events and from any service
 js/views/network.js            the IP sheet
 js/views/gear.js               Models and Items (every unit A–Z), plus the one-tab pages built on it: Fixtures, Patch, Rigging, Hazers, Cameras, Systems; filtered by department, location, room, area / spot, operator position, category, used as and brand; Items is a card per room › area › spot. Grid (models × locations or rooms) is built but not offered for now
-js/views/haze.js               Gear › Haze: hazers, tank checks, fluid bottles per location
+js/views/haze-board.js         Lighting › Haze: the one-page sheet (density, tank, fluid on hand)
+js/views/haze.js               Haze's forms (a model's fluid and tank, a fluid, bottle counts)
 js/views/cameras.js            Gear › Cameras: camera positions and the gear on each
 js/views/systems.js            Logistics › Systems: gear that works together, with roles
 js/views/cables.js             Cables: types by their ends, every length and label with a count
@@ -689,7 +695,7 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 
 ## Sidebar
 
-`NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (Hazers,
+`NAV` in `js/app.js`: Gear (Cables), Software, Audio, Video (Cameras), Lighting (Haze,
 Patch, Rigging, House lights; Fixtures is off the menu for now, its page still works), Network (IP sheet), PCO (Services, Scheduling, People, My schedule), Resi (Studio, Playback) and Logistics (Meetings, Statistics, Systems, Team),
 with Settings at the bottom. On a computer it's a rail of icons that opens while the
 mouse is over it; on an iPad the first tap opens it. On phones and small iPads (under

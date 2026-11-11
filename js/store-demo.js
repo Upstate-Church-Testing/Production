@@ -230,6 +230,12 @@ function buildExample() {
   dev('SVL', W, { name: 'ATMe', departments: ['lighting'], category: 'Hazer', manufacturer: 'MDG', model: 'ATMe', networked: false, location: 'Upstage', fixture_id: 901, patch_universe: 2, patch_address: 501 });
   dev('SVL', 'North Auditorium', { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
   dev('HB', W, { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
+  dev('AND', W, { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
+  dev('FF', W, { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
+  dev('FI', W, { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
+  dev('MAU', W, { name: 'HZ-350', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false });
+  dev('SVL', 'Lighting Storage', { name: 'HZ-350 1', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false, status: 'spare' });
+  dev('SVL', 'Lighting Storage', { name: 'HZ-350 2', departments: ['lighting'], category: 'Hazer', manufacturer: 'Antari', model: 'HZ-350', networked: false, status: 'spare' });
   dev('GCC', W, { name: 'Amhaze Stadium 2X IP', departments: ['lighting'], category: 'Hazer', manufacturer: 'Chauvet Professional', model: 'Amhaze Stadium 2X IP', networked: false });
   // Open positions: three projectors we haven't identified yet.
   ['House left', 'Center', 'House right'].forEach((spot, i) => dev('SVL', 'North Auditorium', { name: `Projector ${i + 1}`, departments: ['video'], category: 'Projector', model: 'Projector', location: spot, projection: spot === 'Center' ? 'front' : 'rear' }));
@@ -1033,6 +1039,11 @@ export function createDemoStore() {
       await wait(120);
       Object.assign(db.types.find((t) => t.id === typeId), { unknown: !!unknown, updated_at: now() });
       changed('device_types');
+    },
+    async setHazeDensity(deviceId, density) {
+      await wait(120);
+      Object.assign(db.devices.find((d) => d.id === deviceId), { haze_density: density, updated_at: now() });
+      changed('devices');
     },
     async setHazerModel(typeId, { haze_fluid_id = null, tank_liters = null }) {
       await wait(120);

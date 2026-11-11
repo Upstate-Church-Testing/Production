@@ -346,5 +346,5 @@ export function hazeView(host) {
     });
   }
 
-  return { draw, click, counts };
+  return { draw, click, counts, modelSheet, fluidSheet, stepStock };
 }

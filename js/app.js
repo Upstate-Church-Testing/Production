@@ -16,6 +16,7 @@ import * as EventsView from './views/events.js';
 import * as HomeView from './views/home.js';
 import * as CgView from './views/cg.js';
 import * as HouseLightsView from './views/house-lights.js';
+import * as HazeView from './views/haze-board.js';
 import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
@@ -55,7 +56,8 @@ const NAV = [
     children: [
       // Fixtures (the sheet of every light) is taken off the menu for now; its page still works:
       // { id: 'fixtures', label: 'Fixtures', minRole: 'staff', view: GearView, scope: { dep: 'lighting', cat: 'Fixture', modes: ['fixtures'] } },
-      { id: 'hazers', label: 'Hazers', minRole: 'staff', view: GearView, scope: { modes: ['haze'] } },
+      // Haze: every location's hazers on one sheet (density, tank, fluid on hand).
+      { id: 'haze', label: 'Haze', minRole: 'staff', view: HazeView },
       { id: 'patch', label: 'Patch', minRole: 'staff', view: GearView, scope: { modes: ['patch'] } },
       // Rigging: each room's battens and trusses, front to back, and the lights on each.
       { id: 'rigging', label: 'Rigging', minRole: 'staff', view: GearView, scope: { modes: ['rig'] } },
@@ -488,7 +490,7 @@ function onHash() {
   if (updateReady && current && takeUpdate()) return; // going to another page: a good moment for the new version
   if (!railMQ.matches) setRail(false);
   const pages = visiblePages();
-  const want = location.hash.replace('#', '');
+  const want = ({ hazers: 'haze' })[location.hash.replace('#', '')] || location.hash.replace('#', ''); // Hazers is Haze now
   const page = pages.find((m) => m.id === want) || pages[0];
   if (current?.id === page.id && current.el?.isConnected) return;
   openSheetApi?.close(true); // leaving a section closes whatever was open on it
