@@ -658,6 +658,30 @@ export function createDemoStore() {
       if (cur) log('deleted', 'software', cur, {});
       changed('software');
     },
+    async softwareVersions() {
+      await wait(40);
+      if (!db.swVersions) {
+        db.swVersions = [
+          ...['27.0.1', '27.0', '26.7', '26.6', '26.5.2', '26.5.1', '26.5', '26.4.1', '26.4', '26.1', '26.0.1', '26.0'].map((version) => ({ product: 'macOS', version, build: null, released_on: null })),
+          ...['22.0.1', '22', '21.4', '21.3', '21.2', '21.1'].map((version) => ({ product: 'ProPresenter', version, build: null, released_on: null })),
+          ...['16.5', '16.4', '16.3', '16.2', '16.1', '16.0.1', '16.0', '15.3.1', '15.3', '15.0', '14.5', '14.4', '14.3'].map((version) => ({ product: 'Desktop Video', version, build: null, released_on: null })),
+        ];
+      }
+      return db.swVersions;
+    },
+    async addSoftwareVersion(product, version) {
+      await wait(60);
+      await this.softwareVersions();
+      if (!db.swVersions.some((x) => x.product === product && x.version === version)) db.swVersions.push({ product, version, build: null, released_on: null });
+      changed('software_versions');
+    },
+    async setDeviceFirmware(id, firmware) {
+      await wait(120);
+      const dev = db.devices.find((d) => d.id === id);
+      if (!dev) throw new Error('That item was deleted by someone else.');
+      Object.assign(dev, { firmware, updated_at: now(), updated_by: me.id });
+      changed('devices');
+    },
     async saveInstall(row) {
       await wait(120);
       const version = blank(row.version);

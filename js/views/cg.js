@@ -9,18 +9,26 @@
 // CG1's or the Worship Center's when there's more than one. A campus with another CG computer
 // (Simpsonville's CG2 in A Control) gets a row for it too, uploaded on its own (js/cg-rows.js).
 // A version Gear doesn't have is left blank.
+// Each version is a pill that opens a list to pick from: the released versions on record
+// (software_versions) and any other in use on a computer, newest first, plus "Another
+// version" to type one (which joins the list). Picking one is saved to Gear: the OS into the
+// computer's Firmware / OS field, the others as that title's version on it, seen today.
 
-import { esc, icon, $, debounce, pageTitle } from '../util.js';
+import { esc, icon, $, $$, debounce, pageTitle } from '../util.js';
+import { wireDropdown } from '../picker.js';
 import { clock, comingSunday } from '../pco.js';
-import { osOf, logoHtml, installsByDevice } from '../software.js';
+import { osOf, logoHtml, installsByDevice, cmpVersion, asOf, MAC_RELEASE } from '../software.js';
 import { cgRows, cgKey, cgStation } from '../cg-rows.js';
 
 /** The three columns: logo on top, outlined in the logo's color. */
 const COLS = [
-  { id: 'mac', name: 'macOS', logo: 'apple.svg' },
+  { id: 'mac', name: 'macOS', logo: 'apple.svg' }, // (its versions are under product 'macOS')
   { id: 'pp', name: 'ProPresenter', logo: 'propresenter.svg', sw: /^propresenter$/i },
   { id: 'dv', name: 'Desktop Video', logo: 'blackmagic.svg', sw: /^desktop video$/i },
 ];
+
+/** The "Another version…" line on a version pill's list. */
+const OTHER = '__other';
 
 export const CG_STATES = [
   { id: 'not_started', label: 'Not started', short: 'Not started' },
@@ -30,7 +38,7 @@ export const CG_STATES = [
 
 export function mount(el, ctx) {
   let alive = true;
-  const s = { tz: 'America/New_York', sunday: null, rows: new Map(), error: null, loaded: false, saving: new Set(), gear: null, computers: [] };
+  const s = { tz: 'America/New_York', sunday: null, rows: new Map(), error: null, loaded: false, saving: new Set(), gear: null, computers: [], versions: [], inUse: new Map(), software: [] };
   let timer = null;
 
   el.innerHTML = `<div class="cgu" id="cgu"><div class="loading">${'<div class="sk"></div>'.repeat(4)}</div></div>`;
@@ -83,12 +91,21 @@ export function mount(el, ctx) {
   /** Gear: each campus's CG computer and what's on it. */
   async function loadGear(redraw = true) {
     try {
-      const data = await ctx.store.networkData();
+      const [data, versions] = await Promise.all([ctx.store.networkData(), ctx.store.softwareVersions().catch(() => [])]);
+      s.versions = versions || [];
+      s.software = data.software || [];
       const rooms = new Map(data.rooms.map((r) => [r.id, r]));
       const types = new Map(data.types.map((t) => [t.id, t]));
       const installs = installsByDevice(data);
       const computers = data.devices.filter((d) => types.get(d.type_id)?.category === 'Computer');
       s.computers = computers;
+      // Every version in use on any computer, per column (so each is on the list to pick).
+      s.inUse = new Map(COLS.map((col) => [col.id, new Set()]));
+      for (const d of computers) {
+        const os = osOf(d);
+        if (os?.family === 'macOS' && os.version) s.inUse.get('mac').add(os.version);
+        for (const i of installs.get(d.id) || []) for (const col of COLS) if (col.sw?.test(i.sw.name)) s.inUse.get(col.id).add(i.version);
+      }
       // Each row's computer: for a campus's main CG, CG1 first, then the Worship Center's, then any other.
       const rank = (x) => (/^cg\s*1$/i.test(String(x.location || '').trim()) || /\(cg\s*1\)/i.test(x.name || '') ? 0
         : /worship center/i.test(rooms.get(x.room_id)?.name || '') ? 1 : 2);
@@ -108,8 +125,8 @@ export function mount(el, ctx) {
         return [key, {
           d,
           mac: os?.family === 'macOS' ? { v: os.version || '', title: os.label } : null,
-          pp: pp ? { v: pp.version, title: `ProPresenter ${pp.version}${pp.build ? ` (${pp.build})` : ''}` } : null,
-          dv: dv ? { v: dv.version, title: `Desktop Video ${dv.version}` } : null,
+          pp: pp ? { v: pp.version, title: `ProPresenter ${pp.version}${pp.build ? ` (${pp.build})` : ''}`, install: pp } : null,
+          dv: dv ? { v: dv.version, title: `Desktop Video ${dv.version}`, install: dv } : null,
         }];
       }));
     } catch { if (!s.gear) s.gear = new Map(); }
@@ -173,11 +190,100 @@ export function mount(el, ctx) {
             <td class="cgu-st"><div class="cgu-seg" role="group" aria-label="${esc(what)}">${CG_STATES.map((x) => `<button type="button" data-cg="${esc(cp.id)}" data-station="${esc(row.station)}" data-st="${x.id}" class="is-${x.id}" aria-pressed="${st === x.id}" ${busy ? 'disabled' : ''}>${x.id === 'done' ? icon('check') : ''}<span>${esc(x.short)}</span></button>`).join('')}</div></td>
             ${COLS.map((col) => {
               const v = g?.[col.id];
-              return `<td class="cgu-v is-${col.id} ${v?.v ? '' : 'is-none'}" ${v?.title ? `title="${esc(`${what}: ${v.title}`)}"` : ''}>${v?.v ? `<span class="cgu-vchip">${logoHtml(col.name, col.logo, 'xs')}<b>${esc(v.v)}</b></span>` : ''}</td>`;
+              // A pill to pick the version from, wherever there's a computer to put it on.
+              if (!g?.d) return `<td class="cgu-v is-${col.id} is-none"></td>`;
+              return `<td class="cgu-v is-${col.id} ${v?.v ? '' : 'is-unset'}" ${v?.title ? `title="${esc(`${what}: ${v.title}`)}"` : ''}><button type="button" class="cgu-vchip" data-ver="${col.id}" data-key="${esc(row.key)}" data-what="${esc(what)}" aria-haspopup="listbox" aria-expanded="false">${logoHtml(col.name, col.logo, 'xs')}<b class="dd-value">${esc(v?.v || 'Set')}</b>${icon('down')}</button></td>`;
             }).join('')}
           </tr>`;
         }).join('')}</tbody>
       </table>
       </div>`;
+    for (const btn of $$('.cgu-vchip[data-ver]', root)) wirePill(btn);
+  }
+
+  // --------------------------------------------------------------- versions ---
+  function productOf(col) { return col.id === 'mac' ? 'macOS' : col.name; }
+
+  /** The versions to pick from for a column: on record or in use, newest first. */
+  function choices(col) {
+    const known = new Map(s.versions.filter((x) => x.product === productOf(col)).map((x) => [x.version, x]));
+    const all = [...new Set([...known.keys(), ...(s.inUse.get(col.id) || [])])].sort((a, b) => cmpVersion(b, a));
+    return all.map((version) => {
+      const k = known.get(version);
+      const n = s.computers.filter((d) => versionOn(d, col) === version).length;
+      const hint = [col.id === 'mac' ? MAC_RELEASE[parseInt(version, 10)] : null, k?.released_on ? asOf(k.released_on) : null].filter(Boolean).join(' · ');
+      return { value: version, label: version, hint: hint || null, count: n || null, build: k?.build || null };
+    });
+  }
+  function versionOn(d, col) {
+    if (col.id === 'mac') { const os = osOf(d); return os?.family === 'macOS' ? os.version : null; }
+    const g = [...(s.gear?.values() || [])].find((x) => x.d.id === d.id);
+    return g?.[col.id]?.v ?? null;
+  }
+
+  function wirePill(btn) {
+    const col = COLS.find((x) => x.id === btn.dataset.ver);
+    const g = s.gear?.get(btn.dataset.key);
+    if (!col || !g) return;
+    const current = () => s.gear?.get(btn.dataset.key)?.[col.id]?.v || '';
+    wireDropdown(btn, {
+      label: `${btn.dataset.what} · ${col.name}`,
+      unit: ['computer', 'computers'],
+      options: () => [...choices(col), { value: OTHER, label: 'Another version…', hint: 'Type one that isn’t listed' }],
+      get: current,
+      set: (v) => { if (v === OTHER) askOther(col, btn.dataset.key, btn.dataset.what); else saveVersion(col, btn.dataset.key, btn.dataset.what, v); },
+    });
+    $('.dd-value', btn).textContent = current() || 'Set';
+    btn.setAttribute('aria-label', `${btn.dataset.what} ${col.name}: ${current() || 'not set'}. Change it`);
+  }
+
+  /** Saves a version to Gear for a row's computer, and shows it at once. */
+  async function saveVersion(col, key, what, version) {
+    const g = s.gear?.get(key);
+    version = String(version || '').trim();
+    if (!g || !version) { draw(); return; }
+    const was = g[col.id];
+    g[col.id] = { ...(was || {}), v: version, title: `${col.name} ${version}` };
+    draw();
+    const today = new Date().toLocaleDateString('en-CA');
+    try {
+      if (col.id === 'mac') {
+        const rel = MAC_RELEASE[parseInt(version, 10)];
+        await ctx.store.setDeviceFirmware(g.d.id, `macOS ${rel ? `${rel} ` : ''}${version}`);
+      } else {
+        const sw = s.software.find((x) => col.sw.test(x.name));
+        if (!sw) throw new Error(`${col.name} isn’t a title in Gear › Software yet. Add it there first.`);
+        const known = s.versions.find((x) => x.product === productOf(col) && x.version === version);
+        const i = was?.install;
+        await ctx.store.saveInstall({ ...(i ? { id: i.id, notes: i.notes ?? null } : {}), software_id: sw.id, device_id: g.d.id, version, build: known?.build || null, seen_on: today });
+      }
+      ctx.toast(`${what} ${col.name}: ${version}`);
+      loadGear();
+    } catch (err) {
+      g[col.id] = was;
+      draw();
+      ctx.toast(err.message, 'bad');
+    }
+  }
+
+  /** "Another version": type one; it's saved and joins the list. */
+  function askOther(col, key, what) {
+    draw(); // the pill goes back to what it said
+    const sheet = ctx.openSheet({ label: `${what} ${col.name} version` });
+    sheet.render(`<header class="sh-head"><div class="sh-top"><span class="eyebrow">${esc(what)}</span><button class="icon-btn" data-close aria-label="Close">${icon('close')}</button></div><h2>${esc(col.name)} version</h2></header>
+      <div class="sh-body form"><label class="field"><span>Version</span><input id="cgu-other" inputmode="decimal" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40" placeholder="${col.id === 'mac' ? '27.1' : col.id === 'pp' ? '22.1' : '16.6'}"></label>
+        <p class="fine">Just the number. It’s added to the list for next time.</p></div>
+      <footer class="sh-foot"><p class="form-msg" role="status"></p><span class="spacer"></span><button type="button" class="btn primary" data-save>Save</button></footer>`);
+    const input = $('#cgu-other', sheet.el);
+    input.focus();
+    const go = async () => {
+      const v = input.value.trim().replace(/^v/i, '');
+      if (!/^\d[\w.\- ()]{0,39}$/.test(v)) { $('.form-msg', sheet.el).textContent = 'Type the version number, like 22.0.1.'; return; }
+      sheet.close(true);
+      try { await ctx.store.addSoftwareVersion(productOf(col), v); } catch { /* still saved to the computer below */ }
+      saveVersion(col, key, what, v);
+    };
+    sheet.el.addEventListener('click', (e) => { if (e.target.closest('[data-save]')) go(); });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
   }
 }

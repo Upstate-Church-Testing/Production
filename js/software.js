@@ -7,7 +7,7 @@ import { esc } from './util.js';
 /** Kinds of item that run software, by category. */
 const COMPUTER_CATS = /^(computers?|laptops?|tablets?|desktops?|servers?)$/i;
 // macOS releases by major version, for an OS written without its name ("macOS 26.1").
-const MAC_RELEASE = { 26: 'Tahoe', 15: 'Sequoia', 14: 'Sonoma', 13: 'Ventura', 12: 'Monterey', 11: 'Big Sur' };
+export const MAC_RELEASE = { 27: 'Golden Gate', 26: 'Tahoe', 15: 'Sequoia', 14: 'Sonoma', 13: 'Ventura', 12: 'Monterey', 11: 'Big Sur' };
 const OS_RE = /^\s*(macOS|Mac OS X|OS X|iPadOS|iOS|Windows|Ubuntu|Linux|ChromeOS)\b\s*(.*)$/i;
 const FAMILY = { macos: 'macOS', 'mac os x': 'macOS', 'os x': 'macOS', ipados: 'iPadOS', ios: 'iOS', windows: 'Windows', ubuntu: 'Ubuntu', linux: 'Linux', chromeos: 'ChromeOS' };
 const FAMILY_ORDER = ['macOS', 'iPadOS', 'iOS', 'Windows', 'Ubuntu', 'Linux', 'ChromeOS'];

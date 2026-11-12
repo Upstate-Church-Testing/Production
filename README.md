@@ -142,7 +142,10 @@ Sunday, until midnight), so on Monday it moves on and everything reads Not start
 `cg_uploads` is keyed by the Sunday, so nothing is wiped and last week's stay as they were.
 Staff change it; changes push live to every open screen. Beside each campus, its CG
 computer's **macOS**, **ProPresenter** and **Desktop Video** versions from Gear (macOS from the
-computer's Firmware / OS field, the others from its software): the campus's computer at CG
+computer's Firmware / OS field, the others from its software), each a pill that opens a list
+to pick the version from (`software_versions`: released versions with build and date where
+known, plus any other in use, newest first, and "Another version" to type one, which joins
+the list); picking one saves it to Gear, seen today. The computer is the campus's computer at CG
 (location CG or CG1, or "(CG)" / "(CG1)" in its name; CG1's, else the Worship Center's, when
 there's more than one), blank where Gear doesn't have it; the CG2 row shows CG2's.
 Simpsonville's Worship Center CG is **CG1**, Mac mini (CG1). On a computer they're columns,

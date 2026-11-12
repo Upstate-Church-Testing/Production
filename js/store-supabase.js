@@ -104,6 +104,18 @@ export async function createSupabaseStore(url, key) {
       if (id) { ok(await sb.from('software_installs').update(fields).eq('id', id)); return id; }
       return ok(await sb.from('software_installs').insert(fields).select('id').single()).id;
     },
+    /** The versions to pick from (CG uploads' version pills): [{ product, version, build, released_on }]. */
+    async softwareVersions() {
+      return (await all(() => sb.from('software_versions').select('product, version, build, released_on')).catch(() => [])) || [];
+    },
+    /** Adds one to that list (nothing happens if it's already there). */
+    async addSoftwareVersion(product, version) {
+      ok(await sb.from('software_versions').upsert({ product, version }, { onConflict: 'product,version', ignoreDuplicates: true }));
+    },
+    /** A computer's operating system, as written in its Firmware / OS field ("macOS Tahoe 26.1"). */
+    async setDeviceFirmware(id, firmware) {
+      ok(await sb.from('devices').update({ firmware }).eq('id', id));
+    },
     async deleteInstall(id) {
       ok(await sb.from('software_installs').delete().eq('id', id));
     },
@@ -469,7 +481,7 @@ export async function createSupabaseStore(url, key) {
     /** Calls cb(table) whenever someone changes shared data. */
     subscribe(cb) {
       const ch = sb.channel('changes');
-      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'rig_positions', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers', 'software', 'software_installs']) {
+      for (const table of ['devices', 'device_ips', 'networks', 'rooms', 'rig_positions', 'profiles', 'device_types', 'device_type_ports', 'streams', 'volunteers', 'software', 'software_installs', 'software_versions']) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, () => cb(table));
       }
       for (const table of ['meetings', 'meeting_notes', 'meeting_questions', 'meeting_answers']) {
