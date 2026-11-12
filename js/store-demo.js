@@ -501,15 +501,28 @@ export function createDemoStore() {
       await wait(60);
       const at = (s) => new Date(Date.now() - s * 1000).toISOString();
       return [
-        { campus_id: 'c-MAU', presentation: 'Gratitude', slide_index: 4, slide_count: 14, slide_text: 'So I throw up my hands\nAnd praise You again and again', next_text: 'Cause all that I have is a hallelujah', media_playing: false, cleared: false, seen_at: at(1), updated_at: at(3) },
-        { campus_id: 'c-SVL', presentation: 'Countdown 5 min', slide_index: 1, slide_count: 1, slide_text: null, next_text: null, media_playing: true, cleared: false, seen_at: at(2), updated_at: at(40) },
-        { campus_id: 'c-HB', presentation: 'Message: Week 3', slide_index: 7, slide_count: 22, slide_text: 'Romans 8:28', next_text: null, media_playing: false, cleared: false, seen_at: at(900), updated_at: at(900) },
+        { campus_id: 'c-MAU', presentation: 'Gratitude', presentation_uuid: 'demo-1', slide_index: 4, slide_count: 14, slide_text: 'So I throw up my hands\nAnd praise You again and again', next_text: 'Cause all that I have is a hallelujah', media_playing: false, cleared: false, seen_at: at(1), updated_at: at(3) },
+        { campus_id: 'c-SVL', presentation: 'Countdown 5 min', presentation_uuid: 'demo-2', slide_index: 1, slide_count: 1, slide_text: null, next_text: null, media_playing: true, cleared: false, seen_at: at(2), updated_at: at(40) },
+        { campus_id: 'c-HB', presentation: 'Message: Week 3', presentation_uuid: 'demo-3', slide_index: 7, slide_count: 22, slide_text: 'Romans 8:28', next_text: null, media_playing: false, cleared: false, seen_at: at(900), updated_at: at(900) },
       ];
     },
-    subscribeCgLive(cb) {
-      const lines = ['So I throw up my hands\nAnd praise You again and again', 'Cause all that I have is a hallelujah\nHallelujah', 'And I know it’s not much\nBut I’ve nothing else fit for a King'];
+    async cgLiveThumbs() {
+      await wait(40);
+      return [
+        { campus_id: 'c-MAU', presentation_uuid: 'demo-1', slide_index: 4, jpeg: demoThumb('So I throw up my hands'), req_at: new Date().toISOString() },
+        { campus_id: 'c-SVL', presentation_uuid: 'demo-2', slide_index: 1, jpeg: demoThumb('5:00'), req_at: new Date().toISOString() },
+        { campus_id: 'c-HB', presentation_uuid: 'demo-3', slide_index: 7, jpeg: demoThumb('Romans 8:28'), req_at: new Date().toISOString() },
+      ];
+    },
+    subscribeCgLive(cb, onThumb) {
+      const lines = ['So I throw up my hands', 'Cause all that I have is a hallelujah', 'And I know it’s not much'];
       let i = 0;
-      const t = setInterval(() => { i += 1; cb({ campus_id: 'c-MAU', presentation: 'Gratitude', slide_index: 4 + (i % 3), slide_count: 14, slide_text: lines[i % 3], next_text: lines[(i + 1) % 3], media_playing: false, cleared: false, seen_at: new Date().toISOString(), updated_at: new Date().toISOString() }); }, 4000);
+      const t = setInterval(() => {
+        i += 1;
+        const at = new Date().toISOString();
+        cb({ campus_id: 'c-MAU', presentation: 'Gratitude', presentation_uuid: 'demo-1', slide_index: 4 + (i % 3), slide_count: 14, slide_text: lines[i % 3], next_text: lines[(i + 1) % 3], media_playing: false, cleared: false, seen_at: at, updated_at: at });
+        setTimeout(() => onThumb?.({ campus_id: 'c-MAU', presentation_uuid: 'demo-1', slide_index: 4 + (i % 3), jpeg: demoThumb(lines[i % 3]), req_at: at }), 300);
+      }, 4000);
       return () => clearInterval(t);
     },
     async houseLights() {
@@ -1182,4 +1195,16 @@ export function createDemoStore() {
     };
     return meetings;
   }
+}
+
+/** A stand-in slide picture for the preview (CG Live): white words on black, as a JPEG. */
+function demoThumb(words) {
+  try {
+    const c = document.createElement('canvas'); c.width = 400; c.height = 225;
+    const g = c.getContext('2d');
+    g.fillStyle = '#05070a'; g.fillRect(0, 0, 400, 225);
+    g.fillStyle = '#fff'; g.font = '600 24px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(String(words).slice(0, 30), 200, 112);
+    return c.toDataURL('image/jpeg', 0.7).split(',')[1];
+  } catch { return ''; }
 }

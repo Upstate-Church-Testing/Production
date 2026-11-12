@@ -713,15 +713,19 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 
 ## CG Live (pilot)
 
-What each location's ProPresenter 7 has on screen, on one sheet (`js/views/cg-live.js`): the
-presentation's name, the live slide's text, which slide, what's showing, and when that Mac
-was last heard from. A listener on the CG Mac (`tools/cg-live/cg-live.sh`, bash and curl
+What each location's ProPresenter 7 has on screen, on one sheet (`js/views/cg-live.js`): a
+picture of the live slide (ProPresenter's own thumbnail; tap it to see it large), the
+presentation's name, which slide, what's showing, and when that Mac was last heard from
+(the slide's words are collected but not shown for now). A listener on the CG Mac (`tools/cg-live/cg-live.sh`, bash and curl
 only, installed as a launch agent by `tools/cg-live/install.sh`) holds four requests open to
 ProPresenter's own network API on that Mac (`/v1/presentation/active`,
 `/v1/presentation/slide_index`, `/v1/status/slide`, `/v1/status/layers`, each with
 `?chunked=true`) and passes every answer, unchanged, to the `cg-live` edge function with
 that campus's key (`cg_agents`); the function parses it into that campus's row in `cg_live`,
-and the page is handed each new row by the database as it lands. Once a minute the listener
+and the page is handed each new row by the database as it lands. The function answers a
+slide change with "thumb <presentation id> <slide> <when>"; the listener then fetches that
+slide's thumbnail from ProPresenter (`/v1/presentation/<id>/thumbnail/<slide>?quality=400`,
+about 10 KB) and posts it back, kept in `cg_live_thumbs` (source: `supabase/functions/cg-live`). Once a minute the listener
 also asks plainly and says "still here"; a row not heard from in two and a half minutes
 shows "Not reporting". Mauldin is the first; a new campus needs a row in `cg_agents` with
 its own key, then the installer run on its Mac with that key.

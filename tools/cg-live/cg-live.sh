@@ -8,7 +8,9 @@
 # changes, so this sits idle in between. Each complete answer goes, unchanged, to the app's
 # cg-live function with this campus's key; the parsing is done there, not on this Mac.
 # Once a minute it also asks the same four things plainly, so a missed change is put right,
-# and says "still here" (only while ProPresenter is answering).
+# and says "still here" (only while ProPresenter is answering). On each slide change it also
+# fetches ProPresenter's own small thumbnail of that slide and passes that on (a file named
+# thumb beside this script holding 0 turns the pictures off).
 #
 # Needs only bash and curl, which every Mac has. Installed by install.sh as a launch
 # agent (starts at login, restarts itself, background priority). Log: cg-live.log beside it.
@@ -16,6 +18,7 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 KEY="$(cat "$DIR/key" 2>/dev/null)"
 PORT="$(cat "$DIR/port" 2>/dev/null)"; PORT="${PORT:-1025}"
+THUMB="$(cat "$DIR/thumb" 2>/dev/null)"; THUMB="${THUMB:-400}"   # the picture's size (ProPresenter's "quality"); 0 = no pictures
 FN="${CG_LIVE_FN:-https://khmqzrxfidwhchmkgdfn.supabase.co/functions/v1/cg-live}"
 PP="http://127.0.0.1:$PORT/v1"
 ST="$DIR/state"; LOG="$DIR/cg-live.log"
@@ -25,15 +28,36 @@ mkdir -p "$ST"; rm -f "$ST"/*; : > "$LOG"
 log() { printf '%s %s\n' "$(date '+%m-%d %H:%M:%S')" "$*" >> "$LOG"; }
 trap 'kill 0' EXIT
 
+# The picture of the slide that's live: ProPresenter's own thumbnail of it (a small JPEG it
+# makes itself; the screen is never read), fetched and passed on. Asked for by the app's
+# function in its reply to a slide change, as "thumb <presentation id> <slide> <when>".
+thumb() { # presentation uuid, slide (from 0), when it was asked for
+  local u="$1" i="$2" at="$3" f="$ST/thumb.$$.$RANDOM.jpg" code
+  case "$u" in ''|*[!A-Za-z0-9-]*) return 0;; esac
+  case "$i" in ''|*[!0-9]*) return 0;; esac
+  case "$at" in ''|*[!0-9]*) return 0;; esac
+  code="$(curl -s -m 5 -o "$f" -w '%{http_code}' "$PP/presentation/$u/thumbnail/$i?quality=$THUMB" 2>/dev/null)"
+  if [ "$code" = 200 ] && [ -s "$f" ]; then
+    code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' -X POST "$FN?kind=thumb&uuid=$u&index=$i&at=$at" \
+      -H "x-cg-key: $KEY" -H 'Content-Type: image/jpeg' --data-binary @"$f" 2>/dev/null)"
+    log "thumb slide $((i + 1)) -> $code ($(wc -c < "$f" | tr -d ' ') bytes)"
+  else
+    log "thumb slide $((i + 1)): ProPresenter said $code"
+  fi
+  rm -f "$f"
+}
+
 # Send one answer on, unless it's the same as the last one sent for that question.
 post() { # kind, json
-  local k="${1//\//_}" sum code
+  local k="${1//\//_}" sum resp code reply
   sum="$(printf '%s' "$2" | cksum)"
   [ "$sum" = "$(cat "$ST/$k" 2>/dev/null)" ] && return 0
-  code="$(printf '%s' "$2" | curl -s -m 8 -o /dev/null -w '%{http_code}' -X POST "$FN?kind=$1" \
+  resp="$(printf '%s' "$2" | curl -s -m 8 -w '\n%{http_code}' -X POST "$FN?kind=$1" \
     -H "x-cg-key: $KEY" -H 'Content-Type: application/json' --data-binary @- 2>/dev/null)"
+  code="${resp##*$'\n'}"; reply="${resp%$'\n'*}"
   [ "$code" = 200 ] && printf '%s' "$sum" > "$ST/$k"
   log "$1 -> $code (${#2} bytes)"
+  if [ "$code" = 200 ] && [ "$THUMB" != 0 ]; then case "$reply" in "thumb "*) set -- $reply; thumb "$2" "$3" "$4" & ;; esac; fi
 }
 
 # One held-open request. The stream is cut into whole JSON objects by counting braces (so

@@ -255,11 +255,19 @@ export async function createSupabaseStore(url, key) {
     /** CG Live: what each location's ProPresenter has on screen (sent by the listener on its
      *  CG Mac, tools/cg-live, through the cg-live function). */
     async cgLive() {
-      return ok(await sb.from('cg_live').select('campus_id, presentation, slide_index, slide_count, slide_text, next_text, media_playing, cleared, seen_at, updated_at')) || [];
+      return ok(await sb.from('cg_live').select('campus_id, presentation, presentation_uuid, slide_index, slide_count, slide_text, next_text, media_playing, cleared, seen_at, updated_at')) || [];
     },
-    /** Each change to it, handed over as it lands (the row itself: no second trip to ask). */
-    subscribeCgLive(cb) {
-      const ch = sb.channel('cg-live').on('postgres_changes', { event: '*', schema: 'public', table: 'cg_live' }, (p) => { if (p.new?.campus_id) cb(p.new); }).subscribe();
+    /** The picture of each location's live slide (a small JPEG, base64). */
+    async cgLiveThumbs() {
+      return ok(await sb.from('cg_live_thumbs').select('campus_id, presentation_uuid, slide_index, jpeg, req_at')) || [];
+    },
+    /** Each change to either, handed over as it lands (the row itself: no second trip to ask).
+     *  cb(row) for what's on screen, onThumb(row) for a new picture. */
+    subscribeCgLive(cb, onThumb) {
+      const ch = sb.channel('cg-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cg_live' }, (p) => { if (p.new?.campus_id) cb(p.new); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cg_live_thumbs' }, (p) => { if (p.new?.campus_id) onThumb?.(p.new); })
+        .subscribe();
       return () => sb.removeChannel(ch);
     },
     /** Lighting › House lights: the rooms on the sheet, Planning Center's services (which
