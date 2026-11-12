@@ -637,6 +637,7 @@ js/views/home.js              Home: what Tally opens on; Ready for Sunday? (the 
 js/roster.js                  the PCO model and the Scheduling grid's rows, shared by Scheduling and Home
 js/views/person-full.js       a person, in a pop-up (from a name on Scheduling)
 js/views/house-lights.js     Lighting › House lights: levels per Worship Center, part of the service and service
+js/views/cg-live.js           CG Live (pilot): what each location's ProPresenter has on screen, as it changes
 js/pull.js                    pull down to refresh (touch screens)
 js/hud.js                     the console look's pop-ups: hudConfirm ("Are you sure?", old → new) and hudPanel (a form)
 js/lanyard.js                 the lanyard badges: the micro one on Scheduling, the large ones in a profile
@@ -709,6 +710,21 @@ Oct 14 to Nov 3, 2026 was Claude's and is marked that way.
 2. Add the methods to both stores.
 3. Add `js/views/<name>.js` exporting `mount(el, ctx)` and add it to `NAV` in
    `js/app.js` (as a group, or under one) with the lowest role that should see it.
+
+## CG Live (pilot)
+
+What each location's ProPresenter 7 has on screen, on one sheet (`js/views/cg-live.js`): the
+presentation's name, the live slide's text, which slide, what's showing, and when that Mac
+was last heard from. A listener on the CG Mac (`tools/cg-live/cg-live.sh`, bash and curl
+only, installed as a launch agent by `tools/cg-live/install.sh`) holds four requests open to
+ProPresenter's own network API on that Mac (`/v1/presentation/active`,
+`/v1/presentation/slide_index`, `/v1/status/slide`, `/v1/status/layers`, each with
+`?chunked=true`) and passes every answer, unchanged, to the `cg-live` edge function with
+that campus's key (`cg_agents`); the function parses it into that campus's row in `cg_live`,
+and the page is handed each new row by the database as it lands. Once a minute the listener
+also asks plainly and says "still here"; a row not heard from in two and a half minutes
+shows "Not reporting". Mauldin is the first; a new campus needs a row in `cg_agents` with
+its own key, then the installer run on its Mac with that key.
 
 ## Sidebar
 

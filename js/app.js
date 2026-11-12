@@ -19,6 +19,7 @@ import * as HouseLightsView from './views/house-lights.js';
 import * as HazeView from './views/haze-board.js';
 import { initPull } from './pull.js';
 import * as PatchView from './views/patch-board.js';
+import * as CgLiveView from './views/cg-live.js';
 import * as CablesView from './views/cables.js';
 import * as StatsView from './views/stats.js';
 import * as AccountView from './views/account.js';
@@ -40,6 +41,8 @@ const NAV = [
   { id: 'home', label: 'Home', icon: 'home', minRole: 'staff', view: HomeView },
   // CG uploads: each campus's CG for the coming Sunday (not started, working, done). Home counts them.
   { id: 'cg-uploads', label: 'CG uploads', icon: 'upload', minRole: 'staff', view: CgView },
+  // CG Live: what each location's ProPresenter has on screen right now (a pilot; tools/cg-live).
+  { id: 'cg-live', label: 'CG Live', icon: 'live', minRole: 'staff', view: CgLiveView },
   { id: 'gear', label: 'Gear', short: 'Gear', icon: 'box', minRole: 'staff', view: GearView, title: 'Gear',
     scope: null, // the whole Gear view, filters and all
     children: [

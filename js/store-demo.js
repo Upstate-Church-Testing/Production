@@ -497,6 +497,21 @@ export function createDemoStore() {
     },
     /** Lighting › House lights: the Worship Centers (not Laurens or Union), Planning Center's
      *  made-up services, and a few levels to start. */
+    async cgLive() {
+      await wait(60);
+      const at = (s) => new Date(Date.now() - s * 1000).toISOString();
+      return [
+        { campus_id: 'c-MAU', presentation: 'Gratitude', slide_index: 4, slide_count: 14, slide_text: 'So I throw up my hands\nAnd praise You again and again', next_text: 'Cause all that I have is a hallelujah', media_playing: false, cleared: false, seen_at: at(1), updated_at: at(3) },
+        { campus_id: 'c-SVL', presentation: 'Countdown 5 min', slide_index: 1, slide_count: 1, slide_text: null, next_text: null, media_playing: true, cleared: false, seen_at: at(2), updated_at: at(40) },
+        { campus_id: 'c-HB', presentation: 'Message: Week 3', slide_index: 7, slide_count: 22, slide_text: 'Romans 8:28', next_text: null, media_playing: false, cleared: false, seen_at: at(900), updated_at: at(900) },
+      ];
+    },
+    subscribeCgLive(cb) {
+      const lines = ['So I throw up my hands\nAnd praise You again and again', 'Cause all that I have is a hallelujah\nHallelujah', 'And I know it’s not much\nBut I’ve nothing else fit for a King'];
+      let i = 0;
+      const t = setInterval(() => { i += 1; cb({ campus_id: 'c-MAU', presentation: 'Gratitude', slide_index: 4 + (i % 3), slide_count: 14, slide_text: lines[i % 3], next_text: lines[(i + 1) % 3], media_playing: false, cleared: false, seen_at: new Date().toISOString(), updated_at: new Date().toISOString() }); }, 4000);
+      return () => clearInterval(t);
+    },
     async houseLights() {
       await wait(90);
       const rooms = db.rooms.filter((r) => /^worship center$/i.test(r.name) && !['c-LAU', 'c-UN'].includes(r.campus_id)).map((r) => ({ id: r.id, name: r.name, campus_id: r.campus_id }));

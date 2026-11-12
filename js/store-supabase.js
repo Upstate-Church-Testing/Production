@@ -252,6 +252,16 @@ export async function createSupabaseStore(url, key) {
     async cgSetUpload(sunday, campusId, status, station = '') {
       ok(await sb.from('cg_uploads').upsert({ sunday, campus_id: campusId, station: station || '', status }, { onConflict: 'sunday,campus_id,station' }));
     },
+    /** CG Live: what each location's ProPresenter has on screen (sent by the listener on its
+     *  CG Mac, tools/cg-live, through the cg-live function). */
+    async cgLive() {
+      return ok(await sb.from('cg_live').select('campus_id, presentation, slide_index, slide_count, slide_text, next_text, media_playing, cleared, seen_at, updated_at')) || [];
+    },
+    /** Each change to it, handed over as it lands (the row itself: no second trip to ask). */
+    subscribeCgLive(cb) {
+      const ch = sb.channel('cg-live').on('postgres_changes', { event: '*', schema: 'public', table: 'cg_live' }, (p) => { if (p.new?.campus_id) cb(p.new); }).subscribe();
+      return () => sb.removeChannel(ch);
+    },
     /** Lighting › House lights: the rooms on the sheet, Planning Center's services (which
      *  ones each room has), and every level set. */
     async houseLights() {

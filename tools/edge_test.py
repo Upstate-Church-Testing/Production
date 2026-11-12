@@ -2,7 +2,7 @@
 # the iOS home-screen gap (--vgap). Needs the app served locally: python3 -m http.server 8777 --bind 127.0.0.1
 from playwright.sync_api import sync_playwright
 errs=[]; bad=[]
-PAGES=[('haze','hb'),('patch','pb')]  # page address, and the prefix of its sheet's classes (.hb-board, .hb-r)
+PAGES=[('haze','hb'),('patch','pb'),('cg-live','cl')]  # page address, and the prefix of its sheet's classes (.hb-board, .hb-r)
 M="() => { const b=document.querySelector('.hb-board').getBoundingClientRect(); const rows=[...document.querySelectorAll('.hb-r')]; const last=rows.at(-1).getBoundingClientRect(); const cut=[...document.querySelectorAll('.hb-r > *, .hb-can, .hb-d b, .hb-nm > *')].filter(e=>{const r=e.getBoundingClientRect(); return r.width && (r.bottom>innerHeight+0.5||r.right>innerWidth+0.5||r.left<-0.5)}).length; return {vh: innerHeight, vw: innerWidth, boardBottom: Math.round(b.bottom), lastBottom: Math.round(last.bottom), right: Math.round(b.right), cut, scroll: document.documentElement.scrollHeight-innerHeight} }"
 with sync_playwright() as p:
     b=p.chromium.launch()
@@ -13,7 +13,7 @@ with sync_playwright() as p:
                 c.add_init_script('window.UCP_PREVIEW = true;'); pg=c.new_page(); pg.on('pageerror', lambda e: errs.append(str(e)))
                 pg.goto('http://127.0.0.1:8777/index.html#'+PAGE); pg.wait_for_timeout(2300)
                 if vgap: pg.evaluate(f"document.documentElement.style.setProperty('--vgap','{vgap}px'); window.dispatchEvent(new Event('resize'))"); pg.wait_for_timeout(400)
-                m=pg.evaluate(M.replace('.hb-', '.'+K+'-').replace('.pb-can, .pb-d b, .pb-nm > *', '.pb-r > * > *')); ok = m['lastBottom']<=m['vh'] and m['boardBottom']<=m['vh'] and m['right']<=m['vw'] and m['cut']==0
+                m=pg.evaluate(M.replace('.hb-', '.'+K+'-').replace('.pb-can, .pb-d b, .pb-nm > *', '.pb-r > * > *').replace('.cl-can, .cl-d b, .cl-nm > *', '.cl-r > * > *')); ok = m['lastBottom']<=m['vh'] and m['boardBottom']<=m['vh'] and m['right']<=m['vw'] and m['cut']==0
                 print('ok ' if ok else 'BAD', PAGE, size, 'vgap', vgap, m)
                 if not ok: bad.append((PAGE,size,vgap))
                 c.close()
